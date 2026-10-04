@@ -18,7 +18,7 @@ resources:
 images:
   - name: mdub1na/devicehub
     newName: ghcr.io/mdub1na/stf
-    newTag: 9758acdf8e1bf44871147205856a5cf7154eaec5
+    digest: sha256:9da0a528f91c5ced4594ee1706392042808819276675311827e516b4971c4e81
 
 patches:
   - path: stf-runtime-patch.yaml

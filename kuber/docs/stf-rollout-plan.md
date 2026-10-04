@@ -1,7 +1,8 @@
 # STF GitOps Rollout Plan
 
 Deploy Android STF from `mdub1na/stf`, branch `develop`, to the existing k3s
-cluster. Upgrade the Kubernetes servers before switching the application.
+cluster. Deploy STF on the current healthy nodes first; upgrade the Kubernetes
+servers in a separate stage once SSH access is provided, as confirmed by the user.
 The old MongoDB and its data may be deleted. iOS and Java test API adaptation
 are outside this rollout.
 
@@ -24,7 +25,9 @@ are outside this rollout.
 
 ## Current checkpoint
 
-Snapshot: 2026-10-04. No server updates or workload source changes applied yet.
+Snapshot: 2026-10-04. Three migration Secrets have been bootstrapped; no server
+updates or workload source changes have been applied. SSH access is deferred.
+The user confirmed deployment before server maintenance and a public GHCR image.
 
 - [x] Kubernetes API and GitHub access verified; GitHub Actions enabled.
 - [x] All three nodes Ready: Ubuntu 26.04 LTS, k3s v1.35.5+k3s1.
@@ -32,14 +35,21 @@ Snapshot: 2026-10-04. No server updates or workload source changes applied yet.
 - [ ] SSH and sudo on 192.168.0.121-123: deferred; the user will provide access
   later. The initial control-server `mdub1na` login was refused.
 - [x] Maintenance scope confirmed: Kubernetes VMs only; no Proxmox host update.
+- [x] Execution order confirmed: STF now, server maintenance after SSH access.
 - [ ] Android USB visibility: both ADB device lists were empty at preflight.
-- [ ] Container build/publish verified; local Docker daemon is not running.
+- [x] Container build/publish verified through GitHub Actions; the local Docker
+  daemon was not needed.
 - [x] GHCR build workflow prepared and locally committed as `9758acdf`.
 - [x] GitHub authorization refreshed by the user; `workflow` scope verified.
 - [x] Prepared commits `9758acdf` and `1b0390e4` pushed to `origin/develop`.
-- [ ] First Docker build/publish verified. Initial run:
+- [x] First Docker build/publish verified. Successful run:
   [37221865853](https://github.com/mdub1na/stf/actions/runs/37221865853).
-  Both architecture build jobs have started and GHCR login succeeded.
+  Both amd64 and arm64 builds and multiarch publication succeeded for source
+  commit `1b0390e4efce43c5635175e6d03a4290880f6390`.
+- [x] Anonymous GHCR manifest access verified; package visibility was not changed.
+  Both STF and migration images are pinned to the verified multiarch digest
+  `sha256:9da0a528f91c5ced4594ee1706392042808819276675311827e516b4971c4e81`.
+- [ ] Image pull by the Kubernetes runtime verified during deployment.
 - [x] STF/RethinkDB manifests prepared; ten local Kustomize slices render.
 - [x] STF/RethinkDB client-side schema checks and 15-command CLI audit passed.
 - [x] Five isolated Secret bootstrap checks passed using in-memory module mocks:
@@ -47,7 +57,7 @@ Snapshot: 2026-10-04. No server updates or workload source changes applied yet.
 - [x] Secret bootstrap explicitly confirmed and completed: current LDAP bind
   verified, three Secrets created, repeated execution preserved all three.
 - [ ] Server maintenance completed.
-- [ ] STF/RethinkDB manifests and image verified.
+- [x] STF/RethinkDB manifests validated locally and published image verified.
 - [ ] GitOps source switched and STF functional checks passed.
 - [ ] Old MongoDB/iOS resources removed and final state documented.
 
@@ -70,7 +80,8 @@ Snapshot: 2026-10-04. No server updates or workload source changes applied yet.
 6. Repeat for the Android worker, then the storage worker, checking services
    after each node. Do not treat storage-bound Pending pods as movable workloads.
 7. Record before/after package/kernel/k3s versions and repeat node, LDAP, ADB,
-   Grid and ingress checks before application migration.
+   Grid and ingress checks after maintenance. Include the deployed RethinkDB
+   persistent data in maintenance backups in addition to LDAP and k3s.
 
 Official references: [k3s manual upgrades](https://docs.k3s.io/upgrades/manual)
 and [Kubernetes node drain](https://kubernetes.io/docs/tasks/administer-cluster/safely-drain-node/).

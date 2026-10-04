@@ -1,19 +1,31 @@
 # STF Deployment Runbook
 
-This runbook applies after the server maintenance gates in
-[the rollout plan](./stf-rollout-plan.md) pass. Do not switch Argo CD to a
-revision whose image has not built successfully and cannot be pulled by nodes.
+The user confirmed deployment on the current healthy nodes first and deferred
+server maintenance until SSH access is provided; see
+[the rollout plan](./stf-rollout-plan.md). Do not switch Argo CD to a revision
+whose image has not built successfully and cannot be pulled by nodes.
 
 ## Image and secrets
 
 GitHub Actions builds the root Dockerfile on pushes to `develop` and publishes
-`ghcr.io/mdub1na/stf:<full-commit-sha>`. The deployment image tag is centralized
-in the `devicehub` and `rethinkdb` kustomizations. Replace it with the verified
-registry digest before the live rollout. A private GHCR package requires node
-pull credentials in both namespaces; publishing does not imply anonymous access.
-The current tag is a preparation placeholder and has not been published.
-Replace it with the digest of the first successful workflow build. GitOps-only
-changes do not trigger a new application image build.
+`ghcr.io/mdub1na/stf:<full-commit-sha>`. The deployment image is centralized in
+the `devicehub` and `rethinkdb` kustomizations and pinned by registry digest.
+GitOps-only changes do not trigger a new application image build.
+
+Verified build on 2026-10-04:
+
+- Source commit: `1b0390e4efce43c5635175e6d03a4290880f6390`.
+- Successful [workflow run](https://github.com/mdub1na/stf/actions/runs/37221865853)
+  for Linux amd64 and arm64, followed by multiarch publication.
+- Pinned image:
+  `ghcr.io/mdub1na/stf@sha256:9da0a528f91c5ced4594ee1706392042808819276675311827e516b4971c4e81`.
+- Anonymous registry manifest access returned HTTP 200; no visibility setting
+  was changed. The user confirmed a public package. Kubernetes runtime pull
+  remains a live deployment check.
+
+A private GHCR package requires node pull credentials in both namespaces;
+publishing alone does not imply anonymous access. Recheck access before rollout
+if package visibility changes.
 
 The `devicehub` slice retains historical resource names and runs STF, not
 DeviceHub. Its base image is replaced by Kustomize; apply the slice with Argo CD,

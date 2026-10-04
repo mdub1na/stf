@@ -36,7 +36,10 @@ Snapshot: 2026-10-04. No server updates or workload source changes applied yet.
 - [ ] Container build/publish verified; local Docker daemon is not running.
 - [x] GHCR build workflow prepared and locally committed as `9758acdf`.
 - [x] GitHub authorization refreshed by the user; `workflow` scope verified.
-- [ ] Prepared commits pushed and container build/publish verified.
+- [x] Prepared commits `9758acdf` and `1b0390e4` pushed to `origin/develop`.
+- [ ] First Docker build/publish verified. Initial run:
+  [37221865853](https://github.com/mdub1na/stf/actions/runs/37221865853).
+  Both architecture build jobs have started and GHCR login succeeded.
 - [x] STF/RethinkDB manifests prepared; ten local Kustomize slices render.
 - [x] STF/RethinkDB client-side schema checks and 15-command CLI audit passed.
 - [x] Five isolated Secret bootstrap checks passed using in-memory module mocks:

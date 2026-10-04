@@ -1,0 +1,29 @@
+apiVersion: argoproj.io/v1alpha1
+kind: AppProject
+metadata:
+  name: devicehub-platform
+  namespace: argocd
+spec:
+  description: Android STF platform project
+  sourceRepos:
+    - https://github.com/mdub1na/stf.git
+  destinations:
+    - server: https://kubernetes.default.svc
+      namespace: argocd
+    - server: https://kubernetes.default.svc
+      namespace: rethinkdb
+    - server: https://kubernetes.default.svc
+      namespace: openldap
+    - server: https://kubernetes.default.svc
+      namespace: devicehub
+    - server: https://kubernetes.default.svc
+      namespace: appium
+    - server: https://kubernetes.default.svc
+      namespace: mitmproxy
+    - server: https://kubernetes.default.svc
+      namespace: observability
+    - server: https://kubernetes.default.svc
+      namespace: kube-system
+  clusterResourceWhitelist:
+    - group: ""
+      kind: Namespace

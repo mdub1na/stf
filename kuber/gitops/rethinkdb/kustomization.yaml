@@ -1,0 +1,16 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: rethinkdb
+
+resources:
+  - namespace.yaml
+  - rethinkdb-pvc.yaml
+  - rethinkdb-service.yaml
+  - rethinkdb-statefulset.yaml
+  - rethinkdb-network-policy.yaml
+  - stf-migrate-job.yaml
+
+images:
+  - name: ghcr.io/mdub1na/stf
+    newTag: 9758acdf8e1bf44871147205856a5cf7154eaec5

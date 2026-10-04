@@ -1,0 +1,24 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: phpldapadmin
+  annotations:
+    cert-manager.io/issuer: letsencrypt-http
+    traefik.ingress.kubernetes.io/router.entrypoints: web,websecure
+spec:
+  ingressClassName: traefik
+  tls:
+    - hosts:
+        - ldap.putmyhexon.ru
+      secretName: ldap-putmyhexon-ru-tls
+  rules:
+    - host: ldap.putmyhexon.ru
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: phpldapadmin
+                port:
+                  number: 80

@@ -1,0 +1,13 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+  - argocd-app.yaml
+  - traefik-app.yaml
+  - cert-manager-app.yaml
+  - rethinkdb-app.yaml
+  - openldap-app.yaml
+  - devicehub-app.yaml
+  - appium-app.yaml
+  - mitmproxy-app.yaml
+  - observability-app.yaml

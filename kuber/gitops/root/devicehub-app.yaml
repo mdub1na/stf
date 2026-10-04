@@ -1,0 +1,17 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: devicehub
+  namespace: argocd
+spec:
+  project: devicehub-platform
+  source:
+    repoURL: https://github.com/mdub1na/stf.git
+    targetRevision: develop
+    path: kuber/gitops/devicehub
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: devicehub
+  syncPolicy:
+    syncOptions:
+      - CreateNamespace=true

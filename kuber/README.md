@@ -11,6 +11,7 @@ and Appium connectivity.
 - [Current architecture](./docs/architecture.md)
 - [Cluster access and service inventory](./docs/cluster-access.md)
 - [STF rollout and server maintenance plan](./docs/stf-rollout-plan.md)
+- [STF deployment runbook](./docs/stf-deployment.md)
 - [Historical DeviceHub roadmap](./docs/roadmap.md)
 - [GitOps layout](./docs/gitops-layout.md)
 - [Decision log](./docs/decision-log.md)
@@ -25,6 +26,9 @@ and Appium connectivity.
 Use `decision-log.md` only for background reasoning and past choices.
 
 ## Bootstrap quick start
+
+For a new cluster only; do not reinstall Argo CD on the existing cluster.
+For migration, follow the rollout plan and deployment runbook instead.
 
 1. Apply Argo CD install manifests:
    `kubectl apply -k kuber/gitops/bootstrap/argocd`

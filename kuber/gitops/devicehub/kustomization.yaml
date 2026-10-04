@@ -1,0 +1,67 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: devicehub
+
+resources:
+  - namespace.yaml
+  - devicehub-configmap.yaml
+  - devicehub-storage-temp-pvc.yaml
+  - devicehub-core-services.yaml
+  - devicehub-core-deployments.yaml
+  - devicehub-android-services.yaml
+  - devicehub-android-deployments.yaml
+  - devicehub-dynamic-proxy.yaml
+  - devicehub-issuer.yaml
+  - devicehub-ingress.yaml
+
+images:
+  - name: mdub1na/devicehub
+    newName: ghcr.io/mdub1na/stf
+    newTag: 9758acdf8e1bf44871147205856a5cf7154eaec5
+
+patches:
+  - path: stf-runtime-patch.yaml
+    target:
+      group: apps
+      version: v1
+      kind: Deployment
+      name: devicehub-(triproxy-app|triproxy-dev|storage-temp|storage-plugin-apk|storage-plugin-image|processor|reaper|api|websocket|api-groups-engine|auth|app|provider|provider-2)
+  - path: stf-session-patch.yaml
+    target:
+      group: apps
+      version: v1
+      kind: Deployment
+      name: devicehub-(app|auth|api|websocket)
+  - path: stf-http-probes-patch.yaml
+    target:
+      group: apps
+      version: v1
+      kind: Deployment
+      name: devicehub-(app|auth|api|websocket|storage-temp|storage-plugin-apk|storage-plugin-image)
+  - target:
+      group: apps
+      version: v1
+      kind: Deployment
+      name: devicehub-auth
+    patch: |-
+      - op: add
+        path: /spec/template/spec/containers/0/envFrom/-
+        value:
+          secretRef:
+            name: devicehub-ldap-bind
+  - target:
+      group: apps
+      version: v1
+      kind: Deployment
+      name: devicehub-provider(-2)?
+    patch: |-
+      - op: replace
+        path: /spec/template/spec/containers/0/resources
+        value:
+          requests:
+            cpu: 200m
+            memory: 256Mi
+          limits:
+            cpu: "2"
+            memory: 2Gi

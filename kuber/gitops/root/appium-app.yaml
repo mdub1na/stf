@@ -1,0 +1,20 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: appium
+  namespace: argocd
+spec:
+  project: devicehub-platform
+  source:
+    repoURL: https://github.com/mdub1na/stf.git
+    targetRevision: develop
+    path: kuber/gitops/appium
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: appium
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true

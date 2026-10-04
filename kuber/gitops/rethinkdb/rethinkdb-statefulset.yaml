@@ -1,0 +1,68 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: rethinkdb
+  annotations:
+    argocd.argoproj.io/sync-wave: "-1"
+spec:
+  serviceName: rethinkdb
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: rethinkdb
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: rethinkdb
+    spec:
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+              - matchExpressions:
+                  - key: devicehub.role
+                    operator: In
+                    values:
+                      - storage
+      containers:
+        - name: rethinkdb
+          image: rethinkdb:2.4.2
+          args:
+            - rethinkdb
+            - --bind
+            - all
+            - --cache-size
+            - "256"
+          ports:
+            - name: driver
+              containerPort: 28015
+          startupProbe:
+            tcpSocket:
+              port: driver
+            periodSeconds: 5
+            failureThreshold: 60
+          readinessProbe:
+            tcpSocket:
+              port: driver
+            periodSeconds: 5
+            timeoutSeconds: 3
+          livenessProbe:
+            tcpSocket:
+              port: driver
+            periodSeconds: 20
+            timeoutSeconds: 3
+            failureThreshold: 6
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              cpu: "1"
+              memory: 1Gi
+          volumeMounts:
+            - name: data
+              mountPath: /data
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: rethinkdb-data

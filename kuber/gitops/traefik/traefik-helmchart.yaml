@@ -1,0 +1,37 @@
+apiVersion: helm.cattle.io/v1
+kind: HelmChart
+metadata:
+  name: traefik
+  namespace: kube-system
+spec:
+  repo: https://traefik.github.io/charts
+  chart: traefik
+  version: 39.0.7
+  targetNamespace: kube-system
+  valuesContent: |-
+    ingressClass:
+      enabled: true
+      isDefaultClass: true
+    providers:
+      kubernetesIngress:
+        enabled: true
+    nodeSelector:
+      devicehub.role: control
+    tolerations:
+      - key: node-role
+        operator: Equal
+        value: infra
+        effect: NoSchedule
+      - key: node-role.kubernetes.io/control-plane
+        operator: Exists
+        effect: NoSchedule
+      - key: node-role.kubernetes.io/master
+        operator: Exists
+        effect: NoSchedule
+    ports:
+      web:
+        hostPort: 80
+      websecure:
+        hostPort: 443
+    service:
+      type: ClusterIP

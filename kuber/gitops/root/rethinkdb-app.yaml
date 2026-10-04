@@ -1,0 +1,17 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: rethinkdb
+  namespace: argocd
+spec:
+  project: devicehub-platform
+  source:
+    repoURL: https://github.com/mdub1na/stf.git
+    targetRevision: develop
+    path: kuber/gitops/rethinkdb
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: rethinkdb
+  syncPolicy:
+    syncOptions:
+      - CreateNamespace=true

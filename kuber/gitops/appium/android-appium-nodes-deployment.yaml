@@ -1,0 +1,169 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: android-appium-node-1
+  labels:
+    app.kubernetes.io/name: android-appium-node-1
+spec:
+  replicas: 8
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: android-appium-node-1
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: android-appium-node-1
+    spec:
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+              - matchExpressions:
+                  - key: devicehub.role
+                    operator: In
+                    values:
+                      - android
+      containers:
+        - name: appium
+          image: appium/appium:v2.11.4-p2
+          imagePullPolicy: IfNotPresent
+          command:
+            - appium
+          args:
+            - --port
+            - "4733"
+            - --base-path
+            - /
+            - --use-drivers
+            - uiautomator2
+            - --allow-insecure
+            - chromedriver_autodownload
+          env:
+            - name: ANDROID_ADB_SERVER_HOST
+              value: adbd.devicehub.svc.cluster.local
+            - name: ANDROID_ADB_SERVER_PORT
+              value: "5037"
+            - name: ADB_SERVER_SOCKET
+              value: tcp:adbd.devicehub.svc.cluster.local:5037
+          ports:
+            - name: appium
+              containerPort: 4733
+        - name: adb-proxy
+          image: alpine/socat:1.8.0.3
+          imagePullPolicy: IfNotPresent
+          args:
+            - tcp-listen:5037,fork,reuseaddr
+            - tcp:adbd.devicehub.svc.cluster.local:5037
+          ports:
+            - name: adb
+              containerPort: 5037
+        - name: selenium-node-relay
+          image: selenium/node-base:4.39.0
+          imagePullPolicy: IfNotPresent
+          command:
+            - /bin/sh
+            - -c
+            - >-
+              java -jar /opt/selenium/selenium-server.jar node
+              --publish-events tcp://appium-grid-event-bus:4442
+              --subscribe-events tcp://appium-grid-event-bus:4443
+              --config /opt/selenium/config/node-android.toml
+          env:
+            - name: SE_EVENT_BUS_HOST
+              value: appium-grid-event-bus
+            - name: SE_EVENT_BUS_PUBLISH_PORT
+              value: "4442"
+            - name: SE_EVENT_BUS_SUBSCRIBE_PORT
+              value: "4443"
+          volumeMounts:
+            - name: node-config
+              mountPath: /opt/selenium/config
+      volumes:
+        - name: node-config
+          configMap:
+            name: android-appium-node-config
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: android-appium-node-2
+  labels:
+    app.kubernetes.io/name: android-appium-node-2
+spec:
+  replicas: 8
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: android-appium-node-2
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: android-appium-node-2
+    spec:
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+              - matchExpressions:
+                  - key: devicehub.role
+                    operator: In
+                    values:
+                      - android
+      containers:
+        - name: appium
+          image: appium/appium:v2.11.4-p2
+          imagePullPolicy: IfNotPresent
+          command:
+            - appium
+          args:
+            - --port
+            - "4733"
+            - --base-path
+            - /
+            - --use-drivers
+            - uiautomator2
+            - --allow-insecure
+            - chromedriver_autodownload
+          env:
+            - name: ANDROID_ADB_SERVER_HOST
+              value: adbd-2.devicehub.svc.cluster.local
+            - name: ANDROID_ADB_SERVER_PORT
+              value: "5037"
+            - name: ADB_SERVER_SOCKET
+              value: tcp:adbd-2.devicehub.svc.cluster.local:5037
+          ports:
+            - name: appium
+              containerPort: 4733
+        - name: adb-proxy
+          image: alpine/socat:1.8.0.3
+          imagePullPolicy: IfNotPresent
+          args:
+            - tcp-listen:5037,fork,reuseaddr
+            - tcp:adbd-2.devicehub.svc.cluster.local:5037
+          ports:
+            - name: adb
+              containerPort: 5037
+        - name: selenium-node-relay
+          image: selenium/node-base:4.39.0
+          imagePullPolicy: IfNotPresent
+          command:
+            - /bin/sh
+            - -c
+            - >-
+              java -jar /opt/selenium/selenium-server.jar node
+              --publish-events tcp://appium-grid-event-bus:4442
+              --subscribe-events tcp://appium-grid-event-bus:4443
+              --config /opt/selenium/config/node-android.toml
+          env:
+            - name: SE_EVENT_BUS_HOST
+              value: appium-grid-event-bus
+            - name: SE_EVENT_BUS_PUBLISH_PORT
+              value: "4442"
+            - name: SE_EVENT_BUS_SUBSCRIBE_PORT
+              value: "4443"
+          volumeMounts:
+            - name: node-config
+              mountPath: /opt/selenium/config
+      volumes:
+        - name: node-config
+          configMap:
+            name: android-appium-node-2-config

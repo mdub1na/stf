@@ -1,0 +1,20 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: openldap
+  namespace: argocd
+spec:
+  project: devicehub-platform
+  source:
+    repoURL: https://github.com/mdub1na/stf.git
+    targetRevision: develop
+    path: kuber/gitops/openldap
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: openldap
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true

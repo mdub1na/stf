@@ -13,8 +13,9 @@ are outside this rollout.
   The `devicehub` deployment slice will run STF despite its historical name.
 - Publish workload changes through Git and synchronize them through Argo CD.
   Initial Argo CD source changes and Secrets are bootstrap exceptions.
-- Do not reset the cluster, reinstall its distribution, or upgrade Ubuntu or
-  Proxmox to another major release as part of routine server maintenance.
+- Server maintenance covers only the three Kubernetes VMs. Proxmox and the
+  Mac mini are excluded. Do not reset the cluster, reinstall its distribution,
+  or upgrade Ubuntu to another major release.
 - Never reboot two Kubernetes servers together. Expect a brief API/ingress
   outage when rebooting the single control-plane server and workload downtime
   for USB-bound ADB and node-local storage.
@@ -28,10 +29,20 @@ Snapshot: 2026-10-04. No server updates or workload source changes applied yet.
 - [x] Kubernetes API and GitHub access verified; GitHub Actions enabled.
 - [x] All three nodes Ready: Ubuntu 26.04 LTS, k3s v1.35.5+k3s1.
 - [x] Initial Argo CD sources inspected: DeviceHub repository, `kuber` branch.
-- [ ] SSH and sudo on 192.168.0.121-123: initial `mdub1na` login refused.
-- [ ] Proxmox maintenance scope and administrative access confirmed.
+- [ ] SSH and sudo on 192.168.0.121-123: deferred; the user will provide access
+  later. The initial control-server `mdub1na` login was refused.
+- [x] Maintenance scope confirmed: Kubernetes VMs only; no Proxmox host update.
 - [ ] Android USB visibility: both ADB device lists were empty at preflight.
 - [ ] Container build/publish verified; local Docker daemon is not running.
+- [x] GHCR build workflow prepared and locally committed as `9758acdf`.
+- [x] GitHub authorization refreshed by the user; `workflow` scope verified.
+- [ ] Prepared commits pushed and container build/publish verified.
+- [x] STF/RethinkDB manifests prepared; ten local Kustomize slices render.
+- [x] STF/RethinkDB client-side schema checks and 15-command CLI audit passed.
+- [x] Five isolated Secret bootstrap checks passed using in-memory module mocks:
+  creation, idempotency, wrong cluster, failed LDAP bind and missing credential.
+- [x] Secret bootstrap explicitly confirmed and completed: current LDAP bind
+  verified, three Secrets created, repeated execution preserved all three.
 - [ ] Server maintenance completed.
 - [ ] STF/RethinkDB manifests and image verified.
 - [ ] GitOps source switched and STF functional checks passed.
@@ -41,7 +52,7 @@ Snapshot: 2026-10-04. No server updates or workload source changes applied yet.
 
 1. Inspect SSH/sudo, OS releases, disk/memory, package holds, repositories,
    pending upgrades, reboot-required flags, k3s service arguments and datastore
-   type. Inspect Proxmox version/repositories only if included by the user.
+   type. Proxmox host updates are excluded by the user.
 2. Preserve the k3s configuration/token/datastore and LDAP persistent data
    before host maintenance. MongoDB data does not need a backup. Identify the
    correct datastore backup procedure; do not assume embedded etcd.
@@ -55,11 +66,7 @@ Snapshot: 2026-10-04. No server updates or workload source changes applied yet.
    Reboot if required, wait for SSH/API/Ready/DNS/ingress, then uncordon.
 6. Repeat for the Android worker, then the storage worker, checking services
    after each node. Do not treat storage-bound Pending pods as movable workloads.
-7. If included, update Proxmox within its current supported major release after
-   VM maintenance. Inspect the package transaction first and gracefully stop
-   the VMs before a host reboot; restore control, storage and Android guests and
-   check USB passthrough. Never reboot the hypervisor with all guests running.
-8. Record before/after package/kernel/k3s versions and repeat node, LDAP, ADB,
+7. Record before/after package/kernel/k3s versions and repeat node, LDAP, ADB,
    Grid and ingress checks before application migration.
 
 Official references: [k3s manual upgrades](https://docs.k3s.io/upgrades/manual)
@@ -74,6 +81,8 @@ and [Kubernetes node drain](https://kubernetes.io/docs/tasks/administer-cluster/
    Verify an amd64 build and node pull access; pin deployment images by digest.
 3. Replace the MongoDB slice with internal-only RethinkDB, local-path PVC on
    the storage worker, readiness checks and a successful `stf migrate` Job.
+   Apply the PVC and StatefulSet in the same sync wave so WaitForFirstConsumer
+   volume binding does not deadlock the application.
 4. Correct STF CLI/environment contracts, shared authentication secret,
    LDAP settings, messaging connections, storage URLs and provider commands.
    Verify all rendered manifests before any synchronization.

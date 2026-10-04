@@ -1,0 +1,87 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: devicehub
+  annotations:
+    cert-manager.io/issuer: letsencrypt-http
+    traefik.ingress.kubernetes.io/router.entrypoints: web,websecure
+spec:
+  ingressClassName: traefik
+  tls:
+    - hosts:
+        - devicehub.putmyhexon.ru
+      secretName: devicehub-putmyhexon-ru-tls
+  rules:
+    - host: devicehub.putmyhexon.ru
+      http:
+        paths:
+          - path: /d/
+            pathType: Prefix
+            backend:
+              service:
+                name: devicehub-dynamic-proxy
+                port:
+                  number: 8080
+          - path: /socket.io/
+            pathType: Prefix
+            backend:
+              service:
+                name: devicehub-websocket
+                port:
+                  number: 3000
+          - path: /static/auth/
+            pathType: Prefix
+            backend:
+              service:
+                name: devicehub-auth
+                port:
+                  number: 3000
+          - path: /auth/
+            pathType: Prefix
+            backend:
+              service:
+                name: devicehub-auth
+                port:
+                  number: 3000
+          - path: /auth
+            pathType: Exact
+            backend:
+              service:
+                name: devicehub-app
+                port:
+                  number: 3000
+          - path: /api/
+            pathType: Prefix
+            backend:
+              service:
+                name: devicehub-api
+                port:
+                  number: 3000
+          - path: /s/image/
+            pathType: Prefix
+            backend:
+              service:
+                name: devicehub-storage-plugin-image
+                port:
+                  number: 3000
+          - path: /s/apk/
+            pathType: Prefix
+            backend:
+              service:
+                name: devicehub-storage-plugin-apk
+                port:
+                  number: 3000
+          - path: /s/
+            pathType: Prefix
+            backend:
+              service:
+                name: devicehub-storage-temp
+                port:
+                  number: 3000
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: devicehub-app
+                port:
+                  number: 3000

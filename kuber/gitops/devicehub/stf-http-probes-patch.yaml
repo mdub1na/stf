@@ -1,0 +1,24 @@
+- op: add
+  path: /spec/template/spec/containers/0/startupProbe
+  value:
+    tcpSocket:
+      port: 3000
+    periodSeconds: 5
+    timeoutSeconds: 3
+    failureThreshold: 60
+- op: add
+  path: /spec/template/spec/containers/0/readinessProbe
+  value:
+    tcpSocket:
+      port: 3000
+    periodSeconds: 10
+    timeoutSeconds: 3
+    failureThreshold: 3
+- op: add
+  path: /spec/template/spec/containers/0/livenessProbe
+  value:
+    tcpSocket:
+      port: 3000
+    periodSeconds: 20
+    timeoutSeconds: 3
+    failureThreshold: 6

@@ -1,0 +1,449 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: devicehub-triproxy-app
+  labels:
+    app.kubernetes.io/name: devicehub-triproxy-app
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: devicehub-triproxy-app
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: devicehub-triproxy-app
+    spec:
+      containers:
+        - name: devicehub-triproxy-app
+          image: mdub1na/devicehub:kuber-amd64-4f59199e
+          imagePullPolicy: IfNotPresent
+          command:
+            - stf
+            - triproxy
+            - app001
+            - --bind-pub
+            - tcp://*:7150
+            - --bind-dealer
+            - tcp://*:7160
+            - --bind-pull
+            - tcp://*:7170
+          envFrom:
+            - configMapRef:
+                name: devicehub-env
+          ports:
+            - name: pub
+              containerPort: 7150
+            - name: dealer
+              containerPort: 7160
+            - name: pull
+              containerPort: 7170
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: devicehub-triproxy-dev
+  labels:
+    app.kubernetes.io/name: devicehub-triproxy-dev
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: devicehub-triproxy-dev
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: devicehub-triproxy-dev
+    spec:
+      containers:
+        - name: devicehub-triproxy-dev
+          image: mdub1na/devicehub:kuber-amd64-4f59199e
+          imagePullPolicy: IfNotPresent
+          command:
+            - stf
+            - triproxy
+            - --name
+            - dev001
+            - --bind-pub
+            - tcp://*:7250
+            - --bind-dealer
+            - tcp://*:7260
+            - --bind-pull
+            - tcp://*:7270
+          envFrom:
+            - configMapRef:
+                name: devicehub-env
+          ports:
+            - name: pub
+              containerPort: 7250
+            - name: dealer
+              containerPort: 7260
+            - name: pull
+              containerPort: 7270
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: devicehub-storage-temp
+  labels:
+    app.kubernetes.io/name: devicehub-storage-temp
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: devicehub-storage-temp
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: devicehub-storage-temp
+    spec:
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+              - matchExpressions:
+                  - key: devicehub.role
+                    operator: In
+                    values:
+                      - storage
+      containers:
+        - name: devicehub-storage-temp
+          image: mdub1na/devicehub:kuber-amd64-4f59199e
+          imagePullPolicy: IfNotPresent
+          command:
+            - stf
+            - storage-temp
+            - --port
+            - "3000"
+            - --save-dir
+            - /tmp
+          envFrom:
+            - configMapRef:
+                name: devicehub-env
+          ports:
+            - name: http
+              containerPort: 3000
+          volumeMounts:
+            - name: storage-temp-data
+              mountPath: /tmp
+      volumes:
+        - name: storage-temp-data
+          persistentVolumeClaim:
+            claimName: devicehub-storage-temp-pvc
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: devicehub-storage-plugin-apk
+  labels:
+    app.kubernetes.io/name: devicehub-storage-plugin-apk
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: devicehub-storage-plugin-apk
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: devicehub-storage-plugin-apk
+    spec:
+      containers:
+        - name: devicehub-storage-plugin-apk
+          image: mdub1na/devicehub:kuber-amd64-4f59199e
+          imagePullPolicy: IfNotPresent
+          command:
+            - stf
+            - storage-plugin-apk
+            - --port
+            - "3000"
+            - --storage-url
+            - http://devicehub-storage-temp:3000/
+          envFrom:
+            - configMapRef:
+                name: devicehub-env
+          ports:
+            - name: http
+              containerPort: 3000
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: devicehub-storage-plugin-image
+  labels:
+    app.kubernetes.io/name: devicehub-storage-plugin-image
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: devicehub-storage-plugin-image
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: devicehub-storage-plugin-image
+    spec:
+      containers:
+        - name: devicehub-storage-plugin-image
+          image: mdub1na/devicehub:kuber-amd64-4f59199e
+          imagePullPolicy: IfNotPresent
+          command:
+            - stf
+            - storage-plugin-image
+            - --port
+            - "3000"
+            - --storage-url
+            - http://devicehub-storage-temp:3000/
+          envFrom:
+            - configMapRef:
+                name: devicehub-env
+          ports:
+            - name: http
+              containerPort: 3000
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: devicehub-processor
+  labels:
+    app.kubernetes.io/name: devicehub-processor
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: devicehub-processor
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: devicehub-processor
+    spec:
+      containers:
+        - name: devicehub-processor
+          image: mdub1na/devicehub:kuber-amd64-4f59199e
+          imagePullPolicy: IfNotPresent
+          command:
+            - stf
+            - processor
+            - --name
+            - processor
+            - --connect-app-dealer
+            - tcp://devicehub-triproxy-app:7160
+            - --connect-dev-dealer
+            - tcp://devicehub-triproxy-dev:7260
+          envFrom:
+            - configMapRef:
+                name: devicehub-env
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: devicehub-reaper
+  labels:
+    app.kubernetes.io/name: devicehub-reaper
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: devicehub-reaper
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: devicehub-reaper
+    spec:
+      containers:
+        - name: devicehub-reaper
+          image: mdub1na/devicehub:kuber-amd64-4f59199e
+          imagePullPolicy: IfNotPresent
+          command:
+            - stf
+            - reaper
+            - --name
+            - reaper001
+            - --connect-push
+            - tcp://devicehub-triproxy-dev:7270
+            - --connect-sub
+            - tcp://devicehub-triproxy-app:7150
+            - --heartbeat-timeout
+            - "30000"
+          envFrom:
+            - configMapRef:
+                name: devicehub-env
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: devicehub-api
+  labels:
+    app.kubernetes.io/name: devicehub-api
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: devicehub-api
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: devicehub-api
+    spec:
+      containers:
+        - name: devicehub-api
+          image: mdub1na/devicehub:kuber-amd64-4f59199e
+          imagePullPolicy: IfNotPresent
+          command:
+            - stf
+            - api
+            - --port
+            - "3000"
+            - --connect-sub
+            - tcp://devicehub-triproxy-app:7150
+            - --connect-push
+            - tcp://devicehub-triproxy-app:7170
+            - --connect-sub-dev
+            - tcp://devicehub-triproxy-dev:7250
+            - --connect-push-dev
+            - tcp://devicehub-triproxy-dev:7270
+          envFrom:
+            - configMapRef:
+                name: devicehub-env
+          ports:
+            - name: http
+              containerPort: 3000
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: devicehub-websocket
+  labels:
+    app.kubernetes.io/name: devicehub-websocket
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: devicehub-websocket
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: devicehub-websocket
+    spec:
+      containers:
+        - name: devicehub-websocket
+          image: mdub1na/devicehub:kuber-amd64-4f59199e
+          imagePullPolicy: IfNotPresent
+          command:
+            - stf
+            - websocket
+            - --port
+            - "3000"
+            - --storage-url
+            - https://devicehub.putmyhexon.ru/
+            - --connect-sub
+            - tcp://devicehub-triproxy-app:7150
+            - --connect-push
+            - tcp://devicehub-triproxy-app:7170
+          envFrom:
+            - configMapRef:
+                name: devicehub-env
+          ports:
+            - name: http
+              containerPort: 3000
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: devicehub-api-groups-engine
+  labels:
+    app.kubernetes.io/name: devicehub-api-groups-engine
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: devicehub-api-groups-engine
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: devicehub-api-groups-engine
+    spec:
+      containers:
+        - name: devicehub-api-groups-engine
+          image: mdub1na/devicehub:kuber-amd64-4f59199e
+          imagePullPolicy: IfNotPresent
+          command:
+            - stf
+            - groups-engine
+            - --connect-sub
+            - tcp://devicehub-triproxy-app:7150
+            - --connect-push
+            - tcp://devicehub-triproxy-app:7170
+            - --connect-push-dev
+            - tcp://devicehub-triproxy-dev:7270
+            - --connect-sub-dev
+            - tcp://devicehub-triproxy-dev:7250
+          envFrom:
+            - configMapRef:
+                name: devicehub-env
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: devicehub-auth
+  labels:
+    app.kubernetes.io/name: devicehub-auth
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: devicehub-auth
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: devicehub-auth
+      annotations:
+        devicehub/config-revision: "letsencrypt-v1"
+    spec:
+      containers:
+        - name: devicehub-auth
+          image: mdub1na/devicehub:kuber-amd64-4f59199e
+          imagePullPolicy: IfNotPresent
+          command:
+            - stf
+            - auth-ldap
+            - --port
+            - "3000"
+          envFrom:
+            - configMapRef:
+                name: devicehub-env
+          ports:
+            - name: http
+              containerPort: 3000
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: devicehub-app
+  labels:
+    app.kubernetes.io/name: devicehub-app
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: devicehub-app
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: devicehub-app
+      annotations:
+        devicehub/config-revision: "letsencrypt-v1"
+    spec:
+      containers:
+        - name: devicehub-app
+          image: mdub1na/devicehub:kuber-amd64-4f59199e
+          imagePullPolicy: IfNotPresent
+          command:
+            - stf
+            - app
+            - --port
+            - "3000"
+          envFrom:
+            - configMapRef:
+                name: devicehub-env
+          ports:
+            - name: http
+              containerPort: 3000

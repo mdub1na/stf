@@ -1,0 +1,14 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: rethinkdb
+  annotations:
+    argocd.argoproj.io/sync-wave: "-2"
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: rethinkdb
+  ports:
+    - name: driver
+      port: 28015
+      targetPort: driver

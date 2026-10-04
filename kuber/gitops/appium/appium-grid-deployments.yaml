@@ -1,0 +1,208 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: appium-grid-event-bus
+  labels:
+    app.kubernetes.io/name: appium-grid-event-bus
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: appium-grid-event-bus
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: appium-grid-event-bus
+    spec:
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+              - matchExpressions:
+                  - key: devicehub.role
+                    operator: In
+                    values:
+                      - storage
+      containers:
+        - name: event-bus
+          image: selenium/event-bus:4.39.0
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: publish
+              containerPort: 4442
+            - name: subscribe
+              containerPort: 4443
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: appium-grid-sessions
+  labels:
+    app.kubernetes.io/name: appium-grid-sessions
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: appium-grid-sessions
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: appium-grid-sessions
+    spec:
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+              - matchExpressions:
+                  - key: devicehub.role
+                    operator: In
+                    values:
+                      - storage
+      containers:
+        - name: sessions
+          image: selenium/sessions:4.39.0
+          imagePullPolicy: IfNotPresent
+          env:
+            - name: SE_EVENT_BUS_HOST
+              value: appium-grid-event-bus
+            - name: SE_EVENT_BUS_PUBLISH_PORT
+              value: "4442"
+            - name: SE_EVENT_BUS_SUBSCRIBE_PORT
+              value: "4443"
+          ports:
+            - name: http
+              containerPort: 5556
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: appium-grid-session-queue
+  labels:
+    app.kubernetes.io/name: appium-grid-session-queue
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: appium-grid-session-queue
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: appium-grid-session-queue
+    spec:
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+              - matchExpressions:
+                  - key: devicehub.role
+                    operator: In
+                    values:
+                      - storage
+      containers:
+        - name: session-queue
+          image: selenium/session-queue:4.39.0
+          imagePullPolicy: IfNotPresent
+          env:
+            - name: SE_EVENT_BUS_HOST
+              value: appium-grid-event-bus
+            - name: SE_EVENT_BUS_PUBLISH_PORT
+              value: "4442"
+            - name: SE_EVENT_BUS_SUBSCRIBE_PORT
+              value: "4443"
+          ports:
+            - name: http
+              containerPort: 5559
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: appium-grid-distributor
+  labels:
+    app.kubernetes.io/name: appium-grid-distributor
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: appium-grid-distributor
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: appium-grid-distributor
+    spec:
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+              - matchExpressions:
+                  - key: devicehub.role
+                    operator: In
+                    values:
+                      - storage
+      containers:
+        - name: distributor
+          image: selenium/distributor:4.39.0
+          imagePullPolicy: IfNotPresent
+          env:
+            - name: SE_EVENT_BUS_HOST
+              value: appium-grid-event-bus
+            - name: SE_EVENT_BUS_PUBLISH_PORT
+              value: "4442"
+            - name: SE_EVENT_BUS_SUBSCRIBE_PORT
+              value: "4443"
+            - name: SE_SESSIONS_MAP_HOST
+              value: appium-grid-sessions
+            - name: SE_SESSIONS_MAP_PORT
+              value: "5556"
+            - name: SE_SESSION_QUEUE_HOST
+              value: appium-grid-session-queue
+            - name: SE_SESSION_QUEUE_PORT
+              value: "5559"
+          ports:
+            - name: http
+              containerPort: 5553
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: appium-grid-router
+  labels:
+    app.kubernetes.io/name: appium-grid-router
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: appium-grid-router
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: appium-grid-router
+    spec:
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+              - matchExpressions:
+                  - key: devicehub.role
+                    operator: In
+                    values:
+                      - storage
+      containers:
+        - name: router
+          image: selenium/router:4.39.0
+          imagePullPolicy: IfNotPresent
+          env:
+            - name: SE_DISTRIBUTOR_HOST
+              value: appium-grid-distributor
+            - name: SE_DISTRIBUTOR_PORT
+              value: "5553"
+            - name: SE_SESSIONS_MAP_HOST
+              value: appium-grid-sessions
+            - name: SE_SESSIONS_MAP_PORT
+              value: "5556"
+            - name: SE_SESSION_QUEUE_HOST
+              value: appium-grid-session-queue
+            - name: SE_SESSION_QUEUE_PORT
+              value: "5559"
+          ports:
+            - name: http
+              containerPort: 4444

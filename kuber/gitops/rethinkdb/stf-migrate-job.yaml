@@ -1,0 +1,39 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: stf-migrate
+  annotations:
+    argocd.argoproj.io/hook: Sync
+    argocd.argoproj.io/hook-delete-policy: BeforeHookCreation,HookSucceeded
+    argocd.argoproj.io/sync-wave: "1"
+spec:
+  backoffLimit: 3
+  activeDeadlineSeconds: 600
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: stf-migrate
+    spec:
+      restartPolicy: OnFailure
+      containers:
+        - name: migrate
+          image: ghcr.io/mdub1na/stf:bootstrap
+          command:
+            - stf
+            - migrate
+          env:
+            - name: RETHINKDB_PORT_28015_TCP
+              value: tcp://rethinkdb.rethinkdb.svc.cluster.local:28015
+            - name: RETHINKDB_ENV_DATABASE
+              value: stf
+            - name: STF_ADMIN_NAME
+              value: administrator
+            - name: STF_ADMIN_EMAIL
+              value: administrator@fakedomain.com
+          resources:
+            requests:
+              cpu: 50m
+              memory: 128Mi
+            limits:
+              cpu: "1"
+              memory: 512Mi

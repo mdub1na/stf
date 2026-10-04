@@ -3,10 +3,10 @@ name: Docker
 on:
   workflow_dispatch:
   pull_request:
-    paths-ignore: ['**.md', 'doc/**']
+    paths-ignore: ['**.md', 'doc/**', 'kuber/**']
   push:
     branches: [master, develop]
-    paths-ignore: ['**.md', 'doc/**']
+    paths-ignore: ['**.md', 'doc/**', 'kuber/**']
 
 concurrency:
   group: docker-${{ github.ref }}

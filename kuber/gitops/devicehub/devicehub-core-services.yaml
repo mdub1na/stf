@@ -1,0 +1,159 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: devicehub-app
+  labels:
+    app.kubernetes.io/name: devicehub-app
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: devicehub-app
+  ports:
+    - name: http
+      port: 3000
+      targetPort: 3000
+      protocol: TCP
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: devicehub-auth
+  labels:
+    app.kubernetes.io/name: devicehub-auth
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: devicehub-auth
+  ports:
+    - name: http
+      port: 3000
+      targetPort: 3000
+      protocol: TCP
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: devicehub-api
+  labels:
+    app.kubernetes.io/name: devicehub-api
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: devicehub-api
+  ports:
+    - name: http
+      port: 3000
+      targetPort: 3000
+      protocol: TCP
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: devicehub-websocket
+  labels:
+    app.kubernetes.io/name: devicehub-websocket
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: devicehub-websocket
+  ports:
+    - name: http
+      port: 3000
+      targetPort: 3000
+      protocol: TCP
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: devicehub-storage-temp
+  labels:
+    app.kubernetes.io/name: devicehub-storage-temp
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: devicehub-storage-temp
+  ports:
+    - name: http
+      port: 3000
+      targetPort: 3000
+      protocol: TCP
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: devicehub-storage-plugin-apk
+  labels:
+    app.kubernetes.io/name: devicehub-storage-plugin-apk
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: devicehub-storage-plugin-apk
+  ports:
+    - name: http
+      port: 3000
+      targetPort: 3000
+      protocol: TCP
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: devicehub-storage-plugin-image
+  labels:
+    app.kubernetes.io/name: devicehub-storage-plugin-image
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: devicehub-storage-plugin-image
+  ports:
+    - name: http
+      port: 3000
+      targetPort: 3000
+      protocol: TCP
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: devicehub-triproxy-app
+  labels:
+    app.kubernetes.io/name: devicehub-triproxy-app
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: devicehub-triproxy-app
+  ports:
+    - name: pub
+      port: 7150
+      targetPort: 7150
+      protocol: TCP
+    - name: dealer
+      port: 7160
+      targetPort: 7160
+      protocol: TCP
+    - name: pull
+      port: 7170
+      targetPort: 7170
+      protocol: TCP
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: devicehub-triproxy-dev
+  labels:
+    app.kubernetes.io/name: devicehub-triproxy-dev
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: devicehub-triproxy-dev
+  ports:
+    - name: pub
+      port: 7250
+      targetPort: 7250
+      protocol: TCP
+    - name: dealer
+      port: 7260
+      targetPort: 7260
+      protocol: TCP
+    - name: pull
+      port: 7270
+      targetPort: 7270
+      protocol: TCP

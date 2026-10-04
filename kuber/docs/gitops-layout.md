@@ -52,7 +52,8 @@ gitops/root/
 ```
 
 `root/` points all child applications at `mdub1na/stf`, revision `develop`.
-The running cluster still uses the old source until the controlled cutover.
+The live cluster was switched to this source on 2026-10-04. STF and RethinkDB
+remain manual-sync; the root and infrastructure applications use prune/self-heal.
 
 ## Argo CD Config
 
@@ -162,7 +163,10 @@ gitops/appium/
   appium-grid-ingress.yaml
 ```
 
-Appium Grid control-plane components run on the storage node. Android Appium node replicas run on the Android node and connect to the DeviceHub ADB service.
+Appium Grid control-plane components run on the storage node. Android Appium
+node replicas run on the Android node and connect to the retained ADB services,
+with eight nodes per ADB pool. The copied Java tests still require adaptation
+from DeviceHub-specific APIs to standard STF APIs.
 
 ## Reserved Slices
 

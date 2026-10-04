@@ -98,6 +98,23 @@ This file keeps background reasoning, rejected alternatives, and explanatory con
 - Start the iOS provider manually from a console command when it is needed.
 - Remove the launchctl plist from `kuber/scripts/ios` to avoid documenting or preserving an unsupported startup path.
 
+### STF GitOps rollout on 2026-10-04
+
+- Switch the existing root and child Applications to `mdub1na/stf`, `develop`;
+  preserve historical namespace/service/domain names and Android/Appium wiring.
+- Deploy before server upgrades, as confirmed by the user. Update only the
+  three Kubernetes VMs once SSH access is provided; exclude Proxmox and Mac mini.
+- Use fresh RethinkDB storage and a successful STF migration hook. The user
+  allowed deleting old MongoDB data, so no MongoDB conversion or backup was done.
+- Publish a public GHCR image and pin its verified multiarch digest in GitOps.
+- Preserve LDAP and temp storage PVCs. Replace plaintext manifest/ConfigMap
+  credentials with separately bootstrapped Secrets without LDAP password reset.
+- Remove iOS bridges and launcher scripts from active deployment scope.
+- Restore root/infrastructure auto-sync; keep STF and RethinkDB manual-sync.
+- Preserve the 8 + 8 Appium nodes. Copied Java tests are historical until adapted
+  away from DeviceHub-specific allocation APIs. Devices were disconnected at
+  rollout, so screen/touch/capture/APK/test checks remain pending.
+
 ## Explanatory notes
 
 ### What `root` means

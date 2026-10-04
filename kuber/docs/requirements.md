@@ -2,7 +2,10 @@
 
 ## Goal
 
-Deploy DeviceHub as a Kubernetes-based mobile device farm on the current Proxmox, k3s, and Mac mini infrastructure.
+Deploy Android STF as a Kubernetes-based device farm on the existing
+Proxmox/k3s infrastructure using GitOps from `mdub1na/stf`, `develop`.
+Preserve LDAP data, Android ADB/provider pools, Appium Grid and public domains.
+The old MongoDB data may be deleted; iOS and Mac mini changes are out of scope.
 
 ## Infrastructure
 
@@ -12,13 +15,20 @@ Deploy DeviceHub as a Kubernetes-based mobile device farm on the current Proxmox
 
 ### k3s nodes
 
+The table records original capacity planning, not verified current VM sizing.
+Use [the live access inventory](./cluster-access.md) for node/version/access
+checks before maintenance; do not resize servers based on this table alone.
+
 | Node | IP | CPU | RAM | Disk | Role |
 | --- | --- | --- | --- | --- | --- |
 | `k3s-control` | `192.168.0.121` | `4` | `6Gi` | `128Gi` | control / GitOps |
 | `k3s-worker-1` | `192.168.0.122` | `6` | `16Gi` | `128Gi` | Android execution |
 | `k3s-worker-2` | `192.168.0.123` | `4` | `8Gi` | `128Gi` | storage / stateful |
 
-### Apple hardware
+### Future Apple hardware
+
+Historical capacity only. No iOS deployment or Mac mini maintenance is included
+in the Android STF rollout.
 
 | Host | RAM | Disk | Role |
 | --- | --- | --- | --- |
@@ -26,17 +36,17 @@ Deploy DeviceHub as a Kubernetes-based mobile device farm on the current Proxmox
 
 ## Functional scope
 
-- DeviceHub browser-based manual testing already exists and must be deployed, not rewritten.
-- DeviceHub must provide:
+- STF browser-based manual testing must be deployed, not rewritten.
+- The Android platform must provide:
   - browser access to physical devices
-  - Android and iOS UI automation support
+  - Android UI automation support through the retained Appium Grid
   - external ADB access for Android devices
 
 ## Device connectivity
 
 - Android devices are physically connected to the Proxmox host.
 - Android devices are passed through into one dedicated VM.
-- iOS devices stay outside k3s and are handled through the Mac mini.
+- iOS device support is a separate future task, not an acceptance gate here.
 
 ## Access requirements
 
@@ -47,19 +57,34 @@ Deploy DeviceHub as a Kubernetes-based mobile device farm on the current Proxmox
 ## Capacity targets
 
 - `8` Android devices
-- `2` iOS devices
 - parallel automation is required
+- retain two ADB/provider pools and eight Appium nodes per pool
+- retain system ports `8200-8209` on each ADB server
+- connected-device verification requires actual USB devices; empty ADB lists
+  leave screen/touch/capture/APK and test execution pending
 
 ## Platform components in scope
 
-- DeviceHub core services
-- `MongoDB`
+- Android STF core services
+- `RethinkDB` with fresh storage and an initialization hook
 - `OpenLDAP`
 - `phpLDAPadmin`
 - `Appium Grid`
-- `mitmproxy` / `mitmweb`
-- observability stack
+- `mitmproxy` / `mitmweb` reserved for later work
+- observability stack reserved for later work
 - `Argo CD`
+
+## Deployment and maintenance boundaries
+
+- Workload changes go through Git and Argo CD. Initial source/project changes,
+  separate Secret bootstrap and orphaned MongoDB cleanup are migration exceptions.
+- Use a public, verified STF image pinned by digest. Do not commit credentials.
+- Deploy on the current healthy nodes first, then update only the three
+  Kubernetes VMs once SSH/sudo access is provided. Do not update Proxmox or Mac mini.
+- Back up k3s, LDAP, RethinkDB and Secrets before maintenance; update/reboot one
+  Kubernetes server at a time without deleting persistent data to enable drain.
+- Copied Java tests require STF API adaptation; DeviceHub `/api/v1/autotests`
+  endpoints are not part of this deployment.
 
 ## Agreed platform stack
 

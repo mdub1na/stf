@@ -5,6 +5,12 @@ the existing Proxmox/k3s infrastructure. iOS is excluded from this rollout.
 Historical `devicehub` service names and domains are retained to preserve ADB
 and Appium connectivity.
 
+STF was deployed on 2026-10-04 at <https://devicehub.putmyhexon.ru>. All ten
+Argo CD Applications now use this repository's `develop` branch and are
+Synced/Healthy. LDAP login is confirmed; the 16-node Appium Grid is unchanged.
+Device-specific checks await connected Android devices. See the rollout plan
+for verified results and pending work.
+
 ## Documents
 
 - [Current requirements](./docs/requirements.md)
@@ -63,5 +69,8 @@ For migration, follow the rollout plan and deployment runbook instead.
 ## Next focus
 
 - keep GitOps documentation aligned with the live manifests
+- verify screen/touch, capture/release and APK installation with connected Android devices
+- adapt the copied Java tests from DeviceHub-specific APIs to standard STF APIs
+- update the three Kubernetes servers after SSH access is provided
 - implement the reserved `mitmproxy` and `observability` slices when we are ready for those layers
-- move plaintext credentials to a proper Kubernetes Secret / sealed secret flow later
+- back up the bootstrapped Secrets outside Git and evaluate encrypted GitOps secret management

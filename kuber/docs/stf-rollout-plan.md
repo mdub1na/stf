@@ -25,9 +25,10 @@ are outside this rollout.
 
 ## Current checkpoint
 
-Snapshot: 2026-10-04. Three migration Secrets have been bootstrapped; no server
-updates or workload source changes have been applied. SSH access is deferred.
-The user confirmed deployment before server maintenance and a public GHCR image.
+Snapshot: 2026-10-04. STF is deployed through Argo CD from `develop`; all ten
+Applications are Synced/Healthy. The user confirmed deployment before server
+maintenance and a public GHCR image. No server upgrades have been applied;
+SSH access is deferred. LDAP and STF temp storage were preserved.
 
 - [x] Kubernetes API and GitHub access verified; GitHub Actions enabled.
 - [x] All three nodes Ready: Ubuntu 26.04 LTS, k3s v1.35.5+k3s1.
@@ -49,7 +50,7 @@ The user confirmed deployment before server maintenance and a public GHCR image.
 - [x] Anonymous GHCR manifest access verified; package visibility was not changed.
   Both STF and migration images are pinned to the verified multiarch digest
   `sha256:9da0a528f91c5ced4594ee1706392042808819276675311827e516b4971c4e81`.
-- [ ] Image pull by the Kubernetes runtime verified during deployment.
+- [x] Image pull by Kubernetes verified on all three nodes during deployment.
 - [x] STF/RethinkDB manifests prepared; ten local Kustomize slices render.
 - [x] STF/RethinkDB client-side schema checks and 15-command CLI audit passed.
 - [x] Five isolated Secret bootstrap checks passed using in-memory module mocks:
@@ -58,8 +59,18 @@ The user confirmed deployment before server maintenance and a public GHCR image.
   verified, three Secrets created, repeated execution preserved all three.
 - [ ] Server maintenance completed.
 - [x] STF/RethinkDB manifests validated locally and published image verified.
-- [ ] GitOps source switched and STF functional checks passed.
-- [ ] Old MongoDB/iOS resources removed and final state documented.
+- [x] GitOps source switched at `59aaafab`; all 14 STF components are Ready.
+- [x] RethinkDB initialization hook succeeded; six STF tables created.
+- [x] HTTPS/login/static/API authentication gate, WebSocket handshake and temp
+  storage upload/download passed. The user confirmed normal LDAP login.
+- [x] Both providers reach their corresponding ADB servers; 16 Grid nodes UP,
+  no active sessions. All ten Argo Applications remain Synced/Healthy.
+- [ ] Device screen/touch, capture/release, APK install and test execution:
+  pending because neither ADB server has connected devices.
+- [ ] Explicit authenticated REST API token check: a new STF token is needed;
+  old DeviceHub tokens and Java allocation APIs are not reused.
+- [x] Old MongoDB Application, namespace, workloads, PVC and PV removed; iOS
+  bridges removed. Root/infrastructure auto-sync restored; final state recorded.
 
 ## Server maintenance
 

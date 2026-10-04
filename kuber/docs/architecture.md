@@ -1,18 +1,28 @@
 # STF Migration Architecture
 
-The prepared GitOps source runs Android STF with RethinkDB in place of
+The deployed GitOps source runs Android STF with RethinkDB in place of
 DeviceHub/MongoDB. It retains the existing `devicehub` namespace, service names,
 node labels, public domain, two ADB/provider pairs and 8 + 8 Appium nodes.
 RethinkDB gets a new `5Gi` local-path PVC on the storage worker; LDAP and temp
-storage PVCs remain unchanged. iOS bridges and Mac mini operations are excluded.
+storage PVCs remain unchanged. iOS bridges are removed; Mac mini operations are
+excluded. The old MongoDB namespace, workloads and persistent data were deleted.
 
-The live cluster has not been switched yet. The rollout status is tracked in
-[the execution plan](./stf-rollout-plan.md); the Argo CD source/secret/database
-sequence is described in [the deployment runbook](./stf-deployment.md).
+The live cluster was switched on 2026-10-04. All ten Argo CD Applications use
+`https://github.com/mdub1na/stf.git`, revision `develop`, and are Synced/Healthy.
+STF and RethinkDB synchronize manually; the root and infrastructure applications
+have automatic prune/self-heal. Passwords and the shared session key are supplied
+by separately bootstrapped Kubernetes Secrets, not the ConfigMap or Git.
+
+LDAP login, HTTPS/static routing, WebSocket handshake, database access and temp
+storage upload/download are verified. Android screen/touch and test execution
+await connected devices; both ADB servers currently return empty device lists.
+The rollout status is tracked in [the execution plan](./stf-rollout-plan.md);
+the source/secret/database sequence is in
+[the deployment runbook](./stf-deployment.md). Server maintenance awaits SSH.
 
 ## Original DeviceHub Architecture
 
-The sections below record the original deployment, not the prepared STF source.
+The sections below record the original deployment, not the current STF runtime.
 
 ## Runtime zones
 

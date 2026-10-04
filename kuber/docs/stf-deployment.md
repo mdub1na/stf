@@ -90,3 +90,31 @@ bridge Services/Endpoints/NodePorts through the application synchronization.
 The copied Java tests still depend on DeviceHub's `/api/v1/autotests` API. They
 are historical code pending a separate STF client adaptation, not validation
 of this rollout. iOS support and Mac mini changes are explicitly out of scope.
+
+## Verified rollout on 2026-10-04
+
+Deployment revision: `59aaafab05d759017e5017db659e0321bc3879a3` on `develop`.
+The image was pulled successfully by all three Kubernetes nodes. The RethinkDB
+hook succeeded and created `accessTokens`, `devices`, `groups`, `logs`, `users`
+and `vncauth`. All 14 STF components became Ready without restarts.
+
+All ten Applications are Synced/Healthy with the STF repository source. Root
+and infrastructure automatic prune/self-heal are restored; STF and RethinkDB
+remain manual-sync. OpenLDAP and temp storage PVC identities are unchanged.
+
+Verified: public TLS; login page and JS/logo assets; normal LDAP login confirmed
+by the user; `/auth/contact` database query; unauthenticated API returns 401;
+Engine.IO WebSocket handshake; temp file upload (201) and identical readback
+(200); both provider-to-ADB connections; Grid ready with 16 UP nodes and no
+sessions. Socket.IO is configured for WebSocket only; polling is not a valid
+health probe.
+
+The old MongoDB Application had no resources finalizer, so root pruning removed
+only its Application. After STF validation, its orphaned `mongodb` namespace
+was deleted explicitly, including workloads/PVC/PV. This was one-time migration
+cleanup, not a workload deployment outside GitOps. iOS bridge resources are gone.
+
+Still pending: connected-device screen/touch, capture/release and APK checks;
+new authenticated REST API token verification; adaptation of Java tests; SSH
+access and the separate server maintenance stage. Neither ADB server currently
+lists a device. No OS/k3s updates, Proxmox changes or Mac mini changes were made.

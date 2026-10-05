@@ -9,8 +9,10 @@ Argo CD, LDAP administration and Appium Grid retain their existing domains.
 STF was deployed on 2026-10-04; its public domain was changed on 2026-10-05. All ten
 Argo CD Applications now use this repository's `develop` branch and are
 Synced/Healthy. GitLab OAuth login was deployed on 2026-10-05; its redirect and
-security checks passed, while the first real login and administrator mapping
-are pending. The LDAP base remains available for rollback; the 16-node Appium Grid is unchanged.
+security checks passed, and the user confirmed browser login. The approved
+account was explicitly promoted to administrator; its role was verified in the
+database, while administrator UI access awaits confirmation. The LDAP base
+remains available for rollback; the 16-node Appium Grid is unchanged.
 Device-specific checks await connected Android devices. See the rollout plan
 for verified results and pending work.
 
@@ -71,8 +73,8 @@ For migration, follow the rollout plan and deployment runbook instead.
 
 ## Next focus
 
-- verify the first real GitLab login and explicitly grant the approved account
-  STF administrator rights; retain the LDAP base until both are confirmed
+- confirm administrator UI access with the approved account; browser login is
+  confirmed and its database role is `admin`; retain the LDAP base until confirmed
 - keep GitOps documentation aligned with the live manifests
 - verify screen/touch, capture/release and APK installation with connected Android devices
 - adapt the copied Java tests from DeviceHub-specific APIs to standard STF APIs

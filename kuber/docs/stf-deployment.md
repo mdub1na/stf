@@ -49,8 +49,16 @@ rotated. Existing users need a new login because cookies are hostname-scoped.
 
 The laptop resolver still returned the former `136.115.23.98` address during
 verification, while authoritative/public/cluster DNS returned the correct IP.
-If a client still sees the previous destination, wait for its DNS cache to
-expire. A targeted check preserves hostname and full certificate validation:
+After the router cache expired, flushing the macOS DNS cache restored normal
+hostname access with valid TLS at 13:55 local time on 2026-10-05. If a client
+still sees the previous destination, wait for the upstream DNS cache to expire,
+then clear its local cache and retry in a new private browser window. On macOS:
+
+```sh
+dscacheutil -flushcache
+```
+
+A targeted check preserves hostname and full certificate validation:
 
 ```sh
 curl --resolve stf.finservice.tech:443:46.191.173.144 \
@@ -181,12 +189,20 @@ Verified GitLab deployment on 2026-10-05:
 - Router DNS `192.168.10.1` still cached the former STF IP during verification;
   its remaining TTL was 462 seconds at 13:42 local time. Public DNS returned
   `46.191.173.144`. Targeted public checks retained full HTTPS verification.
+- Once the router cache expired, flushing the laptop's DNS cache restored a
+  normal hostname request: `46.191.173.144`, HTTP 302 and successful certificate
+  validation at 13:55 local time.
+- GitLab login created the approved account. A targeted update changed only
+  its `privilege` to `admin`; both its role and preservation of the original
+  administrator were verified in the database.
+- The user confirmed successful browser login through GitLab after the DNS
+  cache correction.
 
-Pending: the user's first successful GitLab login and explicit promotion of the
-approved email to STF administrator. Do not remove the original administrator,
-LDAP deployment, PVC or bind Secret before both checks are complete. The account
-is created by the normal STF login flow; promotion must modify only that user's
-`privilege` to `admin`, not grant administrator access to every GitLab user.
+Pending: user confirmation that STF administrator UI access works.
+Reload the farm after promotion so it loads the current database role. Do not
+remove the original administrator, LDAP deployment, PVC or bind Secret before
+this final check is complete. Future promotions must modify only an explicitly
+approved user's `privilege`, not grant administrator access to every GitLab user.
 
 ## Source cutover
 

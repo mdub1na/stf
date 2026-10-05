@@ -77,7 +77,10 @@ The public ingress address is `46.191.173.144`; Traefik advertises LAN address
 DNS, public resolvers and Kubernetes. During cutover, the laptop resolver still
 cached the former `136.115.23.98` answer. New-domain TLS verification passed
 from Kubernetes and from the laptop using the correct IP without disabling
-certificate validation. Router/NAT administration was not changed.
+certificate validation. On 2026-10-05 at 13:55 local time, after the router cache
+expired and the macOS DNS cache was flushed, a normal hostname request connected
+to `46.191.173.144` with valid TLS and redirected to GitLab. Router/NAT
+administration was not changed.
 
 | Service | URL | Namespace / backend | HTTP check |
 | --- | --- | --- | --- |
@@ -88,9 +91,12 @@ certificate validation. Router/NAT administration was not changed.
 | Appium / Selenium Grid | `https://appium-grid.putmyhexon.ru` | `appium`, `appium-grid-router:4444` | `/status`: `200` |
 
 Normal LDAP login was confirmed by the user after the initial deployment;
-GitLab OAuth replaced it on 2026-10-05. A real GitLab login and the explicitly
-approved administrator mapping are pending. OAuth callback/state/PKCE/cookie
-checks passed; Grid remains ready with 16 UP nodes and zero sessions.
+GitLab OAuth replaced it on 2026-10-05. GitLab login created the approved account;
+only that account's role was changed to `admin`, with the original administrator
+preserved. The user confirmed browser login; administrator UI access awaits
+confirmation.
+OAuth callback/state/PKCE/cookie checks passed; Grid remains ready with 16 UP
+nodes and zero sessions.
 New-domain redirect, JS/logo loading,
 WebSocket handshake, `/auth/contact` database access and temporary file
 upload/download passed. An unauthenticated `GET /api/v1/devices` returned `401`.

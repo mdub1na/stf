@@ -25,7 +25,8 @@ the active STF login on 2026-10-05: the existing child Application now selects
 new OAuth image; app reloads its auth URL, and other pod templates are unchanged.
 All users of `gitlab.finservice.tech` with a verified email may sign in; state
 and S256 PKCE are enabled. GitLab roles do not automatically grant STF privileges.
-The first real GitLab login and explicit administrator mapping are pending.
+The user confirmed GitLab browser login. The approved account was explicitly
+promoted to `admin`; administrator UI access awaits user confirmation.
 LDAP data/base and the shared session key are preserved for rollback.
 
 Android screen/touch and test execution still await connected-device validation;

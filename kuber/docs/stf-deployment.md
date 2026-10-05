@@ -5,7 +5,7 @@ server maintenance until SSH access is provided; see
 [the rollout plan](./stf-rollout-plan.md). Do not switch Argo CD to a revision
 whose image has not built successfully and cannot be pulled by nodes.
 
-## Image and secrets
+## Image
 
 GitHub Actions builds the root Dockerfile on pushes to `develop` and publishes
 `ghcr.io/mdub1na/stf:<full-commit-sha>`. The deployment image is centralized in
@@ -26,6 +26,39 @@ Verified build on 2026-10-04:
 A private GHCR package requires node pull credentials in both namespaces;
 publishing alone does not imply anonymous access. Recheck access before rollout
 if package visibility changes.
+
+## Public address
+
+The farm's canonical address is <https://stf.finservice.tech> since 2026-10-05.
+Its DNS A-record targets `46.191.173.144`. Argo CD, LDAP administration and Appium
+Grid keep their existing domains. Cluster-internal service names are unchanged.
+
+`gitops/devicehub/stf-certificate.yaml` declares Certificate and TLS Secret
+`stf-finservice-tech-tls` using the existing `letsencrypt-http` Issuer. The farm
+ingress has no ingress-shim issuer annotation because Certificate ownership is
+explicitly managed by GitOps. For another domain change, issue the new
+Certificate first, wait for Ready, then change ingress and all app/auth,
+WebSocket/storage and provider public URLs. Restart ConfigMap consumers through
+their pod-template annotations; a ConfigMap update alone does not reload env.
+
+New-domain TLS, login page/assets, auth redirect/database query, API 401,
+WebSocket and temp storage round-trip were verified. Old generated Certificate
+and TLS Secret were removed after validation; session and LDAP Secrets were not
+rotated. Existing users need a new login because cookies are hostname-scoped.
+
+The laptop resolver still returned the former `136.115.23.98` address during
+verification, while authoritative/public/cluster DNS returned the correct IP.
+If a client still sees the previous destination, wait for its DNS cache to
+expire. A targeted check preserves hostname and full certificate validation:
+
+```sh
+curl --resolve stf.finservice.tech:443:46.191.173.144 \
+  --head https://stf.finservice.tech/
+```
+
+Do not disable TLS verification to work around a cached DNS answer.
+
+## Secret bootstrap
 
 The `devicehub` slice retains historical resource names and runs STF, not
 DeviceHub. Its base image is replaced by Kustomize; apply the slice with Argo CD,

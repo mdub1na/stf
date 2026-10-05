@@ -2,10 +2,11 @@
 
 This directory contains the GitOps migration from DeviceHub to Android STF on
 the existing Proxmox/k3s infrastructure. iOS is excluded from this rollout.
-Historical `devicehub` service names and domains are retained to preserve ADB
-and Appium connectivity.
+Historical `devicehub` service names are retained to preserve ADB and Appium
+connectivity. The farm's public address is <https://stf.finservice.tech>;
+Argo CD, LDAP administration and Appium Grid retain their existing domains.
 
-STF was deployed on 2026-10-04 at <https://devicehub.putmyhexon.ru>. All ten
+STF was deployed on 2026-10-04; its public domain was changed on 2026-10-05. All ten
 Argo CD Applications now use this repository's `develop` branch and are
 Synced/Healthy. LDAP login is confirmed; the 16-node Appium Grid is unchanged.
 Device-specific checks await connected Android devices. See the rollout plan

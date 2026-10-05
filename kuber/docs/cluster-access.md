@@ -1,11 +1,14 @@
 # Cluster Access And Service Inventory
 
-Snapshot date: 2026-10-04, Asia/Yekaterinburg.
+Snapshot date: 2026-10-05, Asia/Yekaterinburg. Domain and STF/Grid checks were
+repeated during the address change; other infrastructure details retain the
+2026-10-04 inventory baseline.
 
 This document records access details after the Android STF GitOps rollout.
 The cluster now deploys from `mdub1na/stf`, `develop`. Passwords, tokens, private
 keys and kubeconfig certificate data are not copied here. Historical `devicehub`
-service names and public domains are intentionally preserved.
+service names are intentionally preserved. STF uses `stf.finservice.tech`;
+Argo CD, LDAP administration and Grid domains are unchanged.
 
 ## Repositories
 
@@ -14,7 +17,7 @@ service names and public domains are intentionally preserved.
 | Historical DeviceHub work | `https://github.com/mdub1na/devicehub` | `/Users/mdub1na/IdeaProjects/devicehub` |
 | Active STF development and deployment | `https://github.com/mdub1na/stf` | `/Users/mdub1na/IdeaProjects/stf` |
 
-The live deployment source is STF `develop`; controlled cutover revision was
+The live deployment source is STF `develop`; initial STF cutover revision was
 `59aaafab05d759017e5017db659e0321bc3879a3`. The checkout has full Git history.
 Its remotes are `origin=https://github.com/mdub1na/stf.git` and
 `upstream=https://github.com/DeviceFarmer/stf.git`. The clone is self-contained;
@@ -69,18 +72,22 @@ evidence of working SSH access to the Mac.
 
 ## Public HTTPS Entry Points
 
-All four public hosts resolved to `46.191.173.144` during the checks. Their
-ingresses use Traefik and advertise LAN address `192.168.0.121`. HTTPS certificate
-verification succeeded for all four. Router/NAT administration was not checked.
+The public ingress address is `46.191.173.144`; Traefik advertises LAN address
+`192.168.0.121`. The new STF A-record was verified through authoritative REG.RU
+DNS, public resolvers and Kubernetes. During cutover, the laptop resolver still
+cached the former `136.115.23.98` answer. New-domain TLS verification passed
+from Kubernetes and from the laptop using the correct IP without disabling
+certificate validation. Router/NAT administration was not changed.
 
 | Service | URL | Namespace / backend | HTTP check |
 | --- | --- | --- | --- |
-| STF UI | `https://devicehub.putmyhexon.ru` | `devicehub`, `devicehub-app:3000` | `/`: `302` to LDAP; `/auth/ldap/`: `200` |
+| STF UI | `https://stf.finservice.tech` | `devicehub`, `devicehub-app:3000` | `/`: `302` to LDAP; `/auth/ldap/`: `200` |
 | Argo CD | `https://argocd.putmyhexon.ru` | `argocd`, `argocd-server:80` | `200` |
 | phpLDAPadmin | `https://ldap.putmyhexon.ru` | `openldap`, `phpldapadmin:80` | `200` |
 | Appium / Selenium Grid | `https://appium-grid.putmyhexon.ru` | `appium`, `appium-grid-router:4444` | `/status`: `200` |
 
-Normal LDAP login was confirmed by the user after deployment. JS/logo loading,
+Normal LDAP login was confirmed by the user after the initial deployment.
+New-domain redirect, JS/logo loading,
 WebSocket handshake, `/auth/contact` database access and temporary file
 upload/download passed. An unauthenticated `GET /api/v1/devices` returned `401`.
 An explicit authenticated REST API token request and connected-device test
@@ -130,11 +137,11 @@ public ingress, a NodePort, or `kubectl port-forward`.
 
 | Service | Cluster-internal endpoint | LAN / local alternative |
 | --- | --- | --- |
-| STF API | `devicehub-api.devicehub.svc.cluster.local:3000` | `https://devicehub.putmyhexon.ru/api/v1` |
-| STF auth | `devicehub-auth.devicehub.svc.cluster.local:3000` | `https://devicehub.putmyhexon.ru/auth/ldap/` |
-| STF WebSocket | `devicehub-websocket.devicehub.svc.cluster.local:3000` | `wss://devicehub.putmyhexon.ru/socket.io/` |
-| Device/provider proxy | `devicehub-dynamic-proxy.devicehub.svc.cluster.local:8080` | `https://devicehub.putmyhexon.ru/d/` |
-| APK / image / temp storage | `devicehub-storage-plugin-apk`, `devicehub-storage-plugin-image`, `devicehub-storage-temp` in `devicehub`, port `3000` | `/s/apk/`, `/s/image/`, `/s/` on DeviceHub host |
+| STF API | `devicehub-api.devicehub.svc.cluster.local:3000` | `https://stf.finservice.tech/api/v1` |
+| STF auth | `devicehub-auth.devicehub.svc.cluster.local:3000` | `https://stf.finservice.tech/auth/ldap/` |
+| STF WebSocket | `devicehub-websocket.devicehub.svc.cluster.local:3000` | `wss://stf.finservice.tech/socket.io/` |
+| Device/provider proxy | `devicehub-dynamic-proxy.devicehub.svc.cluster.local:8080` | `https://stf.finservice.tech/d/` |
+| APK / image / temp storage | `devicehub-storage-plugin-apk`, `devicehub-storage-plugin-image`, `devicehub-storage-temp` in `devicehub`, port `3000` | `/s/apk/`, `/s/image/`, `/s/` on the STF host |
 | RethinkDB driver | `rethinkdb.rethinkdb.svc.cluster.local:28015`, database `stf` | Internal only; no public ingress or NodePort |
 | OpenLDAP | `openldap.openldap.svc.cluster.local:389` | Port-forward local `1389` to `389` |
 | ADB pool 1 | `adbd.devicehub.svc.cluster.local:5037` | Port-forward local `15037` to `5037` |
@@ -243,9 +250,11 @@ Persistent volumes use `local-path`, with these PVCs all `Bound`:
 | `openldap` | `openldap-data-pvc` | `1Gi` |
 | `devicehub` | `devicehub-storage-temp-pvc` | `5Gi` |
 
-The four ingress Certificates are `Ready=True`, with expiration on 2027-01-02.
+The STF Certificate `stf-finservice-tech-tls` is `Ready=True`, expiring on
+2027-01-03. Other ingress Certificates were Ready with expiration on 2027-01-02
+at the original inventory check.
 Their TLS Secrets are `appium/appium-grid-putmyhexon-ru-tls`,
-`argocd/argocd-putmyhexon-ru-tls`, `devicehub/devicehub-putmyhexon-ru-tls` and
+`argocd/argocd-putmyhexon-ru-tls`, `devicehub/stf-finservice-tech-tls` and
 `openldap/ldap-putmyhexon-ru-tls`. ACME issuer/account key name in each ingress
 namespace is `letsencrypt-http` / `letsencrypt-http-account-key`.
 

@@ -115,6 +115,18 @@ This file keeps background reasoning, rejected alternatives, and explanatory con
   away from DeviceHub-specific allocation APIs. Devices were disconnected at
   rollout, so screen/touch/capture/APK/test checks remain pending.
 
+### STF public domain on 2026-10-05
+
+- Change only the farm address from `devicehub.putmyhexon.ru` to
+  `stf.finservice.tech`; keep LDAP, Argo CD and Appium Grid domains unchanged.
+- Pre-issue an explicit GitOps Certificate, then change ingress and all
+  app/auth/WebSocket/storage/provider public URLs through Argo CD.
+- Trigger app/auth environment reload with existing pod-template annotations.
+  Do not rotate session/LDAP credentials or rebuild the unchanged application.
+- Remove generated TLS resources for the old host after new TLS validation.
+- Treat client DNS cache propagation separately from service/certificate health;
+  never disable TLS verification. Users log in again on the new hostname.
+
 ## Explanatory notes
 
 ### What `root` means

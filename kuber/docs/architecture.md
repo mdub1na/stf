@@ -2,10 +2,15 @@
 
 The deployed GitOps source runs Android STF with RethinkDB in place of
 DeviceHub/MongoDB. It retains the existing `devicehub` namespace, service names,
-node labels, public domain, two ADB/provider pairs and 8 + 8 Appium nodes.
+node labels, two ADB/provider pairs and 8 + 8 Appium nodes.
 RethinkDB gets a new `5Gi` local-path PVC on the storage worker; LDAP and temp
 storage PVCs remain unchanged. iOS bridges are removed; Mac mini operations are
 excluded. The old MongoDB namespace, workloads and persistent data were deleted.
+
+The farm uses <https://stf.finservice.tech> since 2026-10-05. Argo CD, LDAP
+administration and Appium Grid retain their previous public domains. An explicit
+GitOps Certificate supplies the farm ingress TLS Secret; app/auth redirect,
+WebSocket/storage URLs and both provider screen/public URLs use the new host.
 
 The live cluster was switched on 2026-10-04. All ten Argo CD Applications use
 `https://github.com/mdub1na/stf.git`, revision `develop`, and are Synced/Healthy.

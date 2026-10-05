@@ -2,6 +2,11 @@
 
 Java smoke tests for Android and iOS devices through local Appium or DeviceHub Appium Grid.
 
+The remote DeviceHub instructions below are historical. The current farm runs
+STF at <https://stf.finservice.tech> and does not implement `/api/v1/autotests`.
+These remote tests need API adaptation; replacing the hostname alone is not
+sufficient. Local Appium tests and the Grid endpoint are unchanged.
+
 ## Requirements
 
 - JDK 17+

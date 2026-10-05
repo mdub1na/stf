@@ -8,8 +8,10 @@ are outside this rollout.
 
 ## Execution boundaries
 
-- Preserve LDAP data, ADB DNS names, the two ADB/provider pools, public domains,
-  Appium Grid with 8 + 8 nodes, and system ports 8200-8209 per ADB pool.
+- Preserve LDAP data, ADB DNS names, the two ADB/provider pools, LDAP/Argo/Grid
+  public domains, Appium Grid with 8 + 8 nodes, and system ports 8200-8209 per
+  ADB pool. The farm domain is `stf.finservice.tech` since the separate
+  user-requested address change on 2026-10-05.
 - Keep existing application, namespace and service names during this migration.
   The `devicehub` deployment slice will run STF despite its historical name.
 - Publish workload changes through Git and synchronize them through Argo CD.
@@ -71,6 +73,21 @@ SSH access is deferred. LDAP and STF temp storage were preserved.
   old DeviceHub tokens and Java allocation APIs are not reused.
 - [x] Old MongoDB Application, namespace, workloads, PVC and PV removed; iOS
   bridges removed. Root/infrastructure auto-sync restored; final state recorded.
+
+## Public domain change on 2026-10-05
+
+- [x] `stf.finservice.tech` A-record points to `46.191.173.144`; authoritative,
+  public and cluster DNS agree. A cached old answer remains on the laptop.
+- [x] Certificate `stf-finservice-tech-tls` issued through the existing issuer
+  and declared in GitOps before cutover; old generated TLS resources removed.
+- [x] Ingress, app/auth redirects, WebSocket/storage and both provider public
+  addresses changed through Argo CD. app/auth restarted through pod annotations
+  to reload ConfigMap values. LDAP/Grid domains and credentials are unchanged.
+- [x] New-domain TLS, redirect, login page/assets, auth database query, API 401,
+  WebSocket handshake and temp upload/download passed. All ten Applications are
+  Synced/Healthy and Grid still has 16 UP nodes with no sessions.
+- [ ] New-domain signed-in browser check and connected-device screen/touch
+  checks remain pending; users must log in again on the new hostname.
 
 ## Server maintenance
 

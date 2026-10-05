@@ -139,6 +139,7 @@ gitops/devicehub/
   devicehub-android-services.yaml
   devicehub-dynamic-proxy.yaml
   devicehub-issuer.yaml
+  stf-certificate.yaml
   devicehub-ingress.yaml
   stf-runtime-patch.yaml
   stf-session-patch.yaml
@@ -148,6 +149,9 @@ gitops/devicehub/
 This slice owns STF core services, two Android ADB/provider pairs, storage, and
 public HTTPS ingress. Kustomize replaces the legacy base image with the pinned
 STF image and applies resources/probes/Secret references. iOS bridges are removed.
+The public farm host is `stf.finservice.tech`. Its TLS Certificate is explicitly
+managed in GitOps, so this ingress does not use the cert-manager ingress-shim
+annotation. Certificate issuance was completed before changing public URLs.
 
 ## Appium
 

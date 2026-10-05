@@ -1,10 +1,10 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: devicehub-auth
+  name: devicehub-app
 spec:
   template:
     spec:
       containers:
-        - name: devicehub-auth
+        - name: devicehub-app
           image: ghcr.io/mdub1na/stf@sha256:8fb93df2591b34e0eeb5ee594f9165bb196420ee7f15f2fa347b692a554cb2ba

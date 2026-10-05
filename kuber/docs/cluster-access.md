@@ -84,7 +84,7 @@ administration was not changed.
 
 | Service | URL | Namespace / backend | HTTP check |
 | --- | --- | --- | --- |
-| STF UI | `https://stf.finservice.tech` | `devicehub`, `devicehub-app:3000` | `/`: `302` to `/auth/oauth/`, then `302` to GitLab |
+| STF UI | `https://stf.finservice.tech` | `devicehub`, `devicehub-app:3000` | Without a session, `/`: `302` to the STF login page (`200`); only `/auth/oauth/start` redirects to GitLab |
 | GitLab identity provider | `https://gitlab.finservice.tech` | External OAuth/OIDC provider | HTTPS discovery and client authentication verified |
 | Argo CD | `https://argocd.putmyhexon.ru` | `argocd`, `argocd-server:80` | `200` |
 | phpLDAPadmin | `https://ldap.putmyhexon.ru` | `openldap`, `phpldapadmin:80` | `200` |

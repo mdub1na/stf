@@ -8,6 +8,7 @@ resources:
 patches:
   - path: gitlab-config-patch.yaml
   - path: auth-image-patch.yaml
+  - path: app-image-patch.yaml
   - target:
       group: apps
       version: v1

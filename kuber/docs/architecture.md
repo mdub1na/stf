@@ -21,8 +21,9 @@ by separately bootstrapped Kubernetes Secrets, not the ConfigMap or Git.
 The initial rollout verified LDAP login, HTTPS/static routing, WebSocket
 handshake, database access and temp storage upload/download. GitLab OAuth replaced
 the active STF login on 2026-10-05: the existing child Application now selects
-`kuber/gitops/stf-gitlab`, extending the unchanged LDAP base. Only auth uses the
-new OAuth image; app reloads its auth URL, and other pod templates are unchanged.
+`kuber/gitops/stf-gitlab`, extending the unchanged LDAP base. The overlay pins
+updated app/auth images for the explicit GitLab sign-in page and server-side
+logout; other pod templates are unchanged.
 All users of `gitlab.finservice.tech` with a verified email may sign in; state
 and S256 PKCE are enabled. GitLab roles do not automatically grant STF privileges.
 The user confirmed GitLab browser login. The approved account was explicitly

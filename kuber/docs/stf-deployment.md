@@ -10,7 +10,7 @@ whose image has not built successfully and cannot be pulled by nodes.
 GitHub Actions builds the root Dockerfile on pushes to `develop` and publishes
 `ghcr.io/mdub1na/stf:<full-commit-sha>`. The base deployment image is centralized in
 the `devicehub` and `rethinkdb` kustomizations and pinned by registry digest.
-The GitLab overlay separately pins the auth image described below.
+The GitLab overlay separately pins the app/auth images described below.
 GitOps-only changes do not trigger a new application image build.
 
 Verified build on 2026-10-04:
@@ -103,6 +103,26 @@ email-domain or group restriction. GitLab roles do not grant STF administrator
 rights. Existing STF users are matched by email and keep their existing display
 names and privileges. A different email creates a separate STF account.
 
+### Browser login and logout
+
+An unauthenticated visit to `/` redirects only to the STF sign-in page at
+`/auth/oauth/`. That page does not start OAuth automatically. Its explicit
+GitLab button opens `/auth/oauth/start`, which creates state/PKCE and redirects
+to GitLab. Visiting the sign-in page again does not replace an unfinished flow.
+
+The logout button sends `POST /app/logout` with the existing `X-XSRF-TOKEN`
+header. The server clears the signed STF session, its signature, CSRF cookie and
+unfinished OAuth cookies; the browser disconnects its WebSocket and returns to
+the STF sign-in page. GET requests and POST requests without a valid CSRF token
+cannot log an authenticated user out. Other cookies are not deleted.
+
+This is logout from STF, not global logout from GitLab. GitLab's own session and
+previous application consent remain intact; a new STF login still requires
+clicking its GitLab button. As with the existing stateless session model, clearing
+browser cookies does not revoke copies of sessions or API tokens elsewhere.
+
+### Provider registration
+
 Register a confidential OAuth application in GitLab with redirect URI
 `https://stf.finservice.tech/auth/oauth/callback` and scopes `openid profile email`.
 Do not grant repository, `api` or `read_api` access. The configured endpoints are
@@ -117,14 +137,24 @@ and Secure for an HTTPS callback. State expires after ten minutes on the server.
 Missing/invalid state and missing/unverified email fail closed. Provider or
 database errors never issue a login JWT or expose provider response details.
 
-The OAuth image was built from source commit
+The initial OAuth image was built from source commit
 `9adc78cd3d94a4de5d3df005eeae9afa6366ba71` by successful
 [workflow run](https://github.com/mdub1na/stf/actions/runs/37283650695).
 Its public amd64/arm64 digest is
 `sha256:d94f67077c4d8a9a6d357ea0c58bdb2395233d56c605288846c323e7d4dace76`.
-The overlay pins this image for auth only; app uses the unchanged base image
-with its new configuration. Providers, ADB, storage, WebSocket, RethinkDB and
-Appium images and pod templates are unchanged by this cutover.
+The initial cutover pinned this image for auth only. The subsequent login/logout
+fix updates both app and auth because the app serves the new login bundle and
+handles server-side logout. Providers, ADB, storage, WebSocket, RethinkDB and
+Appium images and pod templates are unchanged by either update.
+
+The login/logout fix was built from source commit
+`f4807ae11aea283f7647f367bab4cad682cf51bd` by successful
+[workflow run](https://github.com/mdub1na/stf/actions/runs/37288557053).
+Its public amd64/arm64 digest, pinned separately for app and auth, is
+`sha256:8fb93df2591b34e0eeb5ee594f9165bb196420ee7f15f2fa347b692a554cb2ba`.
+The updated source passed all 246 server tests and 65 frontend tests, strict
+server/frontend TypeScript, scoped ESLint, production webpack and translation
+checks before deployment.
 
 GitLab must return both `email` and `email_verified` from userinfo. Depending on
 GitLab settings, users may need to select a public email in their profile.
@@ -145,7 +175,7 @@ The script checks the target API, creates/updates Secret
 The existing `devicehub-session` Secret is retained; no session key is rotated.
 
 The root child Application selects `kuber/gitops/stf-gitlab`, which extends the
-LDAP base and changes only app/auth configuration, the auth image and its
+LDAP base and changes only app/auth configuration, their images and the auth
 Secret reference. It does not create a second farm or change
 ADB/Appium/Ingress/storage. Before selecting it in the
 existing `devicehub` Argo CD Application:

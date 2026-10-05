@@ -9,7 +9,7 @@ Argo CD, LDAP administration and Appium Grid retain their existing domains.
 STF was deployed on 2026-10-04; its public domain was changed on 2026-10-05. All ten
 Argo CD Applications now use this repository's `develop` branch and are
 Synced/Healthy. GitLab OAuth login was deployed on 2026-10-05; its redirect and
-security checks passed, and the user confirmed browser login. The approved
+security checks passed, and the user confirmed browser login and logout. The approved
 account was explicitly promoted to administrator; its role was verified in the
 database, while administrator UI access awaits confirmation. The LDAP base
 remains available for rollback; the 16-node Appium Grid is unchanged.

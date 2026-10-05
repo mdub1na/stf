@@ -143,6 +143,12 @@ This file keeps background reasoning, rejected alternatives, and explanatory con
   GitOps rollback until real login and administrative access are confirmed.
 - Promote only the account explicitly approved by the user after its first
   successful login; do not map GitLab roles to STF administrator privileges.
+- Keep `/auth/oauth/` as a public STF sign-in page; start the provider flow only
+  at `/auth/oauth/start` after an explicit button click. An existing GitLab
+  session must not make a visit to STF's login page silently sign the user in.
+- Log out through CSRF-protected `POST /app/logout`, clearing only STF's
+  session/state cookies. Preserve the GitLab session and consent. The user
+  confirmed the corrected browser logout on 2026-10-05.
 
 ## Explanatory notes
 

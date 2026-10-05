@@ -93,7 +93,7 @@ administration was not changed.
 Normal LDAP login was confirmed by the user after the initial deployment;
 GitLab OAuth replaced it on 2026-10-05. GitLab login created the approved account;
 only that account's role was changed to `admin`, with the original administrator
-preserved. The user confirmed browser login; administrator UI access awaits
+preserved. The user confirmed browser login and logout; administrator UI access awaits
 confirmation.
 OAuth callback/state/PKCE/cookie checks passed; Grid remains ready with 16 UP
 nodes and zero sessions.

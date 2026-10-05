@@ -234,6 +234,25 @@ remove the original administrator, LDAP deployment, PVC or bind Secret before
 this final check is complete. Future promotions must modify only an explicitly
 approved user's `privilege`, not grant administrator access to every GitLab user.
 
+Verified login/logout correction on 2026-10-05:
+
+- GitOps revision `08fd03f576383064c87cdc4fccc9ec22b1e9fbd6` updated only the
+  app/auth images among 38 rendered resources. Both rollouts succeeded; all ten
+  Argo CD Applications are Synced/Healthy. The other 15 STF pods retained their
+  identities, and all 16 Appium nodes remained UP with zero sessions.
+- A temporary pod on `k3s-worker-2` pulled the public image, verified the new
+  login bundle, rendered its Pug view and found the compiled logout endpoint.
+  The pod was deleted before cutover. No Secrets or session keys changed.
+- Public HTTPS checks verified `/` redirects to the STF sign-in page; that
+  page returns 200 without a provider redirect. The new bundle returns 200 and
+  the app bundle contains the server logout call. Only `/auth/oauth/start`
+  redirects to GitLab; state, S256 PKCE and Secure cookies remain enabled.
+  Unauthenticated API access still returns 401.
+- Browser checks verified the sign-in page, logo and GitLab button at the
+  default desktop viewport and at 360x800, without horizontal overflow.
+- The user confirmed logout works: the browser stays on the STF sign-in page
+  instead of immediately authenticating again through the existing GitLab session.
+
 ## Source cutover
 
 1. Verify the pushed `develop` commit, successful image build and node pull

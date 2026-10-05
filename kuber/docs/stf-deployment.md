@@ -108,6 +108,15 @@ and Secure for an HTTPS callback. State expires after ten minutes on the server.
 Missing/invalid state and missing/unverified email fail closed. Provider or
 database errors never issue a login JWT or expose provider response details.
 
+The OAuth image was built from source commit
+`9adc78cd3d94a4de5d3df005eeae9afa6366ba71` by successful
+[workflow run](https://github.com/mdub1na/stf/actions/runs/37283650695).
+Its public amd64/arm64 digest is
+`sha256:d94f67077c4d8a9a6d357ea0c58bdb2395233d56c605288846c323e7d4dace76`.
+The overlay pins this image for auth only; app uses the unchanged base image
+with its new configuration. Providers, ADB, storage, WebSocket, RethinkDB and
+Appium images and pod templates are unchanged by this cutover.
+
 GitLab must return both `email` and `email_verified` from userinfo. Depending on
 GitLab settings, users may need to select a public email in their profile.
 See [GitLab's claim documentation](https://docs.gitlab.com/integration/openid_connect_provider/).
@@ -126,8 +135,9 @@ The script checks the target API, creates/updates Secret
 `STF_AUTH_OAUTH2_OAUTH_CLIENT_ID` and `STF_AUTH_OAUTH2_OAUTH_CLIENT_SECRET`.
 The existing `devicehub-session` Secret is retained; no session key is rotated.
 
-Prepared cutover: `kuber/gitops/stf-gitlab` extends the LDAP base and changes only
-the app/auth configuration and auth Secret reference. It does not create a
+The root child Application selects `kuber/gitops/stf-gitlab`, which extends the
+LDAP base and changes only app/auth configuration, the auth image and its
+Secret reference. It does not create a
 second farm or change ADB/Appium/Ingress/storage. Before selecting it in the
 existing `devicehub` Argo CD Application:
 

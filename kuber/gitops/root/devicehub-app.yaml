@@ -8,7 +8,7 @@ spec:
   source:
     repoURL: https://github.com/mdub1na/stf.git
     targetRevision: develop
-    path: kuber/gitops/devicehub
+    path: kuber/gitops/stf-gitlab
   destination:
     server: https://kubernetes.default.svc
     namespace: devicehub

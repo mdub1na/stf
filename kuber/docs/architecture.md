@@ -18,9 +18,18 @@ STF and RethinkDB synchronize manually; the root and infrastructure applications
 have automatic prune/self-heal. Passwords and the shared session key are supplied
 by separately bootstrapped Kubernetes Secrets, not the ConfigMap or Git.
 
-LDAP login, HTTPS/static routing, WebSocket handshake, database access and temp
-storage upload/download are verified. Android screen/touch and test execution
-await connected devices; both ADB servers currently return empty device lists.
+The initial rollout verified LDAP login, HTTPS/static routing, WebSocket
+handshake, database access and temp storage upload/download. GitLab OAuth replaced
+the active STF login on 2026-10-05: the existing child Application now selects
+`kuber/gitops/stf-gitlab`, extending the unchanged LDAP base. Only auth uses the
+new OAuth image; app reloads its auth URL, and other pod templates are unchanged.
+All users of `gitlab.finservice.tech` with a verified email may sign in; state
+and S256 PKCE are enabled. GitLab roles do not automatically grant STF privileges.
+The first real GitLab login and explicit administrator mapping are pending.
+LDAP data/base and the shared session key are preserved for rollback.
+
+Android screen/touch and test execution still await connected-device validation;
+empty ADB lists were the initial rollout snapshot, not a permanent current state.
 The rollout status is tracked in [the execution plan](./stf-rollout-plan.md);
 the source/secret/database sequence is in
 [the deployment runbook](./stf-deployment.md). Server maintenance awaits SSH.

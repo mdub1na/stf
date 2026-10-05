@@ -8,8 +8,9 @@ whose image has not built successfully and cannot be pulled by nodes.
 ## Image
 
 GitHub Actions builds the root Dockerfile on pushes to `develop` and publishes
-`ghcr.io/mdub1na/stf:<full-commit-sha>`. The deployment image is centralized in
+`ghcr.io/mdub1na/stf:<full-commit-sha>`. The base deployment image is centralized in
 the `devicehub` and `rethinkdb` kustomizations and pinned by registry digest.
+The GitLab overlay separately pins the auth image described below.
 GitOps-only changes do not trigger a new application image build.
 
 Verified build on 2026-10-04:
@@ -137,8 +138,8 @@ The existing `devicehub-session` Secret is retained; no session key is rotated.
 
 The root child Application selects `kuber/gitops/stf-gitlab`, which extends the
 LDAP base and changes only app/auth configuration, the auth image and its
-Secret reference. It does not create a
-second farm or change ADB/Appium/Ingress/storage. Before selecting it in the
+Secret reference. It does not create a second farm or change
+ADB/Appium/Ingress/storage. Before selecting it in the
 existing `devicehub` Argo CD Application:
 
 1. Build/publish the image containing the OAuth fixes, pin its digest, and verify
@@ -152,11 +153,40 @@ existing `devicehub` Argo CD Application:
    promotion/mapping must be explicit if the GitLab email differs from LDAP.
 
 For rollback, return that Application's source path to `kuber/gitops/devicehub`
-and synchronize it. LDAP data, its bind Secret and the LDAP base are retained
+in `kuber/gitops/root/devicehub-app.yaml`, commit/push the change, then synchronize
+the root and existing child. A live-only Application edit would be reverted by
+root self-heal. LDAP data, its bind Secret and the LDAP base are retained
 until GitLab login and administrative access are confirmed. Existing STF browser
 sessions remain valid until their normal expiry; switching the login provider
 does not revoke old sessions or API tokens. Later GitLab account revocation does
 not immediately revoke an already-issued STF session either.
+
+Verified GitLab deployment on 2026-10-05:
+
+- GitOps revision `82100e403dd5ff7e0ed65128bcf64a032e9c0da3`; source path
+  `kuber/gitops/stf-gitlab`. All ten Applications became Synced/Healthy.
+- 237 unit tests passed, including 39 OAuth profile/strategy/HTTP-flow checks;
+  strict TypeScript and scoped ESLint checks passed. The new image successfully
+  pulled and ran its OAuth CLI on `k3s-worker-2` before cutover; that temporary
+  verification pod was deleted.
+- OAuth Secret was created without printing values or changing the session key.
+  GitLab accepted client authentication with a deliberately invalid code,
+  returning `invalid_grant` without issuing an access token.
+- HTTPS redirect to this GitLab uses the expected callback, three minimal scopes,
+  unpredictable state and S256 PKCE. State cookies are Secure/HttpOnly/SameSite=Lax.
+  An unsolicited callback returned 400; `/auth/contact` returned 200; the
+  unauthenticated STF API returned 401.
+- Only app/auth pods changed; the other 15 `devicehub` pods kept their identities.
+  Appium Grid remained ready with 16 UP nodes and zero sessions.
+- Router DNS `192.168.10.1` still cached the former STF IP during verification;
+  its remaining TTL was 462 seconds at 13:42 local time. Public DNS returned
+  `46.191.173.144`. Targeted public checks retained full HTTPS verification.
+
+Pending: the user's first successful GitLab login and explicit promotion of the
+approved email to STF administrator. Do not remove the original administrator,
+LDAP deployment, PVC or bind Secret before both checks are complete. The account
+is created by the normal STF login flow; promotion must modify only that user's
+`privilege` to `admin`, not grant administrator access to every GitLab user.
 
 ## Source cutover
 

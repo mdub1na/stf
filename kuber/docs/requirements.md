@@ -52,6 +52,13 @@ in the Android STF rollout.
 
 - LAN validation remains useful for low-level diagnostics
 - public HTTPS access is enabled through `Traefik`, `cert-manager`, and Let's Encrypt
+- STF login uses confidential OAuth through `https://gitlab.finservice.tech`
+- allow all users of that GitLab with a verified email; do not require a corporate
+  email domain or group membership
+- retain OAuth state, S256 PKCE and verified-email checks; STF administrator rights
+  are assigned explicitly and are not inherited from GitLab roles
+- preserve LDAP data and the LDAP GitOps base until real GitLab login and
+  administrator access are confirmed
 - `phpLDAPadmin` must remain available
 
 ## Capacity targets

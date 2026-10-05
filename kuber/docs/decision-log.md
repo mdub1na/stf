@@ -127,6 +127,23 @@ This file keeps background reasoning, rejected alternatives, and explanatory con
 - Treat client DNS cache propagation separately from service/certificate health;
   never disable TLS verification. Users log in again on the new hostname.
 
+### STF GitLab login on 2026-10-05
+
+- Replace the active LDAP login with confidential OAuth through
+  `gitlab.finservice.tech`; callback is `/auth/oauth/callback` on the STF host.
+- The user approved all users of that GitLab with a verified email, without
+  email-domain or group restrictions. Request only `openid profile email`.
+- Require state protection and use S256 PKCE, a separate short-lived signed
+  state cookie and verified-email checks. Deny missing/invalid claims.
+- Bootstrap client credentials in a separate Kubernetes Secret, never Git.
+  Preserve the existing STF session signing key.
+- Keep the existing Application and historical service names. Select the
+  `stf-gitlab` overlay; pin its auth image separately to avoid other pod restarts.
+- Preserve LDAP storage/base and the original administrator for explicit
+  GitOps rollback until real login and administrative access are confirmed.
+- Promote only the account explicitly approved by the user after its first
+  successful login; do not map GitLab roles to STF administrator privileges.
+
 ## Explanatory notes
 
 ### What `root` means

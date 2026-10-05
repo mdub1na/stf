@@ -55,6 +55,13 @@ gitops/root/
 The live cluster was switched to this source on 2026-10-04. STF and RethinkDB
 remain manual-sync; the root and infrastructure applications use prune/self-heal.
 
+The existing STF child selects `gitops/stf-gitlab` since 2026-10-05. This overlay
+extends `gitops/devicehub`, retaining all resource names and the LDAP base for
+rollback. It patches app/auth configuration, references the separate OAuth Secret,
+and pins the new image for auth only. Do not create a second Application owning
+the same objects. See [the deployment runbook](./stf-deployment.md) for cutover
+and the Git-backed rollback procedure.
+
 ## Argo CD Config
 
 ```text

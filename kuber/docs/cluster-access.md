@@ -1,7 +1,7 @@
 # Cluster Access And Service Inventory
 
-Snapshot date: 2026-10-05, Asia/Yekaterinburg. Domain and STF/Grid checks were
-repeated during the address change; other infrastructure details retain the
+Snapshot date: 2026-10-05, Asia/Yekaterinburg. Domain, GitLab OAuth and STF/Grid
+checks were repeated during the login cutover; other infrastructure details retain the
 2026-10-04 inventory baseline.
 
 This document records access details after the Android STF GitOps rollout.
@@ -81,12 +81,16 @@ certificate validation. Router/NAT administration was not changed.
 
 | Service | URL | Namespace / backend | HTTP check |
 | --- | --- | --- | --- |
-| STF UI | `https://stf.finservice.tech` | `devicehub`, `devicehub-app:3000` | `/`: `302` to LDAP; `/auth/ldap/`: `200` |
+| STF UI | `https://stf.finservice.tech` | `devicehub`, `devicehub-app:3000` | `/`: `302` to `/auth/oauth/`, then `302` to GitLab |
+| GitLab identity provider | `https://gitlab.finservice.tech` | External OAuth/OIDC provider | HTTPS discovery and client authentication verified |
 | Argo CD | `https://argocd.putmyhexon.ru` | `argocd`, `argocd-server:80` | `200` |
 | phpLDAPadmin | `https://ldap.putmyhexon.ru` | `openldap`, `phpldapadmin:80` | `200` |
 | Appium / Selenium Grid | `https://appium-grid.putmyhexon.ru` | `appium`, `appium-grid-router:4444` | `/status`: `200` |
 
-Normal LDAP login was confirmed by the user after the initial deployment.
+Normal LDAP login was confirmed by the user after the initial deployment;
+GitLab OAuth replaced it on 2026-10-05. A real GitLab login and the explicitly
+approved administrator mapping are pending. OAuth callback/state/PKCE/cookie
+checks passed; Grid remains ready with 16 UP nodes and zero sessions.
 New-domain redirect, JS/logo loading,
 WebSocket handshake, `/auth/contact` database access and temporary file
 upload/download passed. An unauthenticated `GET /api/v1/devices` returned `401`.
@@ -100,8 +104,9 @@ execution remain unverified.
 | Kubernetes | Client certificate in `default` context | Local kubeconfig above |
 | Argo CD | Built-in `admin` account | Initial password: Secret `argocd/argocd-initial-admin-secret`, key `password`; current password may have changed |
 | LDAP administration | `CN=admin,DC=ldap,DC=putmyhexon,DC=ru` | Secret `openldap/openldap-credentials`, key `LDAP_ADMIN_PASSWORD`; existing LDAP bind verified |
-| STF UI | LDAP user, searched by `CN` | User password in LDAP; normal login confirmed by the user, no password copied here |
-| STF LDAP bind | `CN=admin,DC=ldap,DC=putmyhexon,DC=ru` | Secret `devicehub/devicehub-ldap-bind`, key `LDAP_BIND_CREDENTIALS` |
+| STF UI | GitLab user with `email_verified: true` | Sign in at GitLab; STF does not receive the GitLab password |
+| STF GitLab OAuth client | Confidential OAuth application, scopes `openid profile email` | Secret `devicehub/stf-gitlab-oauth`, keys `STF_AUTH_OAUTH2_OAUTH_CLIENT_ID`, `STF_AUTH_OAUTH2_OAUTH_CLIENT_SECRET` |
+| STF LDAP bind (rollback) | `CN=admin,DC=ldap,DC=putmyhexon,DC=ru` | Retained Secret `devicehub/devicehub-ldap-bind`, key `LDAP_BIND_CREDENTIALS` |
 | STF REST API | `Authorization: Bearer <token>` | Generate a new token through STF Settings / Keys / Access Tokens; old DeviceHub tokens are not reused |
 | STF service signing | Shared `SECRET` for app/auth/api/websocket | Secret `devicehub/devicehub-session`, key `SECRET` |
 | Grid | No authentication configured in checked Grid manifests | `/status` was accessible without credentials |
@@ -138,7 +143,7 @@ public ingress, a NodePort, or `kubectl port-forward`.
 | Service | Cluster-internal endpoint | LAN / local alternative |
 | --- | --- | --- |
 | STF API | `devicehub-api.devicehub.svc.cluster.local:3000` | `https://stf.finservice.tech/api/v1` |
-| STF auth | `devicehub-auth.devicehub.svc.cluster.local:3000` | `https://stf.finservice.tech/auth/ldap/` |
+| STF auth | `devicehub-auth.devicehub.svc.cluster.local:3000` | `https://stf.finservice.tech/auth/oauth/` |
 | STF WebSocket | `devicehub-websocket.devicehub.svc.cluster.local:3000` | `wss://stf.finservice.tech/socket.io/` |
 | Device/provider proxy | `devicehub-dynamic-proxy.devicehub.svc.cluster.local:8080` | `https://stf.finservice.tech/d/` |
 | APK / image / temp storage | `devicehub-storage-plugin-apk`, `devicehub-storage-plugin-image`, `devicehub-storage-temp` in `devicehub`, port `3000` | `/s/apk/`, `/s/image/`, `/s/` on the STF host |

@@ -1,0 +1,11 @@
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: stf-finservice-tech-tls
+spec:
+  secretName: stf-finservice-tech-tls
+  dnsNames:
+    - stf.finservice.tech
+  issuerRef:
+    name: letsencrypt-http
+    kind: Issuer

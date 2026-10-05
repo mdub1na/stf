@@ -13,6 +13,7 @@ resources:
   - devicehub-android-deployments.yaml
   - devicehub-dynamic-proxy.yaml
   - devicehub-issuer.yaml
+  - stf-certificate.yaml
   - devicehub-ingress.yaml
 
 images:

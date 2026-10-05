@@ -69,6 +69,8 @@ For migration, follow the rollout plan and deployment runbook instead.
 
 ## Next focus
 
+- finish the prepared GitLab OAuth cutover described in the deployment runbook;
+  LDAP remains the active base until the new image and login are verified
 - keep GitOps documentation aligned with the live manifests
 - verify screen/touch, capture/release and APK installation with connected Android devices
 - adapt the copied Java tests from DeviceHub-specific APIs to standard STF APIs

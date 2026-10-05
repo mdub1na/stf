@@ -86,6 +86,68 @@ Required Secrets:
 | devicehub | devicehub-ldap-bind | LDAP_BIND_CREDENTIALS |
 | devicehub | devicehub-session | SECRET |
 
+## GitLab login
+
+GitLab provider: <https://gitlab.finservice.tech>. The approved access policy is
+all users of this GitLab whose userinfo contains a verified email; there is no
+email-domain or group restriction. GitLab roles do not grant STF administrator
+rights. Existing STF users are matched by email and keep their existing display
+names and privileges. A different email creates a separate STF account.
+
+Register a confidential OAuth application in GitLab with redirect URI
+`https://stf.finservice.tech/auth/oauth/callback` and scopes `openid profile email`.
+Do not grant repository, `api` or `read_api` access. The configured endpoints are
+`/oauth/authorize`, `/oauth/token` and `/oauth/userinfo` on this GitLab only.
+They were discovered over verified HTTPS on 2026-10-05, including a check from
+the running STF auth container.
+
+The `auth-oauth2` unit requires state protection, enables S256 PKCE by default,
+and requires `email_verified: true` by default. Its signed, HttpOnly, SameSite=Lax
+state cookie is separate from the STF session cookie, scoped to `/auth/oauth`,
+and Secure for an HTTPS callback. State expires after ten minutes on the server.
+Missing/invalid state and missing/unverified email fail closed. Provider or
+database errors never issue a login JWT or expose provider response details.
+
+GitLab must return both `email` and `email_verified` from userinfo. Depending on
+GitLab settings, users may need to select a public email in their profile.
+See [GitLab's claim documentation](https://docs.gitlab.com/integration/openid_connect_provider/).
+Do not disable email verification to work around an absent claim.
+
+Store credentials outside Git as a JSON object with `clientId` and `clientSecret`.
+Pass it through stdin, not shell arguments or environment literals:
+
+```sh
+export KUBECONFIG='/Users/mdub1na/Desktop/devicehub home cluster/k3s-lab.yaml'
+node kuber/scripts/bootstrap-stf-gitlab-secret.mjs < "$HOME/.config/stf/gitlab-oauth.json"
+```
+
+The script checks the target API, creates/updates Secret
+`devicehub/stf-gitlab-oauth`, and prints no credential values. Required keys are
+`STF_AUTH_OAUTH2_OAUTH_CLIENT_ID` and `STF_AUTH_OAUTH2_OAUTH_CLIENT_SECRET`.
+The existing `devicehub-session` Secret is retained; no session key is rotated.
+
+Prepared cutover: `kuber/gitops/stf-gitlab` extends the LDAP base and changes only
+the app/auth configuration and auth Secret reference. It does not create a
+second farm or change ADB/Appium/Ingress/storage. Before selecting it in the
+existing `devicehub` Argo CD Application:
+
+1. Build/publish the image containing the OAuth fixes, pin its digest, and verify
+   node pull access. The pre-fix image cannot safely use this configuration.
+2. Bootstrap the OAuth Secret and verify GitLab HTTPS access from the auth pod.
+3. Render the overlay, inspect the differences, and change the existing child
+   Application's GitOps source path to `kuber/gitops/stf-gitlab`.
+4. Synchronize the existing Application. Check its auth redirect, secure state
+   cookies, PKCE parameters and rejected unsolicited callbacks.
+5. Confirm a real GitLab login and STF administrator access. Administrator
+   promotion/mapping must be explicit if the GitLab email differs from LDAP.
+
+For rollback, return that Application's source path to `kuber/gitops/devicehub`
+and synchronize it. LDAP data, its bind Secret and the LDAP base are retained
+until GitLab login and administrative access are confirmed. Existing STF browser
+sessions remain valid until their normal expiry; switching the login provider
+does not revoke old sessions or API tokens. Later GitLab account revocation does
+not immediately revoke an already-issued STF session either.
+
 ## Source cutover
 
 1. Verify the pushed `develop` commit, successful image build and node pull

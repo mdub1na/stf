@@ -1,0 +1,36 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+# Prepared cutover only: the live Argo CD Application still uses ../devicehub.
+resources:
+  - ../devicehub
+
+patches:
+  - path: gitlab-config-patch.yaml
+  - target:
+      group: apps
+      version: v1
+      kind: Deployment
+      name: devicehub-auth
+    patch: |-
+      - op: replace
+        path: /spec/template/spec/containers/0/command
+        value: [stf, auth-oauth2, --port, "3000"]
+      - op: replace
+        path: /spec/template/spec/containers/0/envFrom
+        value:
+          - configMapRef:
+              name: devicehub-env
+          - secretRef:
+              name: devicehub-session
+          - secretRef:
+              name: stf-gitlab-oauth
+  - target:
+      group: apps
+      version: v1
+      kind: Deployment
+      name: devicehub-(app|auth)
+    patch: |-
+      - op: replace
+        path: /spec/template/metadata/annotations/devicehub~1config-revision
+        value: stf-gitlab-oauth-v1

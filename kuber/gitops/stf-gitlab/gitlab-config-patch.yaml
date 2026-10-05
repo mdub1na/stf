@@ -1,0 +1,16 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: devicehub-env
+data:
+  AUTH_URL: auth/oauth/
+  STF_APP_AUTH_URL: https://stf.finservice.tech/auth/oauth/
+  STF_AUTH_OAUTH2_APP_URL: https://stf.finservice.tech/
+  STF_AUTH_OAUTH2_OAUTH_AUTHORIZATION_URL: https://gitlab.finservice.tech/oauth/authorize
+  STF_AUTH_OAUTH2_OAUTH_TOKEN_URL: https://gitlab.finservice.tech/oauth/token
+  STF_AUTH_OAUTH2_OAUTH_USERINFO_URL: https://gitlab.finservice.tech/oauth/userinfo
+  STF_AUTH_OAUTH2_OAUTH_CALLBACK_URL: https://stf.finservice.tech/auth/oauth/callback
+  STF_AUTH_OAUTH2_OAUTH_SCOPE: openid profile email
+  STF_AUTH_OAUTH2_OAUTH_STATE: "true"
+  STF_AUTH_OAUTH2_OAUTH_PKCE: "true"
+  STF_AUTH_OAUTH2_OAUTH_REQUIRE_VERIFIED_EMAIL: "true"

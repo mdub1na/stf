@@ -333,7 +333,7 @@ spec:
             - --port
             - "3000"
             - --storage-url
-            - https://devicehub.putmyhexon.ru/
+            - https://stf.finservice.tech/
             - --connect-sub
             - tcp://devicehub-triproxy-app:7150
             - --connect-push
@@ -396,7 +396,7 @@ spec:
       labels:
         app.kubernetes.io/name: devicehub-auth
       annotations:
-        devicehub/config-revision: "letsencrypt-v1"
+        devicehub/config-revision: "stf-finservice-tech-v1"
     spec:
       containers:
         - name: devicehub-auth
@@ -430,7 +430,7 @@ spec:
       labels:
         app.kubernetes.io/name: devicehub-app
       annotations:
-        devicehub/config-revision: "letsencrypt-v1"
+        devicehub/config-revision: "stf-finservice-tech-v1"
     spec:
       containers:
         - name: devicehub-app

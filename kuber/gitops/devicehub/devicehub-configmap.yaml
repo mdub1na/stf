@@ -3,7 +3,7 @@ kind: ConfigMap
 metadata:
   name: devicehub-env
 data:
-  STF_DOMAIN: devicehub.putmyhexon.ru
+  STF_DOMAIN: stf.finservice.tech
   STF_PORT: "443"
   AUTH_URL: auth/ldap/
   RETHINKDB_PORT_28015_TCP: tcp://rethinkdb.rethinkdb.svc.cluster.local:28015
@@ -12,6 +12,6 @@ data:
   LDAP_SEARCH_FIELD: CN
   LDAP_URL: ldap://openldap.openldap.svc.cluster.local:389
   LDAP_BIND_DN: CN=admin,DC=ldap,DC=putmyhexon,DC=ru
-  STF_APP_AUTH_URL: https://devicehub.putmyhexon.ru/auth/ldap/
-  STF_APP_WEBSOCKET_URL: https://devicehub.putmyhexon.ru/
-  STF_AUTH_LDAP_APP_URL: https://devicehub.putmyhexon.ru
+  STF_APP_AUTH_URL: https://stf.finservice.tech/auth/ldap/
+  STF_APP_WEBSOCKET_URL: https://stf.finservice.tech/
+  STF_AUTH_LDAP_APP_URL: https://stf.finservice.tech

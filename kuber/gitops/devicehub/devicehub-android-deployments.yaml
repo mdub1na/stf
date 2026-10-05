@@ -112,9 +112,9 @@ spec:
             - --connect-push
             - tcp://devicehub-triproxy-dev:7270
             - --storage-url
-            - https://devicehub.putmyhexon.ru/
+            - https://stf.finservice.tech/
             - --public-ip
-            - devicehub.putmyhexon.ru
+            - stf.finservice.tech
             - --min-port
             - "12010"
             - --max-port
@@ -122,7 +122,7 @@ spec:
             - --heartbeat-interval
             - "10000"
             - --screen-ws-url-pattern
-            - wss://devicehub.putmyhexon.ru/d/devicehub-provider/<%= publicPort %>/
+            - wss://stf.finservice.tech/d/devicehub-provider/<%= publicPort %>/
           envFrom:
             - configMapRef:
                 name: devicehub-env
@@ -241,9 +241,9 @@ spec:
             - --connect-push
             - tcp://devicehub-triproxy-dev:7270
             - --storage-url
-            - https://devicehub.putmyhexon.ru/
+            - https://stf.finservice.tech/
             - --public-ip
-            - devicehub.putmyhexon.ru
+            - stf.finservice.tech
             - --min-port
             - "12041"
             - --max-port
@@ -251,7 +251,7 @@ spec:
             - --heartbeat-interval
             - "10000"
             - --screen-ws-url-pattern
-            - wss://devicehub.putmyhexon.ru/d/devicehub-provider-2/<%= publicPort %>/
+            - wss://stf.finservice.tech/d/devicehub-provider-2/<%= publicPort %>/
           envFrom:
             - configMapRef:
                 name: devicehub-env

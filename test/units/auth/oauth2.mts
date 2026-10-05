@@ -128,7 +128,7 @@ describe('auth-oauth2 HTTP flow', function() {
   })
 
   async function start(headers: Record<string, string> = {}) {
-    var response = await fetch(address(auth) + '/auth/oauth/', {
+    var response = await fetch(address(auth) + '/auth/oauth/start', {
       redirect: 'manual', headers: headers
     })
     var location = new URL(response.headers.get('location')!)
@@ -141,6 +141,29 @@ describe('auth-oauth2 HTTP flow', function() {
       code: code, state: state
     }), {redirect: 'manual', headers: {cookie: cookie}})
   }
+
+  it('should show the STF login page without starting provider authentication', async function() {
+    var response = await fetch(address(auth) + '/auth/oauth/', {redirect: 'manual'})
+    expect(response.status).to.equal(200)
+    expect(response.headers.get('content-type')).to.match(/^text\/html/)
+    expect(response.headers.get('location')).to.equal(null)
+    expect(response.headers.getSetCookie()).to.deep.equal([])
+    expect(response.headers.get('cache-control')).to.equal('no-store')
+    expect(await response.text()).to.include('authoauth.entry.js')
+    expect(tokenRequests).to.equal(0)
+  })
+
+  it('should keep the landing page available with an OAuth state cookie', async function() {
+    var login = await start()
+    var response = await fetch(address(auth) + '/auth/oauth/', {
+      redirect: 'manual', headers: {cookie: login.cookie}
+    })
+    expect(response.status).to.equal(200)
+    expect(response.headers.get('location')).to.equal(null)
+    expect(response.headers.getSetCookie()).to.deep.equal([])
+    expect((await completeLogin(login.cookie, login.location.searchParams.get('state')!)).status)
+      .to.equal(302)
+  })
 
   it('should initiate state and S256 PKCE without exposing the client secret', async function() {
     var login = await start()

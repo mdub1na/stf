@@ -11,6 +11,7 @@ import passport from 'passport'
 import logger from '../../../util/logger.js'
 import urlutil from '../../../util/urlutil.js'
 import jwtutil from '../../../util/jwtutil.js'
+import pathutil from '../../../util/pathutil.js'
 import Strategy from './strategy.js'
 import getIdentity from './profile.js'
 
@@ -40,6 +41,8 @@ export default function(options: OAuth2AuthOptions) {
   app.set('strict routing', true)
   app.set('case sensitive routing', true)
   app.set('trust proxy', 1)
+  app.set('view engine', 'pug')
+  app.set('views', pathutil.resource('auth/oauth2/views'))
   app.disable('x-powered-by')
 
   // Keep the short-lived OAuth state separate from the STF login cookie.
@@ -91,7 +94,10 @@ export default function(options: OAuth2AuthOptions) {
   app.get('/', function(req, res) {
     res.redirect('/auth/oauth/')
   })
-  app.get('/auth/oauth/', function(req, res, next) {
+  app.get('/auth/oauth/', function(req, res) {
+    res.render('index')
+  })
+  app.get('/auth/oauth/start', function(req, res, next) {
     req.session!.oauthStartedAt = Date.now()
     next()
   }, authentication.authenticate('oauth2', {session: false}))

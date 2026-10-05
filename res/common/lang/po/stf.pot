@@ -106,11 +106,11 @@ msgstr ""
 msgid "Add the following ADB Key to STF?"
 msgstr ""
 
-#: res/app/src/ui/AppLayout.tsx:83
+#: res/app/src/ui/AppLayout.tsx:84
 msgid "Admin mode has been disabled."
 msgstr ""
 
-#: res/app/src/ui/AppLayout.tsx:82
+#: res/app/src/ui/AppLayout.tsx:83
 msgid "Admin mode has been enabled."
 msgstr ""
 
@@ -349,7 +349,7 @@ msgstr ""
 msgid "Connected"
 msgstr ""
 
-#: res/app/src/ui/AppLayout.tsx:104
+#: res/app/src/ui/AppLayout.tsx:105
 msgid "Connected successfully."
 msgstr ""
 
@@ -358,10 +358,10 @@ msgstr ""
 msgid "Contact Owners"
 msgstr ""
 
-#: res/app/src/features/auth/SignInForm.tsx:165
-#: res/app/src/features/auth/SignInForm.tsx:168
-#: res/app/src/ui/AppLayout.tsx:276
+#: res/app/src/features/auth/SignInForm.tsx:170
+#: res/app/src/features/auth/SignInForm.tsx:173
 #: res/app/src/ui/AppLayout.tsx:283
+#: res/app/src/ui/AppLayout.tsx:290
 msgid "Contact Support"
 msgstr ""
 
@@ -371,7 +371,7 @@ msgstr ""
 msgid "Contact Users"
 msgstr ""
 
-#: res/app/src/ui/AppLayout.tsx:211
+#: res/app/src/ui/AppLayout.tsx:218
 msgid "Control"
 msgstr ""
 
@@ -428,7 +428,7 @@ msgstr ""
 msgid "Daily"
 msgstr ""
 
-#: res/app/src/ui/AppLayout.tsx:301
+#: res/app/src/ui/AppLayout.tsx:308
 msgid "Dark"
 msgstr ""
 
@@ -556,7 +556,7 @@ msgstr ""
 #: res/app/src/features/group-list/columns.tsx:76
 #: res/app/src/features/settings/groups/GroupDetail.tsx:186
 #: res/app/src/features/settings/SettingsPage.tsx:39
-#: res/app/src/ui/AppLayout.tsx:213
+#: res/app/src/ui/AppLayout.tsx:220
 msgid "Devices"
 msgstr ""
 
@@ -600,8 +600,8 @@ msgstr ""
 msgid "Duration"
 msgstr ""
 
-#: res/app/src/features/auth/SignInForm.tsx:128
-#: res/app/src/features/auth/SignInForm.tsx:129
+#: res/app/src/features/auth/SignInForm.tsx:133
+#: res/app/src/features/auth/SignInForm.tsx:134
 msgid "E-mail"
 msgstr ""
 
@@ -645,8 +645,8 @@ msgstr ""
 #: res/app/src/features/control/panes/explorer/ExplorerPane.tsx:218
 #: res/app/src/features/device-list/device-actions.ts:32
 #: res/app/src/features/settings/keys/AdbKeysCard.tsx:64
-#: res/app/src/ui/AppLayout.tsx:110
 #: res/app/src/ui/AppLayout.tsx:111
+#: res/app/src/ui/AppLayout.tsx:112
 msgid "Error"
 msgstr ""
 
@@ -826,7 +826,7 @@ msgstr ""
 #: res/app/src/features/settings/groups/GroupList.tsx:48
 #: res/app/src/features/settings/SettingsPage.tsx:38
 #: res/app/src/features/settings/users/UsersSettings.tsx:299
-#: res/app/src/ui/AppLayout.tsx:214
+#: res/app/src/ui/AppLayout.tsx:221
 msgid "Groups"
 msgstr ""
 
@@ -860,8 +860,8 @@ msgstr ""
 
 #: res/app/src/features/docs/DocsPage.tsx:108
 #: res/app/src/features/docs/DocsPage.tsx:28
-#: res/app/src/ui/AppLayout.tsx:289
-#: res/app/src/ui/AppLayout.tsx:295
+#: res/app/src/ui/AppLayout.tsx:296
+#: res/app/src/ui/AppLayout.tsx:302
 msgid "Help"
 msgstr ""
 
@@ -987,8 +987,8 @@ msgstr ""
 msgid "Launching activity..."
 msgstr ""
 
-#: res/app/src/features/auth/SignInForm.tsx:110
-#: res/app/src/features/auth/SignInForm.tsx:111
+#: res/app/src/features/auth/SignInForm.tsx:115
+#: res/app/src/features/auth/SignInForm.tsx:116
 msgid "LDAP Username"
 msgstr ""
 
@@ -998,7 +998,7 @@ msgstr ""
 msgid "Level"
 msgstr ""
 
-#: res/app/src/ui/AppLayout.tsx:301
+#: res/app/src/ui/AppLayout.tsx:308
 msgid "Light"
 msgstr ""
 
@@ -1012,7 +1012,7 @@ msgstr ""
 msgid "Location"
 msgstr ""
 
-#: res/app/src/features/auth/SignInForm.tsx:156
+#: res/app/src/features/auth/SignInForm.tsx:161
 msgid "Log In"
 msgstr ""
 
@@ -1021,8 +1021,8 @@ msgstr ""
 msgid "Logcat Level"
 msgstr ""
 
-#: res/app/src/ui/AppLayout.tsx:313
-#: res/app/src/ui/AppLayout.tsx:319
+#: res/app/src/ui/AppLayout.tsx:320
+#: res/app/src/ui/AppLayout.tsx:327
 msgid "Logout"
 msgstr ""
 
@@ -1113,8 +1113,8 @@ msgstr ""
 msgid "Mute"
 msgstr ""
 
-#: res/app/src/features/auth/SignInForm.tsx:110
-#: res/app/src/features/auth/SignInForm.tsx:111
+#: res/app/src/features/auth/SignInForm.tsx:115
+#: res/app/src/features/auth/SignInForm.tsx:116
 #: res/app/src/features/control/panes/explorer/ExplorerPane.tsx:228
 #: res/app/src/features/control/panes/info/InfoPane.tsx:287
 #: res/app/src/features/group-list/columns.tsx:56
@@ -1128,7 +1128,7 @@ msgstr ""
 msgid "Name"
 msgstr ""
 
-#: res/app/src/ui/AppLayout.tsx:270
+#: res/app/src/ui/AppLayout.tsx:277
 msgid "Native"
 msgstr ""
 
@@ -1324,8 +1324,8 @@ msgstr ""
 msgid "Package"
 msgstr ""
 
-#: res/app/src/features/auth/SignInForm.tsx:144
-#: res/app/src/features/auth/SignInForm.tsx:145
+#: res/app/src/features/auth/SignInForm.tsx:149
+#: res/app/src/features/auth/SignInForm.tsx:150
 #: res/app/src/features/control/panes/automation/StoreAccountCard.tsx:117
 msgid "Password"
 msgstr ""
@@ -1736,7 +1736,7 @@ msgstr ""
 #: res/app/src/features/control/panes/dashboard/apps/AppsCard.tsx:34
 #: res/app/src/features/settings/SettingsPage.tsx:56
 #: res/app/src/features/settings/SettingsPage.tsx:79
-#: res/app/src/ui/AppLayout.tsx:215
+#: res/app/src/ui/AppLayout.tsx:222
 msgid "Settings"
 msgstr ""
 
@@ -1765,6 +1765,10 @@ msgstr ""
 msgid "Sign in to continue"
 msgstr ""
 
+#: res/app/src/features/auth/SignInForm.tsx:103
+msgid "Sign in with GitLab"
+msgstr ""
+
 #: res/app/src/features/auth/SignInForm.tsx:97
 msgid "Sign in with your LDAP account"
 msgstr ""
@@ -1790,7 +1794,7 @@ msgstr ""
 msgid "Smartphone Test Farm"
 msgstr ""
 
-#: res/app/src/ui/AppLayout.tsx:109
+#: res/app/src/ui/AppLayout.tsx:110
 msgid "Socket connection was lost"
 msgstr ""
 
@@ -2077,6 +2081,10 @@ msgstr ""
 msgid "Type"
 msgstr ""
 
+#: res/app/src/ui/AppLayout.tsx:198
+msgid "Unable to log out. Please try again."
+msgstr ""
+
 #: res/app/src/core/devices/enhance.ts:22
 #: res/app/src/core/devices/enhance.ts:9
 msgid "Unauthorized"
@@ -2205,7 +2213,7 @@ msgstr ""
 msgid "Warning:"
 msgstr ""
 
-#: res/app/src/ui/AppLayout.tsx:269
+#: res/app/src/ui/AppLayout.tsx:276
 msgid "Web"
 msgstr ""
 
@@ -2241,7 +2249,7 @@ msgstr ""
 msgid "Write a mail to the group user selection"
 msgstr ""
 
-#: res/app/src/features/auth/SignInForm.tsx:163
+#: res/app/src/features/auth/SignInForm.tsx:168
 msgid "Write a mail to the support team"
 msgstr ""
 

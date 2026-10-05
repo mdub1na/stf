@@ -31,6 +31,7 @@ import {
 } from '@tabler/icons-react'
 import {alertLevelColors, type AlertMessage} from '@/core/alert-message'
 import {appState, isAdmin} from '@/core/app-state'
+import {api} from '@/core/api'
 import {useContactEmail} from '@/core/contact'
 import {gettext, languageSettingKey, setLanguage, useTranslation} from '@/core/i18n'
 import {getSocket, onSocket, useSocketEvent} from '@/core/socket'
@@ -144,17 +145,6 @@ function useAlertMessage(): AlertMessage | null {
   return isAdmin() ? adminAlert || userAlert : userAlert
 }
 
-function logout() {
-  for (const part of document.cookie.split(';')) {
-    const name = part.split('=')[0]!.trim()
-    if (name) {
-      document.cookie = `${name}=; expires=Thu, 01 Jan 1970 00:00:00 GMT; path=/`
-    }
-  }
-  window.location.href = '/'
-  setTimeout(() => getSocket().disconnect(), 100)
-}
-
 function NavItem({to, icon, label, accessKey}: {
   to: string
   icon: React.ReactNode
@@ -182,6 +172,7 @@ export function AppLayout() {
   const [platform, setPlatform] = usePlatform()
   const contactEmail = useContactEmail()
   const [opened, {toggle, close}] = useDisclosure(false)
+  const [loggingOut, setLoggingOut] = useState(false)
   const {setColorScheme} = useMantineColorScheme()
   const colorScheme = useComputedColorScheme('light')
   const alertMessage = useAlertMessage()
@@ -191,6 +182,22 @@ export function AppLayout() {
   useLanguageSync()
   useKonamiAdminToggle()
   useSocketState()
+
+  async function logout() {
+    if (loggingOut) {
+      return
+    }
+    setLoggingOut(true)
+    try {
+      const response = await api.post<{redirect: string}>('/app/logout')
+      getSocket().disconnect()
+      window.location.replace(response.redirect || '/')
+    }
+    catch {
+      setLoggingOut(false)
+      notifications.show({color: 'red', message: t('Unable to log out. Please try again.')})
+    }
+  }
 
   useSocketEvent('user.keys.adb.confirm', (data: {fingerprint: string, title: string}) => {
     openAddAdbKey(data).then((accepted) => {
@@ -316,6 +323,7 @@ export function AppLayout() {
                 color='gray'
                 size='lg'
                 onClick={logout}
+                loading={loggingOut}
                 aria-label={t('Logout')}
                 className='stf-logout'
               >

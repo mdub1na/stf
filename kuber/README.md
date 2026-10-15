@@ -22,6 +22,7 @@ for verified results and pending work.
 - [Current architecture](./docs/architecture.md)
 - [Cluster access and service inventory](./docs/cluster-access.md)
 - [Cluster upgrade and observability review](./docs/cluster-upgrades-and-observability.md)
+- [Component upgrade rollout](./docs/cluster-upgrade-rollout.md)
 - [STF rollout and server maintenance plan](./docs/stf-rollout-plan.md)
 - [STF deployment runbook](./docs/stf-deployment.md)
 - [Historical STF roadmap](./docs/roadmap.md)

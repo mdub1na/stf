@@ -199,3 +199,12 @@ This file keeps background reasoning, rejected alternatives, and explanatory con
   logs before optional tracing, mesh or search layers. Prefer Alloy over the
   discontinued Promtail. This review does not authorize installing those layers
   or upgrading the audited infrastructure components.
+
+## Upgrade active components while preserving RethinkDB — 2026-10-15
+
+- Authorize the component versions and checks in [the rollout](./cluster-upgrade-rollout.md).
+- Keep RethinkDB at 2.4.2 and do not run its migration hook.
+- Defer K3s after the user confirmed that node access is unavailable.
+- Pin Argo CD bootstrap to 3.5.5 and application images to reviewed releases/digests.
+- Validate Appium on Android APIs 31/35/36 and NGINX on a real WebSocket route
+  before updating their working deployments. LDAP remains paused.

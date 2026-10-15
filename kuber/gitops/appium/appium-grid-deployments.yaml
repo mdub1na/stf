@@ -25,7 +25,7 @@ spec:
                       - storage
       containers:
         - name: event-bus
-          image: selenium/event-bus:4.39.0
+          image: selenium/event-bus:4.51.0-20261010@sha256:d522966c38946625bae1e03b24800d470f77372187b3a1045f8ed3a153ed052b
           imagePullPolicy: IfNotPresent
           ports:
             - name: publish
@@ -60,7 +60,7 @@ spec:
                       - storage
       containers:
         - name: sessions
-          image: selenium/sessions:4.39.0
+          image: selenium/sessions:4.51.0-20261010@sha256:e084546cfbac9ced6bfc5b44c5df586760a91f8d44f54178692beb4971d77bc3
           imagePullPolicy: IfNotPresent
           env:
             - name: SE_EVENT_BUS_HOST
@@ -100,7 +100,7 @@ spec:
                       - storage
       containers:
         - name: session-queue
-          image: selenium/session-queue:4.39.0
+          image: selenium/session-queue:4.51.0-20261010@sha256:780836fbe57321fc6829ed0d0c1c8a3f18ee643ed42e2dea78ad65c025c48041
           imagePullPolicy: IfNotPresent
           env:
             - name: SE_EVENT_BUS_HOST
@@ -140,7 +140,7 @@ spec:
                       - storage
       containers:
         - name: distributor
-          image: selenium/distributor:4.39.0
+          image: selenium/distributor:4.51.0-20261010@sha256:d485bc65bd52668c5093b341b54d6f90078f1eb0fc136a60ad726706de6d12cb
           imagePullPolicy: IfNotPresent
           env:
             - name: SE_EVENT_BUS_HOST
@@ -188,7 +188,7 @@ spec:
                       - storage
       containers:
         - name: router
-          image: selenium/router:4.39.0
+          image: selenium/router:4.51.0-20261010@sha256:d4454884cbd9e67870fff4e159e37e3c0d577b6df1668251f65f3bd4027997fa
           imagePullPolicy: IfNotPresent
           env:
             - name: SE_DISTRIBUTOR_HOST

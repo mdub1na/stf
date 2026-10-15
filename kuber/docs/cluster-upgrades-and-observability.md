@@ -84,7 +84,9 @@ Appium candidates were checked against the official npm package metadata;
 its [migration guide](https://appium.io/docs/en/latest/guides/migrating-2-to-3/)
 requires supported Node/npm versions, scoped insecure-feature flags and W3C
 endpoint compatibility. [Node release status](https://nodejs.org/en/about/previous-releases)
-confirms that Node 18 is EOL and Node 24 is LTS.
+confirms that Node 18 is EOL and Node 24 is LTS. Both active Appium pools
+currently pass unscoped `--allow-insecure chromedriver_autodownload`; the
+Appium 3 migration must use `uiautomator2:chromedriver_autodownload` instead.
 
 ## What to add to observability
 
@@ -115,12 +117,21 @@ unavailable ports. Its optional supervisor metrics require
 
 Start with alerts for disk pressure, node/pod readiness and restarts, PVC space,
 certificate expiry, Argo CD drift, Grid availability and queue growth, and the
-number of available Android devices/providers. Ordinary Kubernetes metrics do
-not provide device readiness or Grid JSON counters automatically: add a small
-STF/ADB/Grid exporter or application instrumentation. A DB-reading exporter
-must respect the existing RethinkDB NetworkPolicy; do not broadly open the DB
-to the whole observability namespace. Prefer aggregated counts without user or
-device identifiers.
+number of available Android devices/providers. STF already exposes native
+Prometheus metrics at `/api/v1/metrics`; the route and controller were verified
+inside the deployed API image, as well as in `lib/util/metrics.ts` and
+`lib/units/api/controllers/metrics.ts`. It provides `stf_devices_total`,
+`stf_devices_available`, `stf_devices_busy`, device-state counts, active-provider
+counts, user/group aggregates and default Node process metrics. The endpoint
+requires an administrator access token: keep the bearer token in a dedicated
+Kubernetes Secret and restrict the scrape path. Do not make it public or add a
+duplicate device-count exporter. An authenticated live scrape was not attempted
+because this audit did not create or retrieve an administrator token.
+
+ADB transport health and Selenium Grid JSON counters still need dedicated probes
+or exporters; ordinary Kubernetes metrics do not supply those. Prefer aggregated
+counts without user or device identifiers. Use the existing STF API instead of
+broadly opening RethinkDB to the observability namespace.
 
 Use Alloy for pod logs and Kubernetes events. Promtail is already
 [end of life](https://grafana.com/docs/alloy/latest/set-up/migrate/from-promtail/).

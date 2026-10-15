@@ -1,4 +1,7 @@
 - op: add
+  path: /spec/template/spec/enableServiceLinks
+  value: false
+- op: add
   path: /spec/template/spec/containers/0/resources
   value:
     requests:

@@ -18,6 +18,12 @@ This runbook moves the application to namespace `stf`. The deployment source is
 
 ## Cut over
 
+All STF process pods set `enableServiceLinks: false`. Kubernetes otherwise
+injects `STF_*_SERVICE_*` and `STF_*_PORT_*` variables from the renamed Services.
+The STF command-line parser treats those variables as unknown options and
+exits. Explicit ConfigMap and Secret variables remain available; service
+discovery uses DNS.
+
 1. Pause automatic synchronization while the namespace and project change.
 2. Add `stf.role` labels to the existing control, Android and storage nodes.
 3. Create namespace `stf`, its Secrets, services and PVC. Keep the public Ingress

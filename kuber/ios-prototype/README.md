@@ -100,7 +100,8 @@ loopback; its token is never sent to the browser.
 
 This is a manual preview deployment on the PR branch. Argo CD's desired images
 still point to `develop`; synchronizing that application can revert the app and
-WebSocket images. Promote the image through the normal GitOps process after
+WebSocket images. Remove the iOS provider sidecar before syncing an older STF
+revision: its command authorization requires the updated WebSocket service. Promote the image through the normal GitOps process after
 review and merge.
 
 To roll back, first remove the provider sidecar, then restore the recorded

@@ -30,6 +30,12 @@ The user confirmed GitLab browser login. The approved account was explicitly
 promoted to `admin`; administrator UI access awaits user confirmation.
 LDAP data/base and the shared session key are preserved for rollback.
 
+Since 2026-10-15, both OpenLDAP and phpLDAPadmin have zero desired replicas.
+Their PVC and credentials are preserved; an LDAP rollback requires explicitly
+re-enabling the replicas. GitLab OAuth remains the active login mechanism.
+The [upgrade and observability review](./cluster-upgrades-and-observability.md)
+records current capacity, version candidates and telemetry deployment stages.
+
 Android screen/touch and test execution still await connected-device validation;
 empty ADB lists were the initial rollout snapshot, not a permanent current state.
 The rollout status is tracked in [the execution plan](./stf-rollout-plan.md);

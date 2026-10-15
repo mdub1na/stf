@@ -45,6 +45,15 @@ bash kuber/ios-prototype/deploy.sh /private/path/k3s-lab.yaml \
 The readiness probe checks the device state, not just API liveness. A running
 Pod can remain 1/2 ready while waiting for USB, Trust, a tunnel or WDA.
 
+Both socket-mounted containers also check that `/run/usbmuxd` accepts connections
+every ten seconds. After two failures Kubernetes restarts the affected container
+and resolves the host socket path again. This handles hosts that recreate the
+socket when the last USB device is unplugged: the previous file mount otherwise
+keeps an unreachable inode even after the phone returns. A listening usbmuxd
+passes this check without a connected phone; device/WDA recovery still belongs
+to the prototype runtime. Repeated daemon outages can incur Kubernetes restart
+backoff, so this is recovery rather than an immediate reconnect guarantee.
+
 ```sh
 export KUBECONFIG='/private/path/k3s-lab.yaml'
 kubectl -n stf-ios-prototype get pods -o wide

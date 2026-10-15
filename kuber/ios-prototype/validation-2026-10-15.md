@@ -3,8 +3,9 @@
 Result: the standalone prototype controls an iPhone 16 Plus running iOS 27.0.1
 from `k3s-worker-1` (`192.168.0.122`, Linux amd64), in namespace
 `stf-ios-prototype`. The Mac Xcode test was stopped before Linux startup.
-The subsequent STF integration also passed its live trial later the same day
-(see the final section). Appium Grid registration remains outside this preview.
+The subsequent STF integration also passed its live trial later the same day.
+A later physical USB test exposed a stale socket mount, described below.
+Appium Grid registration remains outside this preview.
 
 ## Artifact and transport
 
@@ -48,8 +49,8 @@ Secrets, full pairing records, UDID and screenshots remain outside Git.
 
 This phone was first prepared with Xcode. Linux successfully ran the selected
 image-mounter command, but a cold phone reboot followed by fresh Cryptex/DDI
-preparation entirely from Linux has not been tested. Also pending: physical USB
-unplug/reconnect, landscape control, reboot/passcode recovery, abrupt WDA process
+preparation entirely from Linux has not been tested. Also pending: landscape
+control, reboot/passcode recovery, abrupt WDA process
 termination and profile renewal. The trial proves the current signed,
 prepared-device path; these remaining checks are required before treating it as
 an unattended farm service.
@@ -126,18 +127,55 @@ commit's CI covers the normal build, lint, unit/component and device-less
 integration checks, the Android matrix, standard amd64/arm64 and Debian builds,
 and separate published prototype/STF integration images.
 
-The [source CI run](https://github.com/mdub1na/stf/actions/runs/38784610590)
-passed its core checks and the other Android tiers, but its overall report is
+The first [source CI run](https://github.com/mdub1na/stf/actions/runs/38784610590)
+passed its core checks and the other Android tiers, but its overall report was
 red because the Android 12 / API 31 emulator did not finish booting after two
-attempts. Tests could not start on that emulator; this was not a failed STF
-assertion. Keep the PR in draft until required checks are green.
+attempts. The subsequent [CI run for `ffde11a1`](https://github.com/mdub1na/stf/actions/runs/38787389187)
+passed every tier and its final report. The corresponding Docker and iOS image
+workflows also passed. The PR remains a draft preview pending review.
 
 This remains a manual preview on the open PR branch. Argo CD still targets the
 older `develop` images. Remove the iOS provider before syncing an older STF
 revision; its command authorization requires the updated WebSocket service.
 Use the deployment and rollback steps in README for a repeatable preview.
 
-Cold phone reboot/fresh Linux Cryptex preparation, physical USB reconnect,
+Cold phone reboot/fresh Linux Cryptex preparation,
 landscape, multi-touch, long press, profile renewal and Appium Grid registration
 remain unverified or unsupported as described in the runbook. Browser visual
 inspection remains a manual check for the operator.
+
+## Physical USB reconnect — stale host socket
+
+The user unplugged and reconnected the iPhone after the STF trial. The prototype
+remained unavailable with `dial unix /var/run/usbmuxd: connect: connection refused`.
+A new diagnostic Pod mounting the same host socket could connect and find the
+selected phone. The original containers retained the previous socket inode.
+
+Restarting only the prototype container in its existing Pod changed the mounted
+inode from 86586 to 92394 and restored socket connectivity. Restarting the tunnel
+container then restored the whole Pod to 3/3 Ready. This establishes that a
+container restart resolves the hostPath again; a whole-Pod restart is unnecessary.
+
+Both containers now have a socket liveness probe (ten-second interval, two
+failures). It checks usbmuxd connectivity rather than phone presence, so a healthy
+daemon with no attached phone does not trigger a restart. Three regression tests
+execute the manifest's actual probe programs: valid YAML-embedded JavaScript,
+listening socket without a phone, missing/stale socket failure and replacement
+socket recovery for both containers. The server suite now passes 256 tests and
+the standalone suite 22; lint/type/translation checks pass.
+
+The probe-only change was applied to the existing deployment with its images
+unchanged. The user then repeated a physical cable cycle and confirmed that STF
+worked again. No manual restart was performed during this second cycle:
+
+- Kubernetes recorded failed liveness checks from 18:51:14 UTC and automatically
+  restarted both socket-mounted containers twice while USB was unavailable.
+- The same Pod returned to 3/3 Ready by 18:51:58 UTC; its STF bridge did not restart.
+- The prototype reported `ready`, with no error, and returned a fresh PNG
+  (4077561 bytes, valid PNG signature).
+- STF again reported seven present/Ready devices: one iOS and six Android.
+- The completed socket-check Pod was removed after validation.
+
+This verifies a short physical USB cycle on the prepared, unlocked phone.
+Long disconnects can incur Kubernetes restart backoff; cold boot/passcode and
+the other outstanding scenarios above have not been established by this test.

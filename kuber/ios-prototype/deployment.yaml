@@ -57,6 +57,15 @@ spec:
           resources:
             requests: {cpu: 50m, memory: 64Mi}
             limits: {cpu: '1', memory: 512Mi}
+          # A file mount keeps the old inode when host usbmuxd recreates its socket.
+          # Restarting this container resolves the hostPath again.
+          livenessProbe:
+            exec:
+              command: [node, -e, 'const s=require("node:net").connect(process.argv[1]); s.setTimeout(2000,()=>process.exit(1)); s.once("error",()=>process.exit(1)); s.once("connect",()=>{s.destroy();process.exit(0)});', /run/usbmuxd]
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            timeoutSeconds: 3
+            failureThreshold: 2
           volumeMounts:
             - {name: usbmuxd, mountPath: /run/usbmuxd, readOnly: true}
             - {name: tun, mountPath: /dev/net/tun}
@@ -84,6 +93,13 @@ spec:
           resources:
             requests: {cpu: 100m, memory: 256Mi}
             limits: {cpu: '2', memory: 2Gi}
+          livenessProbe:
+            exec:
+              command: [node, -e, 'const s=require("node:net").connect(process.argv[1]); s.setTimeout(2000,()=>process.exit(1)); s.once("error",()=>process.exit(1)); s.once("connect",()=>{s.destroy();process.exit(0)});', /run/usbmuxd]
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            timeoutSeconds: 3
+            failureThreshold: 2
           readinessProbe:
             exec:
               command: [node, -e, 'fetch("http://127.0.0.1:7400/device", {headers:{Authorization:"Bearer "+require("node:fs").readFileSync("/token/token","utf8").trim()}}).then(async r=>process.exit(r.ok&&(await r.json()).state==="ready"?0:1)).catch(()=>process.exit(1))']

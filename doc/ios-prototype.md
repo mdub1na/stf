@@ -295,7 +295,7 @@ remaining recovery/cold-start scenarios:
 - [x] Pod recreation restores readiness and screenshots with pairing retained.
 - [x] Removing the owned WDA session restores readiness and screenshots automatically.
 - [ ] Repeat control checks in landscape.
-- [ ] USB unplug makes control unavailable; reconnect restores readiness.
+- [x] USB unplug makes control unavailable; reconnect restores readiness with socket-mount recovery.
 - [ ] WDA failure recovers without orphaned processes or replayed input.
 - [ ] Phone reboot recovers after any required physical unlock.
 - [ ] Ctrl+C frees API/forward ports and stops the owned WDA session.

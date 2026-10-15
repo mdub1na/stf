@@ -6,6 +6,10 @@ metadata:
     app.kubernetes.io/name: android-appium-node-1
 spec:
   replicas: 8
+  strategy:
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
   selector:
     matchLabels:
       app.kubernetes.io/name: android-appium-node-1
@@ -25,8 +29,26 @@ spec:
                       - android
       containers:
         - name: appium
-          image: appium/appium:v2.11.4-p2
+          image: appium/appium:v3.8.0-p1@sha256:aa0af4543b763c69da31388251bbea2347ae8e01f8d0516cf6b35c35a2c9fe3e
           imagePullPolicy: IfNotPresent
+          resources:
+            requests:
+              cpu: 50m
+              memory: 256Mi
+            limits:
+              cpu: "1"
+              memory: 768Mi
+          startupProbe:
+            httpGet:
+              path: /status
+              port: appium
+            periodSeconds: 5
+            failureThreshold: 30
+          readinessProbe:
+            httpGet:
+              path: /status
+              port: appium
+            periodSeconds: 10
           command:
             - appium
           args:
@@ -37,7 +59,7 @@ spec:
             - --use-drivers
             - uiautomator2
             - --allow-insecure
-            - chromedriver_autodownload
+            - uiautomator2:chromedriver_autodownload
           env:
             - name: ANDROID_ADB_SERVER_HOST
               value: adbd.stf.svc.cluster.local
@@ -51,6 +73,13 @@ spec:
         - name: adb-proxy
           image: alpine/socat:1.8.0.3
           imagePullPolicy: IfNotPresent
+          resources:
+            requests:
+              cpu: 5m
+              memory: 8Mi
+            limits:
+              cpu: 100m
+              memory: 64Mi
           args:
             - tcp-listen:5037,fork,reuseaddr
             - tcp:adbd.stf.svc.cluster.local:5037
@@ -58,8 +87,15 @@ spec:
             - name: adb
               containerPort: 5037
         - name: selenium-node-relay
-          image: selenium/node-base:4.39.0
+          image: selenium/node-base:4.51.0-20261010@sha256:e582019bb0748d7b551ebd8d0aaeb0197531510683ccdf172a4b45087830dc9d
           imagePullPolicy: IfNotPresent
+          resources:
+            requests:
+              cpu: 25m
+              memory: 128Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
           command:
             - /bin/sh
             - -c
@@ -91,6 +127,10 @@ metadata:
     app.kubernetes.io/name: android-appium-node-2
 spec:
   replicas: 8
+  strategy:
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
   selector:
     matchLabels:
       app.kubernetes.io/name: android-appium-node-2
@@ -110,8 +150,26 @@ spec:
                       - android
       containers:
         - name: appium
-          image: appium/appium:v2.11.4-p2
+          image: appium/appium:v3.8.0-p1@sha256:aa0af4543b763c69da31388251bbea2347ae8e01f8d0516cf6b35c35a2c9fe3e
           imagePullPolicy: IfNotPresent
+          resources:
+            requests:
+              cpu: 50m
+              memory: 256Mi
+            limits:
+              cpu: "1"
+              memory: 768Mi
+          startupProbe:
+            httpGet:
+              path: /status
+              port: appium
+            periodSeconds: 5
+            failureThreshold: 30
+          readinessProbe:
+            httpGet:
+              path: /status
+              port: appium
+            periodSeconds: 10
           command:
             - appium
           args:
@@ -122,7 +180,7 @@ spec:
             - --use-drivers
             - uiautomator2
             - --allow-insecure
-            - chromedriver_autodownload
+            - uiautomator2:chromedriver_autodownload
           env:
             - name: ANDROID_ADB_SERVER_HOST
               value: adbd-2.stf.svc.cluster.local
@@ -136,6 +194,13 @@ spec:
         - name: adb-proxy
           image: alpine/socat:1.8.0.3
           imagePullPolicy: IfNotPresent
+          resources:
+            requests:
+              cpu: 5m
+              memory: 8Mi
+            limits:
+              cpu: 100m
+              memory: 64Mi
           args:
             - tcp-listen:5037,fork,reuseaddr
             - tcp:adbd-2.stf.svc.cluster.local:5037
@@ -143,8 +208,15 @@ spec:
             - name: adb
               containerPort: 5037
         - name: selenium-node-relay
-          image: selenium/node-base:4.39.0
+          image: selenium/node-base:4.51.0-20261010@sha256:e582019bb0748d7b551ebd8d0aaeb0197531510683ccdf172a4b45087830dc9d
           imagePullPolicy: IfNotPresent
+          resources:
+            requests:
+              cpu: 25m
+              memory: 128Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
           command:
             - /bin/sh
             - -c

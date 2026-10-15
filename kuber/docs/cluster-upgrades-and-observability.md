@@ -2,8 +2,10 @@
 
 Verified on 2026-10-15, Asia/Yekaterinburg, against the live Kubernetes API,
 container runtimes, official release APIs, npm and container registries.
-Version candidates below are an audit snapshot, not an instruction to upgrade
-all components together. The only runtime change in this task is disabling LDAP.
+Version candidates below are the pre-upgrade audit snapshot. The audit itself
+only disabled LDAP. The subsequently authorized component upgrades are tracked
+in [the upgrade rollout](./cluster-upgrade-rollout.md); RethinkDB stays at 2.4.2
+and the user deferred K3s until node access is available.
 
 ## Current state and capacity
 

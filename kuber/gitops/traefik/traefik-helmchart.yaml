@@ -9,6 +9,8 @@ spec:
   version: 39.0.7
   targetNamespace: kube-system
   valuesContent: |-
+    image:
+      tag: v3.6.25@sha256:31267173a15b4944e797a76ffd9c419707c8d8b32fe5b610f80cd0cfa05f372d
     ingressClass:
       enabled: true
       isDefaultClass: true

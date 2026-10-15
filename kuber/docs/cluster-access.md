@@ -201,8 +201,9 @@ cutover because no Android device is connected.
 | `android-appium-node-1` | `8` | `adbd.stf.svc.cluster.local:5037` | `8200-8209` on `adbd` |
 | `android-appium-node-2` | `8` | `adbd-2.stf.svc.cluster.local:5037` | `8200-8209` on `adbd-2` |
 
-Each pod contains Appium `appium/appium:v2.11.4-p2`, an ADB proxy, and Selenium
-relay `selenium/node-base:4.39.0`. Relay listens on port `6666` and forwards to
+The upgraded pods contain Appium `appium/appium:v3.8.0-p1` (Node 24 LTS,
+UiAutomator2 8.7.0), an ADB proxy, and Selenium relay
+`selenium/node-base:4.51.0-20261010`, with Appium/Selenium pinned by digest. Relay listens on port `6666` and forwards to
 Appium on pod-local port `4733`. Native and Chrome stereotypes share
 `max-sessions = 1`; they are alternative capabilities, not two parallel sessions
 per pod. Port ranges are scoped to each ADB server; concurrent sessions sharing
@@ -254,9 +255,11 @@ Applications does not mean those products are deployed.
 Live main images: STF `ghcr.io/mdub1na/stf` pinned to the verified digest in
 [the deployment runbook](./stf-deployment.md), RethinkDB `rethinkdb:2.4.2`,
 OpenLDAP `osixia/openldap:1.5.0`, phpLDAPadmin
-`osixia/phpldapadmin:0.9.0`, Argo CD `v3.4.2`, Traefik `v3.6.12`, cert-manager
-`v1.20.1`, Selenium Grid `4.39.0`. CoreDNS, metrics-server and local-path-provisioner
-are also installed.
+`osixia/phpldapadmin:0.9.0` (both LDAP workloads paused), active Argo CD `v3.5.5`,
+Traefik `v3.6.25`, cert-manager `v1.20.4`, Selenium Grid `4.51.0-20261010` and
+NGINX `1.30.6-alpine`. See [the component rollout](./cluster-upgrade-rollout.md)
+for checks and scope. K3s remains 1.35.5+k3s1 by user request; bundled CoreDNS,
+metrics-server and local-path-provisioner are unchanged.
 
 Persistent volumes use `local-path`, with these PVCs all `Bound`:
 

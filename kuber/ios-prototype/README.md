@@ -65,3 +65,51 @@ Stop the prototype with
 To remove this trial, delete its namespace; that also deletes its local PVC,
 remote pairing/cache and API token. USB pairing records managed by the host
 usbmuxd remain on the host. Keep the PVC while remote pairing/cache is needed.
+
+## STF integration preview
+
+After the standalone phone is ready, the `STF iOS integration image` CI job
+publishes the complete STF application with the `ios-provider` command. Deploy
+its commit tag or digest to the preview:
+
+```sh
+bash kuber/ios-prototype/integrate-stf.sh /private/path/k3s-lab.yaml \
+  ghcr.io/mdub1na/stf:ios-stf-COMMIT_SHA
+```
+
+This updates the STF app and WebSocket unit, then adds an unprivileged provider
+sidecar to the existing phone Pod. It does not change Android providers or the
+database. The example targets the existing `stf.finservice.tech` deployment;
+adjust the public origin, screen URL and internal service names for another
+installation. Set `--market-name` for the connected phone; the model identifier
+and iOS version come from the device.
+
+The provider registers an ordinary STF device with platform `iOS`. The current
+preview supports portrait viewing, single-finger taps/swipes, Home, text input
+and screenshots. iOS pages hide APK/ADB, shell, logs, file exploration and
+rotation commands. Long press, multi-touch, clipboard read, app installation,
+landscape and Appium Grid registration remain outside this preview.
+
+Screen traffic is exposed only through the existing dynamic proxy. The provider
+accepts the configured browser origin and authenticates the forwarded signed
+session cookie against the STF owned-device API. Missing/non-owner credentials
+are rejected, access is checked again every five seconds, and release or backend
+recovery closes viewers immediately. Socket.IO checks iOS ownership and group
+visibility before forwarding controls. The private prototype API stays on
+loopback; its token is never sent to the browser.
+
+This is a manual preview deployment on the PR branch. Argo CD's desired images
+still point to `develop`; synchronizing that application can revert the app and
+WebSocket images. Promote the image through the normal GitOps process after
+review and merge.
+
+To roll back, first remove the provider sidecar, then restore the recorded
+pre-preview app/WebSocket image digests and remove the preview network objects:
+
+```sh
+kubectl --kubeconfig /private/path/k3s-lab.yaml -n stf-ios-prototype \
+  patch deployment ios-prototype --type=strategic \
+  -p '{"spec":{"template":{"spec":{"containers":[{"name":"stf-provider","$patch":"delete"}]}}}}'
+# Restore stf-app and stf-websocket with `kubectl set image` and their saved digests.
+kubectl --kubeconfig /private/path/k3s-lab.yaml delete -f kuber/ios-prototype/stf-network.yaml
+```

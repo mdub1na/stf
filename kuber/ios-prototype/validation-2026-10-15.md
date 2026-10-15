@@ -5,6 +5,9 @@ from `k3s-worker-1` (`192.168.0.122`, Linux amd64), in namespace
 `stf-ios-prototype`. The Mac Xcode test was stopped before Linux startup.
 This does not yet register the phone in the STF UI or Appium Grid.
 
+The subsequent STF integration is implemented and built; its rollout and
+end-to-end phone check are pending cluster connectivity (see the final section).
+
 ## Artifact and transport
 
 - Image source commit: `61b83916c5d57eb325309e8c93df3fae458cc9c5`.
@@ -51,3 +54,52 @@ unplug/reconnect, landscape control, reboot/passcode recovery, abrupt WDA proces
 termination and profile renewal. The trial proves the current signed,
 prepared-device path; these remaining checks are required before treating it as
 an unattended farm service.
+
+## STF integration preview — rollout pending
+
+Integration source: `ce98440ca26f8dbd961112850de6a642fd5387ae`.
+Published amd64 image:
+`ghcr.io/mdub1na/stf@sha256:c1ca9f65323bc164b112a2c71c944811e17b62fefd37695beb9cd78c26d5e4aa`.
+
+The new `ios-provider` registers the phone through STF's existing wire protocol,
+handles ownership, translates touch/text/Home commands, uploads screenshots and
+bridges WDA MJPEG to the existing screen WebSocket protocol. Screen access checks
+both the authenticated STF identity and owned-device visibility. The iOS UI
+shows Dashboard, Screenshots and Info; unsupported Android controls are hidden.
+
+Verified before deployment:
+
+- Local build, lint/type/translation checks passed.
+- Server unit suite: 253 passed, including seven new iOS integration tests;
+  standalone prototype tests: 22 passed.
+- Component suite: 68 passed, including three iOS/Android control checks.
+- CI build, lint, unit, component and device-less integration checks passed for
+  the source commit; standard amd64/arm64 and Debian image builds passed.
+- STF integration image publication and Linux Node 22.18/24 prototype checks passed.
+- Kubernetes server dry runs accepted the provider patch and scoped screen network objects.
+- Baseline immediately before the preview: four present, ready Android devices.
+
+The first rollout changed the desired `stf-websocket` image. Its new Pod could
+not pull from GHCR because the node reported `lookup ghcr.io: Try again`; the
+previous Pod remained 1/1 Running. The Kubernetes API at `192.168.0.121:6443`
+then stopped responding from the development Mac, as did a short connection
+check to the USB VM. The public STF site still returned HTTP 302. The rollout
+script was stopped while waiting for the WebSocket deployment, before it could
+update the app or add the iOS provider/network objects. The phone has therefore
+not yet been verified in the live STF interface.
+
+After connectivity returns:
+
+1. Inspect the pending WebSocket rollout and the GHCR DNS/image-pull error.
+2. Remove `ios-image-check` in `stf-ios-prototype` if the timed-out diagnostic
+   Pod creation reached the API server.
+3. Run `integrate-stf.sh` with the published digest above.
+4. Verify the iPhone's listing, reservation/release, authenticated JPEG stream,
+   Home, taps/swipes, text and stored screenshots through STF. Check that an
+   anonymous client and a second non-owner cannot view or release it.
+5. Hide the screen for more than 60 seconds, resume it, and confirm release
+   closes the viewer. Recheck the four Android devices.
+
+No temporary validation users were created before connectivity was lost.
+The previously observed standalone Linux/WDA results above remain separate
+from this unfinished STF end-to-end check.

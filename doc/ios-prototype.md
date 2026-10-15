@@ -293,6 +293,7 @@ remaining recovery/cold-start scenarios:
 - [x] Screenshot and MJPEG show the selected phone.
 - [x] Tap, swipe, text, Home and Settings activation work in portrait.
 - [x] Pod recreation restores readiness and screenshots with pairing retained.
+- [x] Removing the owned WDA session restores readiness and screenshots automatically.
 - [ ] Repeat control checks in landscape.
 - [ ] USB unplug makes control unavailable; reconnect restores readiness.
 - [ ] WDA failure recovers without orphaned processes or replayed input.

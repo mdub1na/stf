@@ -36,6 +36,8 @@ This does not yet register the phone in the STF UI or Appium Grid.
 | Swipe and tap | HTTP 200; Settings scrolling/header touch |
 | Text | Entered `STF prototype` into the identified Settings search field through `/text`, read value back, cleared it |
 | Pod recreation | Returned to 2/2 Ready and produced a new screenshot without a new Trust confirmation |
+| Owned WDA session loss | Deliberately removed the prototype session; recovered in 9451 ms, generation advanced 2→3 and a new PNG was returned |
+| Child cleanup | After recovery, exactly one iproxy process and one owned go-ios WDA runner remained |
 
 Developer Mode and certificate trust were confirmed on the phone by the user.
 Secrets, full pairing records, UDID and screenshots remain outside Git.
@@ -45,7 +47,7 @@ Secrets, full pairing records, UDID and screenshots remain outside Git.
 This phone was first prepared with Xcode. Linux successfully ran the selected
 image-mounter command, but a cold phone reboot followed by fresh Cryptex/DDI
 preparation entirely from Linux has not been tested. Also pending: physical USB
-unplug/reconnect, landscape control, reboot/passcode recovery, deliberate WDA
-failure recovery and profile renewal. The trial proves the current signed,
+unplug/reconnect, landscape control, reboot/passcode recovery, abrupt WDA process
+termination and profile renewal. The trial proves the current signed,
 prepared-device path; these remaining checks are required before treating it as
 an unattended farm service.

@@ -63,6 +63,8 @@ describe('Linux iOS integration', function() {
         res.setHeader('Content-Type', 'multipart/x-mixed-replace;boundary=frame')
         res.write('--frame\r\nContent-Type: image/jpeg\r\nContent-Length: 6\r\n\r\n')
         res.write(Buffer.from('ffd80102ffd9', 'hex'))
+        res.write('\r\n\r\n--frame\r\nContent-Type: image/jpeg\r\nContent-Length: 6\r\n\r\n')
+        res.write(Buffer.from('ffd80102ffd9', 'hex'))
       }
       else {
         const chunks: Buffer[] = []
@@ -192,7 +194,7 @@ describe('Linux iOS integration', function() {
     const decoder = new MjpegDecoder()
     const part = Buffer.concat([
       Buffer.from('--frame\r\nContent-Length: 6\r\n\r\n')
-    , Buffer.from('ffd80102ffd9', 'hex'), Buffer.from('\r\n')
+    , Buffer.from('ffd80102ffd9', 'hex'), Buffer.from('\r\n\r\n')
     ])
     const frames: Buffer[] = []
     const stream = Buffer.concat([part, part])
@@ -201,6 +203,7 @@ describe('Linux iOS integration', function() {
     }
     assert.equal(frames.length, 2)
     assert.deepEqual(frames[0], Buffer.from('ffd80102ffd9', 'hex'))
+    assert.equal(new MjpegDecoder().feed(Buffer.concat([part, part])).length, 2)
     assert.throws(() => new MjpegDecoder().feed(Buffer.from('Content-Length: 99999999\r\n\r\n')))
     assert.throws(() => new MjpegDecoder().feed(Buffer.from('Content-Type: image/jpeg\r\n\r\n')))
   })
@@ -242,7 +245,7 @@ describe('Linux iOS integration', function() {
       try {
         await once(ws, 'open')
         ws.send('on')
-        await until(() => messages.some(message => message.binary))
+        await until(() => messages.filter(message => message.binary).length >= 2)
         assert.ok(messages[0]!.data.toString().startsWith('start '))
         assert.deepEqual(messages.find(message => message.binary)!.data,
           Buffer.from('ffd80102ffd9', 'hex'))

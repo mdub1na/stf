@@ -11,6 +11,7 @@ export function createScreenServer(options: {
   serial: string
   owner: () => IosOwner | null
   keepalive: () => void
+  onError?: (error: unknown) => void
 }) {
   const server = http.createServer((_req, res) => {
     res.writeHead(404).end()
@@ -67,8 +68,9 @@ export function createScreenServer(options: {
                 ws.close(1011, 'Screen stream ended')
               }
             }
-            catch {
+            catch (error) {
               if (!active.signal.aborted) {
+                options.onError?.(error)
                 ws.close(1011, 'Screen unavailable')
               }
             }

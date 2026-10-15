@@ -8,6 +8,10 @@ export class MjpegDecoder {
     const frames: Buffer[] = []
     while (this.buffer.length) {
       if (!this.length) {
+        // WDA appends two CRLFs after each JPEG; they can arrive in separate chunks.
+        while (this.buffer.length >= 2 && this.buffer.readUInt16BE(0) === 0x0d0a) {
+          this.buffer = this.buffer.subarray(2)
+        }
         const end = this.buffer.indexOf('\r\n\r\n')
         if (end < 0) {
           if (this.buffer.length > 16384) {

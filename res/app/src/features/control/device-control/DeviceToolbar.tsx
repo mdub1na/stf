@@ -78,6 +78,7 @@ export function DeviceToolbar({device, actions, showScreen, onToggleScreen}: {
     <div className={`${classes.toolbar} stf-vnc-navbar`}>
       <DeviceNameMenu device={device} actions={actions} />
       <Group gap={6} wrap='nowrap' className={`${classes.rightButtons} stf-vnc-right-buttons`}>
+        {device.platform !== 'iOS' && <>
         <ActionIcon.Group>
           <Tooltip label={`${t('Portrait')} ${rotationSuffix}`} position='bottom'>
             <ActionIcon
@@ -125,6 +126,7 @@ export function DeviceToolbar({device, actions, showScreen, onToggleScreen}: {
           </Tooltip>
         </ActionIcon.Group>
         <Divider orientation='vertical' />
+        </>}
         <Tooltip label={showScreen ? t('Hide Screen') : t('Show Screen')} position='bottom'>
           <ActionIcon
             size='md'

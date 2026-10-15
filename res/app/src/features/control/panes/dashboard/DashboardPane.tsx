@@ -11,6 +11,10 @@ import {ShellCard} from './shell/ShellCard'
 export default function DashboardPane({device, control}: PaneProps) {
   const [platform] = usePlatform()
 
+  if (device.platform === 'iOS') {
+    return <ClipboardCard control={control} inputOnly />
+  }
+
   return (
     <SimpleGrid type='container' cols={{base: 1, '720px': 2}} spacing='md' verticalSpacing='md'>
       <NavigationCard device={device} control={control} />

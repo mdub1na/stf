@@ -183,7 +183,7 @@ export default function InfoPane({device, control}: PaneProps) {
       , title: gettext('Physical Device')
       , icon: IconMapPin
       , color: 'pink'
-      , actions: (
+      , actions: device.platform !== 'iOS' && (
         <Button size='compact-xs' leftSection={<IconInfoCircle size={14} />} onClick={() => control.identify().catch(notifyFailure)}>
           {t('Find Device')}
         </Button>
@@ -304,7 +304,8 @@ export default function InfoPane({device, control}: PaneProps) {
 
   return (
     <div className={`stf-info selectable ${classes.masonry}`}>
-      {sections.map((section) => (
+      {sections.filter(section => device.platform !== 'iOS' ||
+        ['physical', 'display', 'hardware', 'platform'].includes(section.id)).map((section) => (
         <WidgetCard
           key={section.id}
           title={t(section.title)}

@@ -45,7 +45,7 @@ gitops/root/
   cert-manager-app.yaml
   rethinkdb-app.yaml
   openldap-app.yaml
-  devicehub-app.yaml
+  stf-app.yaml
   appium-app.yaml
   mitmproxy-app.yaml
   observability-app.yaml
@@ -56,7 +56,7 @@ The live cluster was switched to this source on 2026-10-04. STF and RethinkDB
 remain manual-sync; the root and infrastructure applications use prune/self-heal.
 
 The existing STF child selects `gitops/stf-gitlab` since 2026-10-05. This overlay
-extends `gitops/devicehub`, retaining all resource names and the LDAP base for
+extends `gitops/stf`, retaining all resource names and the LDAP base for
 rollback. It patches app/auth configuration, references the separate OAuth Secret,
 and pins the updated images for app/auth only. Do not create a second Application owning
 the same objects. See [the deployment runbook](./stf-deployment.md) for cutover
@@ -74,7 +74,7 @@ gitops/argocd/
   argocd-ingress.yaml
 ```
 
-This slice owns the shared `devicehub-platform` AppProject, Argo CD server ingress, and HTTPS issuer for the Argo CD namespace.
+This slice owns the shared `stf-platform` AppProject, Argo CD server ingress, and HTTPS issuer for the Argo CD namespace.
 
 ## Traefik
 
@@ -132,22 +132,22 @@ gitops/openldap/
 OpenLDAP and phpLDAPadmin run on the storage node. The existing LDAP PVC is
 retained; the administrator password comes from `openldap-credentials`.
 
-## STF With Historical Resource Names
+## STF
 
 ```text
-gitops/devicehub/
+gitops/stf/
   namespace.yaml
   kustomization.yaml
-  devicehub-configmap.yaml
-  devicehub-core-deployments.yaml
-  devicehub-core-services.yaml
-  devicehub-storage-temp-pvc.yaml
-  devicehub-android-deployments.yaml
-  devicehub-android-services.yaml
-  devicehub-dynamic-proxy.yaml
-  devicehub-issuer.yaml
+  stf-configmap.yaml
+  stf-core-deployments.yaml
+  stf-core-services.yaml
+  stf-storage-temp-pvc.yaml
+  stf-android-deployments.yaml
+  stf-android-services.yaml
+  stf-dynamic-proxy.yaml
+  stf-issuer.yaml
   stf-certificate.yaml
-  devicehub-ingress.yaml
+  stf-ingress.yaml
   stf-runtime-patch.yaml
   stf-session-patch.yaml
   stf-http-probes-patch.yaml
@@ -177,7 +177,7 @@ gitops/appium/
 Appium Grid control-plane components run on the storage node. Android Appium
 node replicas run on the Android node and connect to the retained ADB services,
 with eight nodes per ADB pool. The copied Java tests still require adaptation
-from DeviceHub-specific APIs to standard STF APIs.
+from legacy allocation APIs to standard STF APIs.
 
 ## Reserved Slices
 

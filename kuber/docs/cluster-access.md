@@ -1,27 +1,25 @@
 # Cluster Access And Service Inventory
 
-Snapshot date: 2026-10-05, Asia/Yekaterinburg. Domain, GitLab OAuth and STF/Grid
+Resource naming migration: 2026-10-15, Asia/Yekaterinburg. Original snapshot: 2026-10-05. Domain, GitLab OAuth and STF/Grid
 checks were repeated during the login cutover; other infrastructure details retain the
 2026-10-04 inventory baseline.
 
 This document records access details after the Android STF GitOps rollout.
 The cluster now deploys from `mdub1na/stf`, `develop`. Passwords, tokens, private
-keys and kubeconfig certificate data are not copied here. Historical `devicehub`
-service names are intentionally preserved. STF uses `stf.finservice.tech`;
+keys and kubeconfig certificate data are not copied here. Application resources use namespace `stf` and the `stf-` prefix. STF uses `stf.finservice.tech`;
 Argo CD, LDAP administration and Grid domains are unchanged.
 
 ## Repositories
 
 | Purpose | Repository | Local directory |
 | --- | --- | --- |
-| Historical DeviceHub work | `https://github.com/mdub1na/devicehub` | `/Users/mdub1na/IdeaProjects/devicehub` |
 | Active STF development and deployment | `https://github.com/mdub1na/stf` | `/Users/mdub1na/IdeaProjects/stf` |
 
 The live deployment source is STF `develop`; initial STF cutover revision was
 `59aaafab05d759017e5017db659e0321bc3879a3`. The checkout has full Git history.
 Its remotes are `origin=https://github.com/mdub1na/stf.git` and
 `upstream=https://github.com/DeviceFarmer/stf.git`. The clone is self-contained;
-it does not depend on the existing DeviceHub checkout for Git objects.
+deployment changes are developed in isolated worktrees.
 
 ## Kubernetes Access
 
@@ -29,11 +27,11 @@ it does not depend on the existing DeviceHub checkout for Git objects.
 | --- | --- |
 | Distribution | k3s `v1.35.5+k3s1` |
 | API server | `https://192.168.0.121:6443` |
-| Local kubeconfig | `/Users/mdub1na/Desktop/devicehub home cluster/k3s-lab.yaml` |
+| Local kubeconfig | `/absolute/path/to/k3s-lab.yaml` |
 | Context / cluster / kubeconfig user | `default` / `default` / `default` |
 | Authentication | Embedded client certificate and private key |
 | Authorization check | `kubectl auth can-i '*' '*' --all-namespaces` returned `yes` |
-| Local k3s join token file | `/Users/mdub1na/Desktop/devicehub home cluster/node-token.txt` |
+| Local k3s join token file | `/absolute/path/to/node-token.txt` |
 
 The join token is for adding k3s nodes; it is not the credential for `kubectl`.
 Both local credential files have owner-only filesystem permissions (`0600`).
@@ -47,7 +45,7 @@ upgrade has been applied; the user will provide SSH access later. Deployment
 first, maintenance later was explicitly confirmed.
 
 ```sh
-export KUBECONFIG='/Users/mdub1na/Desktop/devicehub home cluster/k3s-lab.yaml'
+export KUBECONFIG='/absolute/path/to/k3s-lab.yaml'
 kubectl --request-timeout=15s get nodes -o wide
 kubectl -n argocd get applications
 kubectl get ingress -A
@@ -84,7 +82,7 @@ administration was not changed.
 
 | Service | URL | Namespace / backend | HTTP check |
 | --- | --- | --- | --- |
-| STF UI | `https://stf.finservice.tech` | `devicehub`, `devicehub-app:3000` | Without a session, `/`: `302` to the STF login page (`200`); only `/auth/oauth/start` redirects to GitLab |
+| STF UI | `https://stf.finservice.tech` | `stf`, `stf-app:3000` | Without a session, `/`: `302` to the STF login page (`200`); only `/auth/oauth/start` redirects to GitLab |
 | GitLab identity provider | `https://gitlab.finservice.tech` | External OAuth/OIDC provider | HTTPS discovery and client authentication verified |
 | Argo CD | `https://argocd.putmyhexon.ru` | `argocd`, `argocd-server:80` | `200` |
 | phpLDAPadmin | `https://ldap.putmyhexon.ru` | `openldap`, `phpldapadmin:80` | `200` |
@@ -111,10 +109,10 @@ execution remain unverified.
 | Argo CD | Built-in `admin` account | Initial password: Secret `argocd/argocd-initial-admin-secret`, key `password`; current password may have changed |
 | LDAP administration | `CN=admin,DC=ldap,DC=putmyhexon,DC=ru` | Secret `openldap/openldap-credentials`, key `LDAP_ADMIN_PASSWORD`; existing LDAP bind verified |
 | STF UI | GitLab user with `email_verified: true` | Sign in at GitLab; STF does not receive the GitLab password |
-| STF GitLab OAuth client | Confidential OAuth application, scopes `openid profile email` | Secret `devicehub/stf-gitlab-oauth`, keys `STF_AUTH_OAUTH2_OAUTH_CLIENT_ID`, `STF_AUTH_OAUTH2_OAUTH_CLIENT_SECRET` |
-| STF LDAP bind (rollback) | `CN=admin,DC=ldap,DC=putmyhexon,DC=ru` | Retained Secret `devicehub/devicehub-ldap-bind`, key `LDAP_BIND_CREDENTIALS` |
-| STF REST API | `Authorization: Bearer <token>` | Generate a new token through STF Settings / Keys / Access Tokens; old DeviceHub tokens are not reused |
-| STF service signing | Shared `SECRET` for app/auth/api/websocket | Secret `devicehub/devicehub-session`, key `SECRET` |
+| STF GitLab OAuth client | Confidential OAuth application, scopes `openid profile email` | Secret `stf/stf-gitlab-oauth`, keys `STF_AUTH_OAUTH2_OAUTH_CLIENT_ID`, `STF_AUTH_OAUTH2_OAUTH_CLIENT_SECRET` |
+| STF LDAP bind (rollback) | `CN=admin,DC=ldap,DC=putmyhexon,DC=ru` | Retained Secret `stf/stf-ldap-bind`, key `LDAP_BIND_CREDENTIALS` |
+| STF REST API | `Authorization: Bearer <token>` | Generate a new token through STF Settings / Keys / Access Tokens; legacy platform tokens are not reused |
+| STF service signing | Shared `SECRET` for app/auth/api/websocket | Secret `stf/stf-session`, key `SECRET` |
 | Grid | No authentication configured in checked Grid manifests | `/status` was accessible without credentials |
 | RethinkDB | No database password configured; internal driver access restricted by NetworkPolicy | `gitops/rethinkdb/rethinkdb-statefulset.yaml` and `rethinkdb-network-policy.yaml` |
 
@@ -148,19 +146,19 @@ public ingress, a NodePort, or `kubectl port-forward`.
 
 | Service | Cluster-internal endpoint | LAN / local alternative |
 | --- | --- | --- |
-| STF API | `devicehub-api.devicehub.svc.cluster.local:3000` | `https://stf.finservice.tech/api/v1` |
-| STF auth | `devicehub-auth.devicehub.svc.cluster.local:3000` | `https://stf.finservice.tech/auth/oauth/` |
-| STF WebSocket | `devicehub-websocket.devicehub.svc.cluster.local:3000` | `wss://stf.finservice.tech/socket.io/` |
-| Device/provider proxy | `devicehub-dynamic-proxy.devicehub.svc.cluster.local:8080` | `https://stf.finservice.tech/d/` |
-| APK / image / temp storage | `devicehub-storage-plugin-apk`, `devicehub-storage-plugin-image`, `devicehub-storage-temp` in `devicehub`, port `3000` | `/s/apk/`, `/s/image/`, `/s/` on the STF host |
+| STF API | `stf-api.stf.svc.cluster.local:3000` | `https://stf.finservice.tech/api/v1` |
+| STF auth | `stf-auth.stf.svc.cluster.local:3000` | `https://stf.finservice.tech/auth/oauth/` |
+| STF WebSocket | `stf-websocket.stf.svc.cluster.local:3000` | `wss://stf.finservice.tech/socket.io/` |
+| Device/provider proxy | `stf-dynamic-proxy.stf.svc.cluster.local:8080` | `https://stf.finservice.tech/d/` |
+| APK / image / temp storage | `stf-storage-plugin-apk`, `stf-storage-plugin-image`, `stf-storage-temp` in `stf`, port `3000` | `/s/apk/`, `/s/image/`, `/s/` on the STF host |
 | RethinkDB driver | `rethinkdb.rethinkdb.svc.cluster.local:28015`, database `stf` | Internal only; no public ingress or NodePort |
 | OpenLDAP | `openldap.openldap.svc.cluster.local:389` | Port-forward local `1389` to `389` |
-| ADB pool 1 | `adbd.devicehub.svc.cluster.local:5037` | Port-forward local `15037` to `5037` |
-| ADB pool 2 | `adbd-2.devicehub.svc.cluster.local:5037` | Port-forward local `15038` to `5037` |
-| Android provider 1 | `devicehub-provider.devicehub.svc.cluster.local:12010-12040` | STF `/d/devicehub-provider/<port>/` proxy |
-| Android provider 2 | `devicehub-provider-2.devicehub.svc.cluster.local:12041-12070` | STF `/d/devicehub-provider-2/<port>/` proxy |
-| App-side ZeroMQ | `devicehub-triproxy-app.devicehub.svc.cluster.local:7150,7160,7170` | Internal service |
-| Device-side ZeroMQ | `devicehub-triproxy-dev.devicehub.svc.cluster.local:7250,7260,7270` | Internal service |
+| ADB pool 1 | `adbd.stf.svc.cluster.local:5037` | Port-forward local `15037` to `5037` |
+| ADB pool 2 | `adbd-2.stf.svc.cluster.local:5037` | Port-forward local `15038` to `5037` |
+| Android provider 1 | `stf-provider.stf.svc.cluster.local:12010-12040` | STF `/d/stf-provider/<port>/` proxy |
+| Android provider 2 | `stf-provider-2.stf.svc.cluster.local:12041-12070` | STF `/d/stf-provider-2/<port>/` proxy |
+| App-side ZeroMQ | `stf-triproxy-app.stf.svc.cluster.local:7150,7160,7170` | Internal service |
+| Device-side ZeroMQ | `stf-triproxy-dev.stf.svc.cluster.local:7250,7260,7270` | Internal service |
 
 The old MongoDB namespace, PVC/PV, NodePort `32017`, iOS bridge Services,
 Endpoints and NodePorts have been removed. STF API access to RethinkDB and all
@@ -174,8 +172,8 @@ kubectl -n appium port-forward svc/appium-grid-router 4444:4444
 kubectl -n argocd port-forward svc/argocd-server 8080:80
 kubectl -n rethinkdb port-forward svc/rethinkdb 28015:28015
 kubectl -n openldap port-forward svc/openldap 1389:389
-kubectl -n devicehub port-forward svc/adbd 15037:5037
-kubectl -n devicehub port-forward svc/adbd-2 15038:5037
+kubectl -n stf port-forward svc/adbd 15037:5037
+kubectl -n stf port-forward svc/adbd-2 15038:5037
 ```
 
 For ADB diagnostics through the two local forwards:
@@ -193,8 +191,8 @@ cutover because no Android device is connected.
 
 | Pool | Replicas | ADB server | Exposed UiAutomator2 system ports |
 | --- | --- | --- | --- |
-| `android-appium-node-1` | `8` | `adbd.devicehub.svc.cluster.local:5037` | `8200-8209` on `adbd` |
-| `android-appium-node-2` | `8` | `adbd-2.devicehub.svc.cluster.local:5037` | `8200-8209` on `adbd-2` |
+| `android-appium-node-1` | `8` | `adbd.stf.svc.cluster.local:5037` | `8200-8209` on `adbd` |
+| `android-appium-node-2` | `8` | `adbd-2.stf.svc.cluster.local:5037` | `8200-8209` on `adbd-2` |
 
 Each pod contains Appium `appium/appium:v2.11.4-p2`, an ADB proxy, and Selenium
 relay `selenium/node-base:4.39.0`. Relay listens on port `6666` and forwards to
@@ -214,7 +212,7 @@ and zero active sessions. The control-plane services in namespace `appium` are:
 | `appium-grid-session-queue` | `5559` |
 | `appium-grid-event-bus` | `4442`, `4443` |
 
-Historical Java/Gradle tests and their old DeviceHub setup are in
+Historical Java/Gradle tests and their old STF setup are in
 [`../appium-tests/README.md`](../appium-tests/README.md). Their
 `/api/v1/autotests` allocation API is absent from STF and must be adapted before
 these tests can validate the new deployment.
@@ -230,13 +228,13 @@ Every Application below currently uses
 
 | Application | Source path | Sync / health at inspection | Automatic sync |
 | --- | --- | --- | --- |
-| `devicehub-root` | `kuber/gitops/root` | Synced / Healthy | prune + self-heal |
+| `stf-root` | `kuber/gitops/root` | Synced / Healthy | prune + self-heal |
 | `argocd-config` | `kuber/gitops/argocd` | Synced / Healthy | prune + self-heal |
 | `traefik` | `kuber/gitops/traefik` | Synced / Healthy | prune + self-heal |
 | `cert-manager` | `kuber/gitops/cert-manager` | Synced / Healthy | prune + self-heal |
 | `rethinkdb` | `kuber/gitops/rethinkdb` | Synced / Healthy | Manual |
 | `openldap` | `kuber/gitops/openldap` | Synced / Healthy | prune + self-heal |
-| `devicehub` | `kuber/gitops/devicehub` | Synced / Healthy | Manual |
+| `stf` | `kuber/gitops/stf-gitlab` | Synced / Healthy | Manual |
 | `appium` | `kuber/gitops/appium` | Synced / Healthy | prune + self-heal |
 | `mitmproxy` | `kuber/gitops/mitmproxy` | Synced / Healthy | prune + self-heal |
 | `observability` | `kuber/gitops/observability` | Synced / Healthy | prune + self-heal |
@@ -259,13 +257,13 @@ Persistent volumes use `local-path`, with these PVCs all `Bound`:
 | --- | --- | --- |
 | `rethinkdb` | `rethinkdb-data` | `5Gi` |
 | `openldap` | `openldap-data-pvc` | `1Gi` |
-| `devicehub` | `devicehub-storage-temp-pvc` | `5Gi` |
+| `stf` | `stf-storage-temp-pvc` | `5Gi` |
 
 The STF Certificate `stf-finservice-tech-tls` is `Ready=True`, expiring on
 2027-01-03. Other ingress Certificates were Ready with expiration on 2027-01-02
 at the original inventory check.
 Their TLS Secrets are `appium/appium-grid-putmyhexon-ru-tls`,
-`argocd/argocd-putmyhexon-ru-tls`, `devicehub/stf-finservice-tech-tls` and
+`argocd/argocd-putmyhexon-ru-tls`, `stf/stf-finservice-tech-tls` and
 `openldap/ldap-putmyhexon-ru-tls`. ACME issuer/account key name in each ingress
 namespace is `letsencrypt-http` / `letsencrypt-http-account-key`.
 
@@ -276,7 +274,7 @@ namespace is `letsencrypt-http` / `letsencrypt-http-account-key`.
 - Connected-device screen/touch, capture/release and APK tests await Android
   devices. Both ADB/provider pairs and the 16-node Grid are reachable.
 - A new authenticated STF API token check and Java client adaptation remain
-  separate tasks; DeviceHub-specific APIs and old tokens are not compatible.
+  separate tasks; legacy allocation APIs and old tokens are not compatible.
 - Back up k3s, LDAP, RethinkDB and the bootstrapped Secrets before maintenance.
   The kubeconfig and join token stay outside the repository.
 - Router/NAT administration and external host credentials remain unverified.
@@ -284,9 +282,9 @@ namespace is `letsencrypt-http` / `letsencrypt-http-account-key`.
 ## Source Files
 
 - `../README.md`, `requirements.md`, `architecture.md`
-- `../gitops/devicehub/devicehub-configmap.yaml`
-- `../gitops/devicehub/devicehub-ingress.yaml`
-- `../gitops/devicehub/devicehub-android-services.yaml`
+- `../gitops/stf/stf-configmap.yaml`
+- `../gitops/stf/stf-ingress.yaml`
+- `../gitops/stf/stf-android-services.yaml`
 - `../gitops/openldap/openldap-statefulset.yaml`
 - `../gitops/rethinkdb/rethinkdb-statefulset.yaml`
 - `../gitops/rethinkdb/rethinkdb-network-policy.yaml`

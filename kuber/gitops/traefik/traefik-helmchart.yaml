@@ -16,7 +16,7 @@ spec:
       kubernetesIngress:
         enabled: true
     nodeSelector:
-      devicehub.role: control
+      stf.role: control
     tolerations:
       - key: node-role
         operator: Equal

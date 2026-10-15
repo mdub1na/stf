@@ -14,7 +14,7 @@ spec:
     - from:
         - namespaceSelector:
             matchLabels:
-              kubernetes.io/metadata.name: devicehub
+              kubernetes.io/metadata.name: stf
         - namespaceSelector:
             matchLabels:
               kubernetes.io/metadata.name: rethinkdb

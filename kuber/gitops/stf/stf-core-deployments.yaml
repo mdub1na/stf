@@ -1,0 +1,449 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: stf-triproxy-app
+  labels:
+    app.kubernetes.io/name: stf-triproxy-app
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: stf-triproxy-app
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: stf-triproxy-app
+    spec:
+      containers:
+        - name: stf-triproxy-app
+          image: mdub1na/stf:kuber-amd64-4f59199e
+          imagePullPolicy: IfNotPresent
+          command:
+            - stf
+            - triproxy
+            - app001
+            - --bind-pub
+            - tcp://*:7150
+            - --bind-dealer
+            - tcp://*:7160
+            - --bind-pull
+            - tcp://*:7170
+          envFrom:
+            - configMapRef:
+                name: stf-env
+          ports:
+            - name: pub
+              containerPort: 7150
+            - name: dealer
+              containerPort: 7160
+            - name: pull
+              containerPort: 7170
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: stf-triproxy-dev
+  labels:
+    app.kubernetes.io/name: stf-triproxy-dev
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: stf-triproxy-dev
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: stf-triproxy-dev
+    spec:
+      containers:
+        - name: stf-triproxy-dev
+          image: mdub1na/stf:kuber-amd64-4f59199e
+          imagePullPolicy: IfNotPresent
+          command:
+            - stf
+            - triproxy
+            - --name
+            - dev001
+            - --bind-pub
+            - tcp://*:7250
+            - --bind-dealer
+            - tcp://*:7260
+            - --bind-pull
+            - tcp://*:7270
+          envFrom:
+            - configMapRef:
+                name: stf-env
+          ports:
+            - name: pub
+              containerPort: 7250
+            - name: dealer
+              containerPort: 7260
+            - name: pull
+              containerPort: 7270
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: stf-storage-temp
+  labels:
+    app.kubernetes.io/name: stf-storage-temp
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: stf-storage-temp
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: stf-storage-temp
+    spec:
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+              - matchExpressions:
+                  - key: stf.role
+                    operator: In
+                    values:
+                      - storage
+      containers:
+        - name: stf-storage-temp
+          image: mdub1na/stf:kuber-amd64-4f59199e
+          imagePullPolicy: IfNotPresent
+          command:
+            - stf
+            - storage-temp
+            - --port
+            - "3000"
+            - --save-dir
+            - /tmp
+          envFrom:
+            - configMapRef:
+                name: stf-env
+          ports:
+            - name: http
+              containerPort: 3000
+          volumeMounts:
+            - name: storage-temp-data
+              mountPath: /tmp
+      volumes:
+        - name: storage-temp-data
+          persistentVolumeClaim:
+            claimName: stf-storage-temp-pvc
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: stf-storage-plugin-apk
+  labels:
+    app.kubernetes.io/name: stf-storage-plugin-apk
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: stf-storage-plugin-apk
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: stf-storage-plugin-apk
+    spec:
+      containers:
+        - name: stf-storage-plugin-apk
+          image: mdub1na/stf:kuber-amd64-4f59199e
+          imagePullPolicy: IfNotPresent
+          command:
+            - stf
+            - storage-plugin-apk
+            - --port
+            - "3000"
+            - --storage-url
+            - http://stf-storage-temp:3000/
+          envFrom:
+            - configMapRef:
+                name: stf-env
+          ports:
+            - name: http
+              containerPort: 3000
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: stf-storage-plugin-image
+  labels:
+    app.kubernetes.io/name: stf-storage-plugin-image
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: stf-storage-plugin-image
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: stf-storage-plugin-image
+    spec:
+      containers:
+        - name: stf-storage-plugin-image
+          image: mdub1na/stf:kuber-amd64-4f59199e
+          imagePullPolicy: IfNotPresent
+          command:
+            - stf
+            - storage-plugin-image
+            - --port
+            - "3000"
+            - --storage-url
+            - http://stf-storage-temp:3000/
+          envFrom:
+            - configMapRef:
+                name: stf-env
+          ports:
+            - name: http
+              containerPort: 3000
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: stf-processor
+  labels:
+    app.kubernetes.io/name: stf-processor
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: stf-processor
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: stf-processor
+    spec:
+      containers:
+        - name: stf-processor
+          image: mdub1na/stf:kuber-amd64-4f59199e
+          imagePullPolicy: IfNotPresent
+          command:
+            - stf
+            - processor
+            - --name
+            - processor
+            - --connect-app-dealer
+            - tcp://stf-triproxy-app:7160
+            - --connect-dev-dealer
+            - tcp://stf-triproxy-dev:7260
+          envFrom:
+            - configMapRef:
+                name: stf-env
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: stf-reaper
+  labels:
+    app.kubernetes.io/name: stf-reaper
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: stf-reaper
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: stf-reaper
+    spec:
+      containers:
+        - name: stf-reaper
+          image: mdub1na/stf:kuber-amd64-4f59199e
+          imagePullPolicy: IfNotPresent
+          command:
+            - stf
+            - reaper
+            - --name
+            - reaper001
+            - --connect-push
+            - tcp://stf-triproxy-dev:7270
+            - --connect-sub
+            - tcp://stf-triproxy-app:7150
+            - --heartbeat-timeout
+            - "30000"
+          envFrom:
+            - configMapRef:
+                name: stf-env
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: stf-api
+  labels:
+    app.kubernetes.io/name: stf-api
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: stf-api
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: stf-api
+    spec:
+      containers:
+        - name: stf-api
+          image: mdub1na/stf:kuber-amd64-4f59199e
+          imagePullPolicy: IfNotPresent
+          command:
+            - stf
+            - api
+            - --port
+            - "3000"
+            - --connect-sub
+            - tcp://stf-triproxy-app:7150
+            - --connect-push
+            - tcp://stf-triproxy-app:7170
+            - --connect-sub-dev
+            - tcp://stf-triproxy-dev:7250
+            - --connect-push-dev
+            - tcp://stf-triproxy-dev:7270
+          envFrom:
+            - configMapRef:
+                name: stf-env
+          ports:
+            - name: http
+              containerPort: 3000
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: stf-websocket
+  labels:
+    app.kubernetes.io/name: stf-websocket
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: stf-websocket
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: stf-websocket
+    spec:
+      containers:
+        - name: stf-websocket
+          image: mdub1na/stf:kuber-amd64-4f59199e
+          imagePullPolicy: IfNotPresent
+          command:
+            - stf
+            - websocket
+            - --port
+            - "3000"
+            - --storage-url
+            - https://stf.finservice.tech/
+            - --connect-sub
+            - tcp://stf-triproxy-app:7150
+            - --connect-push
+            - tcp://stf-triproxy-app:7170
+          envFrom:
+            - configMapRef:
+                name: stf-env
+          ports:
+            - name: http
+              containerPort: 3000
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: stf-api-groups-engine
+  labels:
+    app.kubernetes.io/name: stf-api-groups-engine
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: stf-api-groups-engine
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: stf-api-groups-engine
+    spec:
+      containers:
+        - name: stf-api-groups-engine
+          image: mdub1na/stf:kuber-amd64-4f59199e
+          imagePullPolicy: IfNotPresent
+          command:
+            - stf
+            - groups-engine
+            - --connect-sub
+            - tcp://stf-triproxy-app:7150
+            - --connect-push
+            - tcp://stf-triproxy-app:7170
+            - --connect-push-dev
+            - tcp://stf-triproxy-dev:7270
+            - --connect-sub-dev
+            - tcp://stf-triproxy-dev:7250
+          envFrom:
+            - configMapRef:
+                name: stf-env
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: stf-auth
+  labels:
+    app.kubernetes.io/name: stf-auth
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: stf-auth
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: stf-auth
+      annotations:
+        stf/config-revision: "stf-finservice-tech-v1"
+    spec:
+      containers:
+        - name: stf-auth
+          image: mdub1na/stf:kuber-amd64-4f59199e
+          imagePullPolicy: IfNotPresent
+          command:
+            - stf
+            - auth-ldap
+            - --port
+            - "3000"
+          envFrom:
+            - configMapRef:
+                name: stf-env
+          ports:
+            - name: http
+              containerPort: 3000
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: stf-app
+  labels:
+    app.kubernetes.io/name: stf-app
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: stf-app
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: stf-app
+      annotations:
+        stf/config-revision: "stf-finservice-tech-v1"
+    spec:
+      containers:
+        - name: stf-app
+          image: mdub1na/stf:kuber-amd64-4f59199e
+          imagePullPolicy: IfNotPresent
+          command:
+            - stf
+            - app
+            - --port
+            - "3000"
+          envFrom:
+            - configMapRef:
+                name: stf-env
+          ports:
+            - name: http
+              containerPort: 3000

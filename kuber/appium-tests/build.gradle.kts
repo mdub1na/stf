@@ -2,7 +2,7 @@ plugins {
     java
 }
 
-group = "ru.devicehub"
+group = "ru.stf"
 version = "0.1.0-SNAPSHOT"
 
 dependencies {
@@ -33,7 +33,7 @@ tasks.named<Test>("test") {
     description = "Runs unit-style tests only. Device smoke tests must be started explicitly."
 
     useJUnitPlatform {
-        excludeTags("local", "devicehub")
+        excludeTags("local", "stf")
     }
 }
 
@@ -46,38 +46,38 @@ tasks.register<Test>("localAndroidTest") {
     }
 }
 
-tasks.register<Test>("devicehubAndroidTest") {
-    description = "Runs DeviceHub capture/free smoke tests."
+tasks.register<Test>("stfAndroidTest") {
+    description = "Runs STF capture/free smoke tests."
     group = "verification"
 
     useJUnitPlatform {
-        includeTags("devicehub")
+        includeTags("stf")
     }
 }
 
-tasks.register<Test>("devicehubAppiumAndroidTest") {
-    description = "Runs Android Appium tests against a DeviceHub-managed device."
+tasks.register<Test>("stfAppiumAndroidTest") {
+    description = "Runs Android Appium tests against a STF-managed device."
     group = "verification"
 
     useJUnitPlatform {
-        includeTags("devicehub-appium")
+        includeTags("stf-appium")
     }
 }
 
-tasks.register<Test>("devicehubAppiumSettingsTest") {
-    description = "Runs Android Settings Appium smoke tests against a DeviceHub-managed device."
+tasks.register<Test>("stfAppiumSettingsTest") {
+    description = "Runs Android Settings Appium smoke tests against a STF-managed device."
     group = "verification"
 
     useJUnitPlatform {
-        includeTags("devicehub-appium-settings")
+        includeTags("stf-appium-settings")
     }
 }
 
-tasks.register<Test>("devicehubAppiumIosSettingsTest") {
-    description = "Runs iOS Settings Appium smoke tests against a DeviceHub-managed device."
+tasks.register<Test>("stfAppiumIosSettingsTest") {
+    description = "Runs iOS Settings Appium smoke tests against a STF-managed device."
     group = "verification"
 
     useJUnitPlatform {
-        includeTags("devicehub-appium-ios-settings")
+        includeTags("stf-appium-ios-settings")
     }
 }

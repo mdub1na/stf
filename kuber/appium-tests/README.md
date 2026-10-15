@@ -1,8 +1,8 @@
-# DeviceHub Appium Tests
+# STF Appium Tests
 
-Java smoke tests for Android and iOS devices through local Appium or DeviceHub Appium Grid.
+Java smoke tests for Android and iOS devices through local Appium or STF Appium Grid.
 
-The remote DeviceHub instructions below are historical. The current farm runs
+The remote STF instructions below are historical. The current farm runs
 STF at <https://stf.finservice.tech> and does not implement `/api/v1/autotests`.
 These remote tests need API adaptation; replacing the hostname alone is not
 sufficient. Local Appium tests and the Grid endpoint are unchanged.
@@ -54,9 +54,9 @@ Optional variables:
 
 Failure artifacts are saved under `target/appium-artifacts`.
 
-## DeviceHub Capture Smoke
+## STF Capture Smoke
 
-This smoke test checks only the DeviceHub autotests API lifecycle:
+This smoke test checks only the STF autotests API lifecycle:
 
 1. Capture one Android device.
 2. Print captured device data.
@@ -66,61 +66,61 @@ It does not start an Appium session yet.
 
 ```bash
 cd kuber/appium-tests
-DEVICEHUB_BASE_URL=https://<devicehub-host> \
-DEVICEHUB_TOKEN=<access-token> \
-./gradlew devicehubAndroidTest
+STF_BASE_URL=https://<stf-host> \
+STF_TOKEN=<access-token> \
+./gradlew stfAndroidTest
 ```
 
-`DEVICEHUB_BASE_URL` can be either the root DeviceHub URL or the `/api/v1` URL.
+`STF_BASE_URL` can be either the root STF URL or the `/api/v1` URL.
 
-Optional DeviceHub variables:
+Optional STF variables:
 
-- `DEVICEHUB_AMOUNT` defaults to `1`
-- `DEVICEHUB_TIMEOUT_SECONDS` defaults to `600`
-- `DEVICEHUB_NEED_AMOUNT` defaults to `true`
-- `DEVICEHUB_RUN_NAME` defaults to a generated smoke run name
-- `DEVICEHUB_DEVICE_TYPE` defaults to empty because current DeviceHub installations may use different internal platform field names
-- `DEVICEHUB_ABI`, `DEVICEHUB_MODEL`, `DEVICEHUB_SDK`, `DEVICEHUB_VERSION` default to empty filters
+- `STF_AMOUNT` defaults to `1`
+- `STF_TIMEOUT_SECONDS` defaults to `600`
+- `STF_NEED_AMOUNT` defaults to `true`
+- `STF_RUN_NAME` defaults to a generated smoke run name
+- `STF_DEVICE_TYPE` defaults to empty because current STF installations may use different internal platform field names
+- `STF_ABI`, `STF_MODEL`, `STF_SDK`, `STF_VERSION` default to empty filters
 
-## DeviceHub Appium Smoke
+## STF Appium Smoke
 
-This smoke test captures one DeviceHub device, uses its `serial` as Appium `udid`, runs the Chrome smoke through Appium, and frees the DeviceHub group in `finally`.
+This smoke test captures one STF device, uses its `serial` as Appium `udid`, runs the Chrome smoke through Appium, and frees the STF group in `finally`.
 
 ```bash
 cd kuber/appium-tests
-DEVICEHUB_BASE_URL=https://<devicehub-host> \
-DEVICEHUB_TOKEN=<access-token> \
+STF_BASE_URL=https://<stf-host> \
+STF_TOKEN=<access-token> \
 APPIUM_SERVER_URL=https://<appium-grid-host> \
-./gradlew devicehubAppiumAndroidTest
+./gradlew stfAppiumAndroidTest
 ```
 
-When running through the multi-provider Appium Grid, do not pass `APPIUM_REMOTE_ADB_HOST` by default. DeviceHub tests read the captured device provider and automatically map it to the matching ADB server (`devicehub-provider` -> `adbd`, `devicehub-provider-2` -> `adbd-2`).
+When running through the multi-provider Appium Grid, do not pass `APPIUM_REMOTE_ADB_HOST` by default. STF tests read the captured device provider and automatically map it to the matching ADB server (`stf-provider` -> `adbd`, `stf-provider-2` -> `adbd-2`).
 
 For diagnostics or when pinning a run to one ADB pair, pass remote ADB capabilities explicitly:
 
 ```bash
-APPIUM_REMOTE_ADB_HOST=adbd.devicehub.svc.cluster.local
+APPIUM_REMOTE_ADB_HOST=adbd.stf.svc.cluster.local
 APPIUM_ADB_PORT=5037
 ```
 
-## DeviceHub Settings Smoke
+## STF Settings Smoke
 
-This smoke test captures one DeviceHub device, opens Android Settings through Appium, checks that page source is available, and frees the DeviceHub group in `finally`.
+This smoke test captures one STF device, opens Android Settings through Appium, checks that page source is available, and frees the STF group in `finally`.
 
 ```bash
 cd kuber/appium-tests
-DEVICEHUB_BASE_URL=https://<devicehub-host> \
-DEVICEHUB_TOKEN=<access-token> \
-DEVICEHUB_MODEL=SM-A556E \
+STF_BASE_URL=https://<stf-host> \
+STF_TOKEN=<access-token> \
+STF_MODEL=SM-A556E \
 APPIUM_SERVER_URL=https://<appium-grid-host> \
-./gradlew devicehubAppiumSettingsTest
+./gradlew stfAppiumSettingsTest
 ```
 
-Use a `DEVICEHUB_MODEL` value that is available in DeviceHub. To check what a specific ADB pair sees:
+Use a `STF_MODEL` value that is available in STF. To check what a specific ADB pair sees:
 
 ```bash
-adb -H adbd.devicehub.svc.cluster.local -P 5037 devices -l
-adb -H adbd-2.devicehub.svc.cluster.local -P 5037 devices -l
+adb -H adbd.stf.svc.cluster.local -P 5037 devices -l
+adb -H adbd-2.stf.svc.cluster.local -P 5037 devices -l
 ```
 
 For diagnostics against a single Appium node, forward the node locally and switch `APPIUM_SERVER_URL` to the forwarded port:
@@ -130,23 +130,23 @@ kubectl -n appium port-forward pod/<android-appium-node-pod> 4734:4733
 APPIUM_SERVER_URL=http://127.0.0.1:4734
 ```
 
-## DeviceHub iOS Settings Smoke
+## STF iOS Settings Smoke
 
-This smoke test captures one iOS DeviceHub device, opens iOS Settings through Appium/XCUITest, checks that page source is available, and frees the DeviceHub group in `finally`.
+This smoke test captures one iOS STF device, opens iOS Settings through Appium/XCUITest, checks that page source is available, and frees the STF group in `finally`.
 
-The current DeviceHub iOS devices use `platform=iOS`, while the autotests API can capture them reliably by model. The default iOS model filter is `iPhone (Альфа)` and can be overridden with `DEVICEHUB_IOS_MODEL` or `DEVICEHUB_MODEL`.
+The current STF iOS devices use `platform=iOS`, while the autotests API can capture them reliably by model. The default iOS model filter is `iPhone (Альфа)` and can be overridden with `STF_IOS_MODEL` or `STF_MODEL`.
 
 ```bash
 cd kuber/appium-tests
-DEVICEHUB_BASE_URL=https://<devicehub-host> \
-DEVICEHUB_TOKEN=<access-token> \
+STF_BASE_URL=https://<stf-host> \
+STF_TOKEN=<access-token> \
 APPIUM_SERVER_URL=https://<appium-grid-host> \
-./gradlew devicehubAppiumIosSettingsTest
+./gradlew stfAppiumIosSettingsTest
 ```
 
 Optional iOS variables:
 
-- `DEVICEHUB_IOS_MODEL` defaults to `iPhone (Альфа)`
+- `STF_IOS_MODEL` defaults to `iPhone (Альфа)`
 - `IOS_DEVICE_NAME` defaults to `iPhone`
 - `IOS_BUNDLE_ID` defaults to `com.apple.Preferences`
 - `IOS_PLATFORM_VERSION` defaults to empty
@@ -155,11 +155,11 @@ The public Appium Grid must have at least one iOS/XCUITest node registered. A Li
 
 ## External Repository Handoff
 
-Use this section as the handoff guide for adding DeviceHub Appium tests to another repository.
+Use this section as the handoff guide for adding STF Appium tests to another repository.
 
 ### Goal
 
-Run autotests from another repository on DeviceHub devices through the public Appium Grid.
+Run autotests from another repository on STF devices through the public Appium Grid.
 
 ### Recommended Stack
 
@@ -171,10 +171,10 @@ Run autotests from another repository on DeviceHub devices through the public Ap
 
 ### Launch Flow
 
-Before starting an Appium session, the test must capture a device in DeviceHub:
+Before starting an Appium session, the test must capture a device in STF:
 
 ```text
-GET https://devicehub.putmyhexon.ru/api/v1/autotests?amount=1&timeout=600&need_amount=true&run=<run-name>
+GET https://stf.putmyhexon.ru/api/v1/autotests?amount=1&timeout=600&need_amount=true&run=<run-name>
 ```
 
 Take these values from the response:
@@ -186,20 +186,20 @@ Take these values from the response:
 Pass the device serial to Appium as `udid`:
 
 ```text
-appium:udid=<serial from DeviceHub>
+appium:udid=<serial from STF>
 ```
 
 Use the captured device provider to select the matching ADB pair:
 
 ```text
-devicehub-provider   -> adbd.devicehub.svc.cluster.local
-devicehub-provider-2 -> adbd-2.devicehub.svc.cluster.local
+stf-provider   -> adbd.stf.svc.cluster.local
+stf-provider-2 -> adbd-2.stf.svc.cluster.local
 ```
 
 After the test finishes, always release the captured group:
 
 ```text
-DELETE https://devicehub.putmyhexon.ru/api/v1/autotests?group=<group.id>
+DELETE https://stf.putmyhexon.ru/api/v1/autotests?group=<group.id>
 ```
 
 Release should be done in `finally`, `afterEach`, or `@After` so the device is freed even when the test fails.
@@ -216,7 +216,7 @@ https://appium-grid.putmyhexon.ru
 platformName=Android
 appium:automationName=UiAutomator2
 appium:deviceName=Android
-appium:udid=<serial from DeviceHub>
+appium:udid=<serial from STF>
 appium:remoteAdbHost=<ADB host selected from captured device provider>
 appium:adbPort=5037
 appium:noReset=true
@@ -228,7 +228,7 @@ appium:newCommandTimeout=120
 Start from a Settings smoke test. It only opens the system Settings app on the phone and verifies the base chain:
 
 ```text
-DeviceHub capture -> Appium Grid -> Android device -> Settings opened
+STF capture -> Appium Grid -> Android device -> Settings opened
 ```
 
 Capabilities for Settings smoke:
@@ -241,23 +241,23 @@ appium:appActivity=.Settings
 Launch command:
 
 ```bash
-DEVICEHUB_BASE_URL=https://devicehub.putmyhexon.ru \
-DEVICEHUB_TOKEN='<token>' \
+STF_BASE_URL=https://stf.putmyhexon.ru \
+STF_TOKEN='<token>' \
 APPIUM_SERVER_URL=https://appium-grid.putmyhexon.ru \
 ./gradlew <test-task>
 ```
 
-Do not pass `APPIUM_REMOTE_ADB_HOST` by default when running through the shared Appium Grid. DeviceHub tests should read the captured device provider and automatically map it to the matching ADB pair:
+Do not pass `APPIUM_REMOTE_ADB_HOST` by default when running through the shared Appium Grid. STF tests should read the captured device provider and automatically map it to the matching ADB pair:
 
-- `android-appium-node-1` -> `adbd.devicehub.svc.cluster.local`
-- `android-appium-node-2` -> `adbd-2.devicehub.svc.cluster.local`
+- `android-appium-node-1` -> `adbd.stf.svc.cluster.local`
+- `android-appium-node-2` -> `adbd-2.stf.svc.cluster.local`
 
 Use `APPIUM_REMOTE_ADB_HOST` only for diagnostics or when intentionally pinning a run to one ADB pair.
 
 By default, run without selecting a device model. If temporary model filtering is needed, add:
 
 ```bash
-DEVICEHUB_MODEL=SM-A556E
+STF_MODEL=SM-A556E
 ```
 
 ### Parallel Android Runs
@@ -278,10 +278,10 @@ UiAutomator2 uses `systemPort` for communication with the device. If two session
 ### Infrastructure Expectations
 
 - Appium Grid is available at the public endpoint.
-- DeviceHub sees Android devices and can capture/release them through the autotests API.
+- STF sees Android devices and can capture/release them through the autotests API.
 - Appium Grid has Android nodes connected to both ADB pairs:
-  - `android-appium-node-1` -> `adbd.devicehub.svc.cluster.local`
-  - `android-appium-node-2` -> `adbd-2.devicehub.svc.cluster.local`
+  - `android-appium-node-1` -> `adbd.stf.svc.cluster.local`
+  - `android-appium-node-2` -> `adbd-2.stf.svc.cluster.local`
 - For four parallel Android sessions, there must be four free devices and enough Appium node capacity.
 - For iOS sessions, Appium Grid must also have a macOS XCUITest node with access to the iOS devices and a working WebDriverAgent signing setup.
 

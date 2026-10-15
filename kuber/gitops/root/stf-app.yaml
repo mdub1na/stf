@@ -1,0 +1,17 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: stf
+  namespace: argocd
+spec:
+  project: stf-platform
+  source:
+    repoURL: https://github.com/mdub1na/stf.git
+    targetRevision: develop
+    path: kuber/gitops/stf-gitlab
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: stf
+  syncPolicy:
+    syncOptions:
+      - CreateNamespace=true

@@ -5,7 +5,7 @@
 ### Status
 - Open
 - Priority: medium
-- Scope: upstream DeviceHub code (not `kuber` manifests/scripts)
+- Scope: upstream STF code (not `kuber` manifests/scripts)
 
 ### Where it happens
 - File: `lib/cli/ios-provider/index.js`
@@ -41,7 +41,7 @@
 
 ### Symptoms
 - `ios-provider` logs phantom device like `7423J07` even when only iPhones are expected.
-- Device appears in DeviceHub UI with broken state (`display.url` empty), may trigger `No display url`.
+- Device appears in STF UI with broken state (`display.url` empty), may trigger `No display url`.
 - Provider repeatedly restarts worker process for phantom serial.
 
 ### Root cause (observed)

@@ -1,7 +1,7 @@
 apiVersion: v1
 kind: ConfigMap
 metadata:
-  name: devicehub-env
+  name: stf-env
 data:
   AUTH_URL: auth/oauth/
   STF_APP_AUTH_URL: https://stf.finservice.tech/auth/oauth/

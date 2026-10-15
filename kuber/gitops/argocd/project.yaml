@@ -1,7 +1,7 @@
 apiVersion: argoproj.io/v1alpha1
 kind: AppProject
 metadata:
-  name: devicehub-platform
+  name: stf-platform
   namespace: argocd
 spec:
   description: Android STF platform project
@@ -15,7 +15,7 @@ spec:
     - server: https://kubernetes.default.svc
       namespace: openldap
     - server: https://kubernetes.default.svc
-      namespace: devicehub
+      namespace: stf
     - server: https://kubernetes.default.svc
       namespace: appium
     - server: https://kubernetes.default.svc

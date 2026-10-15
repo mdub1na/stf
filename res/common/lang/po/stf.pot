@@ -1211,10 +1211,6 @@ msgstr ""
 msgid "No output"
 msgstr ""
 
-#: res/app/src/features/control/panes/info/InfoPane.tsx:104
-msgid "No photo available"
-msgstr ""
-
 #: res/app/src/features/control/panes/advanced/PortForwardingCard.tsx:94
 msgid "No Ports Forwarded"
 msgstr ""

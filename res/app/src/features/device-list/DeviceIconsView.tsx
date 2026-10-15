@@ -6,6 +6,7 @@ import type {Device} from '@/core/devices/types'
 import {controlHref, type DeviceActions} from './device-actions'
 import {StatusButton} from './cells'
 import {DeviceContextMenu} from './DeviceContextMenu'
+import {DeviceImage} from '@/ui/DeviceImage'
 import classes from './DeviceList.module.css'
 
 function TileMeta({device}: {device: Device}) {
@@ -45,7 +46,7 @@ const DeviceTile = memo(function DeviceTile({device, actions}: {
   const content = (
     <>
       <div className={`device-photo-small ${classes.photo}`}>
-        <img src={device.enhancedImage120} alt='' loading='lazy' />
+        <DeviceImage src={device.enhancedImage120} alt='' loading='lazy' />
       </div>
       <div className={`device-name ${device.state === 'available' ? 'state-available' : ''} ${classes.name}`}>
         {device.enhancedName}

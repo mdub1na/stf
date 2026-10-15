@@ -1,6 +1,7 @@
 import {appState} from '../app-state'
 import {gettext, translate} from '../i18n'
 import type {Device, DeviceState} from './types'
+import {deviceImageUrl} from '../../../../../lib/util/device-image-paths'
 
 const stateActions: Record<DeviceState, string> = {
   absent: gettext('Disconnected')
@@ -156,8 +157,8 @@ export function enhanceDevice(device: Device): Device {
   device.enhancedName = device.marketName || device.name || device.model || device.serial ||
     'Unknown'
   device.enhancedModel = device.model || 'Unknown'
-  device.enhancedImage120 = `/static/app/devices/icon/x120/${device.image || '_default.jpg'}`
-  device.enhancedImage24 = `/static/app/devices/icon/x24/${device.image || '_default.jpg'}`
+  device.enhancedImage120 = deviceImageUrl(device.image, 'icon/x120')
+  device.enhancedImage24 = deviceImageUrl(device.image, 'icon/x24')
   device.enhancedStateAction = statusNameAction(device.state)
   device.enhancedStatePassive = statusNamePassive(device.state)
 

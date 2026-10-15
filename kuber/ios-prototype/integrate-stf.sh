@@ -25,6 +25,11 @@ kubectl --kubeconfig "$cluster_config" -n stf set image \
   --request-timeout=15s deployment/stf-websocket "stf-websocket=$stf_image"
 kubectl --kubeconfig "$cluster_config" -n stf rollout status deployment/stf-websocket \
   --request-timeout=610s --timeout=600s
+# The API enriches the initial device list; keep its catalogue aligned with live updates.
+kubectl --kubeconfig "$cluster_config" -n stf set image deployment/stf-api "stf-api=$stf_image" \
+  --request-timeout=15s
+kubectl --kubeconfig "$cluster_config" -n stf rollout status deployment/stf-api \
+  --request-timeout=610s --timeout=600s
 kubectl --kubeconfig "$cluster_config" -n stf set image deployment/stf-app "stf-app=$stf_image" \
   --request-timeout=15s
 kubectl --kubeconfig "$cluster_config" -n stf rollout status deployment/stf-app \

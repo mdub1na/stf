@@ -86,7 +86,7 @@ bash kuber/ios-prototype/integrate-stf.sh /private/path/k3s-lab.yaml \
   ghcr.io/mdub1na/stf:ios-stf-COMMIT_SHA
 ```
 
-This updates the STF app and WebSocket unit, then adds an unprivileged provider
+This updates the STF app, API and WebSocket unit, then adds an unprivileged provider
 sidecar to the existing phone Pod. It does not change Android providers or the
 database. The example targets the existing `stf.finservice.tech` deployment;
 adjust the public origin, screen URL and internal service names for another
@@ -114,12 +114,12 @@ revision: its command authorization requires the updated WebSocket service. Prom
 review and merge.
 
 To roll back, first remove the provider sidecar, then restore the recorded
-pre-preview app/WebSocket image digests and remove the preview network objects:
+pre-preview app/API/WebSocket image digests and remove the preview network objects:
 
 ```sh
 kubectl --kubeconfig /private/path/k3s-lab.yaml -n stf-ios-prototype \
   patch deployment ios-prototype --type=strategic \
   -p '{"spec":{"template":{"spec":{"containers":[{"name":"stf-provider","$patch":"delete"}]}}}}'
-# Restore stf-app and stf-websocket with `kubectl set image` and their saved digests.
+# Restore stf-app, stf-api and stf-websocket with `kubectl set image` and saved digests.
 kubectl --kubeconfig /private/path/k3s-lab.yaml delete -f kuber/ios-prototype/stf-network.yaml
 ```

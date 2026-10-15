@@ -228,6 +228,10 @@ export class IosBridge {
       return
     }
     const envelope = wire.Envelope.decode(data)
+    // The provider channel is public metadata; it only accepts registration acknowledgements.
+    if (channel === this.solo && envelope.type !== wire.DeviceRegisteredMessage.$code) {
+      return
+    }
     const setup = [wire.ProbeMessage.$code, wire.DeviceRegisteredMessage.$code
       , wire.GroupMessage.$code, wire.AutoGroupMessage.$code]
     if (!setup.includes(envelope.type) && (!this.owner || !this.registered)) {

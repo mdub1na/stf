@@ -2,6 +2,8 @@ import {setTimeout as delay} from 'node:timers/promises'
 
 import {ManagedProcess, runCommand, runJson} from './process.mts'
 import {WdaClient} from './wda.mts'
+import {selectedTunnel, rsdEndpoint} from './tunnel.mts'
+import type {ImageMounter} from './tunnel.mts'
 
 export interface RuntimeOptions {
   udid: string
@@ -9,6 +11,8 @@ export interface RuntimeOptions {
   xctest: string
   goIos: string
   iproxy: string
+  imageMounter: ImageMounter
+  pymobiledevice3: string
   wdaPort: number
   mjpegPort: number
   tunnelPort: number
@@ -93,10 +97,16 @@ export class IosRuntime {
     this.info = await json(o.goIos, this.args('info'), 15000, this.abort.signal)
     this.checkChildren()
     const tunnels = await json(o.goIos, this.args('tunnel', 'ls'), 15000, this.abort.signal)
-    if (!Array.isArray(tunnels) || !tunnels.some(t => t?.udid === o.udid || t?.Udid === o.udid)) {
-      throw new Error('No go-ios tunnel for this iPhone; start the tunnel agent first')
+    const tunnel = selectedTunnel(tunnels, o.udid)
+    if (o.imageMounter === 'pymobiledevice3') {
+      // Reuse the selected kernel tunnel; do not start a second tunnel daemon.
+      await run(o.pymobiledevice3, [
+        'mounter', 'auto-mount', '--udid=' + o.udid, '--rsd', ...rsdEndpoint(tunnel)
+      ], 120000, this.abort.signal)
     }
-    await run(o.goIos, this.args('image', 'auto'), 120000, this.abort.signal)
+    else {
+      await run(o.goIos, this.args('image', 'auto'), 120000, this.abort.signal)
+    }
     this.checkChildren()
     this.children.push(start(o.iproxy, [
       '-u', o.udid, '-l', '-s', '127.0.0.1'

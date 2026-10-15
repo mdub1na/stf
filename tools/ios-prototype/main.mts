@@ -4,6 +4,7 @@ import {parseArgs} from 'node:util'
 import {IosRuntime} from './runtime.mts'
 import {createServer} from './server.mts'
 import {diagnose} from './doctor.mts'
+import type {ImageMounter} from './tunnel.mts'
 
 const {values} = parseArgs({options: {
   udid: {type: 'string'}
@@ -11,6 +12,8 @@ const {values} = parseArgs({options: {
 , 'xctest-config': {type: 'string', default: 'WebDriverAgentRunner.xctest'}
 , 'go-ios': {type: 'string', default: 'ios'}
 , iproxy: {type: 'string', default: 'iproxy'}
+, 'image-mounter': {type: 'string', default: 'go-ios'}
+, pymobiledevice3: {type: 'string', default: 'pymobiledevice3'}
 , port: {type: 'string', default: '7400'}
 , 'wda-port': {type: 'string', default: '18100'}
 , 'mjpeg-port': {type: 'string', default: '19100'}
@@ -20,17 +23,26 @@ const {values} = parseArgs({options: {
 , doctor: {type: 'boolean'}
 }})
 
+const requestedMounter = values['image-mounter']
+if (requestedMounter !== 'go-ios' && requestedMounter !== 'pymobiledevice3') {
+  throw new Error('--image-mounter must be go-ios or pymobiledevice3')
+}
+const imageMounter: ImageMounter = requestedMounter
+
 if (values.help) {
   process.stdout.write('Usage: npm run ios:prototype -- --udid UDID --wda-bundle-id BUNDLE_ID ' +
     '--token-file /path/to/token\n' +
     'Options: --port 7400 --wda-port 18100 --mjpeg-port 19100 --tunnel-port 28100\n' +
     '         --go-ios ios --iproxy iproxy --xctest-config WebDriverAgentRunner.xctest\n' +
+    '         --image-mounter go-ios|pymobiledevice3 --pymobiledevice3 /path/to/pymobiledevice3\n' +
+    'Use pymobiledevice3 for iOS 27 developer images (requires a kernel go-ios tunnel).\n' +
     'Check the Linux host without starting WDA: --doctor [--udid UDID]\n' +
     'Requires a signed, installed WDA and a running go-ios tunnel. Listens on 127.0.0.1.\n')
 }
 else if (values.doctor) {
   const report = await diagnose({
     goIos: values['go-ios'], iproxy: values.iproxy, tunnelPort: Number(values['tunnel-port'])
+  , imageMounter, pymobiledevice3: values.pymobiledevice3
   , ...(values.udid ? {udid: values.udid} : {})
   })
   process.stdout.write(JSON.stringify(report, null, 2) + '\n')
@@ -65,6 +77,7 @@ async function main(): Promise<void> {
   const runtime = new IosRuntime({
     udid: values.udid, bundleId: values['wda-bundle-id'], xctest: values['xctest-config']
   , goIos: values['go-ios'], iproxy: values.iproxy
+  , imageMounter, pymobiledevice3: values.pymobiledevice3
   , wdaPort: ports[1]!, mjpegPort: ports[2]!, tunnelPort: ports[3]!
   , retryMs: 5000, startupMs: 60000
   })

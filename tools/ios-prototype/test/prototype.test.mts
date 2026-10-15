@@ -17,6 +17,7 @@ const cleanups: Array<() => Promise<unknown>> = []
 const options: RuntimeOptions = {
   udid: '00000000-0000000000000001', bundleId: 'test.wda.xctrunner'
 , xctest: 'WebDriverAgentRunner.xctest', goIos: 'ios', iproxy: 'iproxy'
+, imageMounter: 'go-ios', pymobiledevice3: '/venv/bin/pymobiledevice3'
 , wdaPort: 18100, mjpegPort: 19100, tunnelPort: 28100, retryMs: 30, startupMs: 500
 }
 
@@ -213,7 +214,7 @@ describe('iOS prototype lifecycle', () => {
           return {deviceList: connected ? [options.udid] : []}
         }
         if (args.includes('ls')) {
-          return [{udid: options.udid}]
+          return [{udid: options.udid, address: 'fd00::1', rsdPort: 58783, userspaceTun: false}]
         }
         return {ProductVersion: '18.0'}
       }
@@ -308,21 +309,107 @@ describe('iOS prototype lifecycle', () => {
     assert.ok(d.spawned.every(child => child.binary === 'iproxy' && child.stopped))
   })
 
-  it('cancels developer-image preparation on shutdown', async() => {
+  it('mounts iOS 27 images through only the selected existing kernel tunnel', async() => {
     const f = await fixture()
     const d = dependencies(f)
-    let preparing = false
-    d.deps.run = (_binary, _args, _timeout, signal) => new Promise((_resolve, reject) => {
-      preparing = true
-      signal!.addEventListener('abort', () => reject(new Error('aborted')), {once: true})
-    })
-    const runtime = new IosRuntime({...options}, d.deps)
+    const json = d.deps.json
+    d.deps.json = (binary, args) => args.includes('ls') ? Promise.resolve([
+      {udid: 'another-phone', address: 'fd00::2', rsdPort: 2222}
+    , {udid: options.udid, address: 'fd00::1', rsdPort: 58783, userspaceTun: false}
+    ]) : json(binary, args)
+    const mounts: Array<{binary: string, args: string[]}> = []
+    d.deps.run = async(binary, args) => {
+      mounts.push({binary, args})
+      return ''
+    }
+    const runtime = new IosRuntime({...options, imageMounter: 'pymobiledevice3'}, d.deps)
     cleanups.push(() => runtime.stop())
     runtime.start()
-    await until(() => preparing)
-    await runtime.stop()
-    assert.equal(runtime.state, 'stopped')
+    await until(() => runtime.state === 'ready')
+    assert.deepEqual(mounts, [{binary: options.pymobiledevice3, args: [
+      'mounter', 'auto-mount', '--udid=' + options.udid, '--rsd', 'fd00::1', '58783'
+    ]}])
+    assert.deepEqual(d.spawned.map(child => child.binary), ['iproxy', 'ios'])
+  })
+
+  it('rejects inaccessible or invalid RSD endpoints before mounting or starting WDA', async() => {
+    for (const tunnel of [
+      {address: 'fd00::1', rsdPort: 58783, userspaceTun: true}
+    , {address: 'fd00::1', rsdPort: 0}
+    , {address: 'fd00::1', rsdPort: '58783'}
+    , {address: 'http://unexpected-host', rsdPort: 58783}
+    , {}
+    ]) {
+      const f = await fixture()
+      const d = dependencies(f)
+      const json = d.deps.json
+      d.deps.json = (binary, args) => args.includes('ls') ?
+        Promise.resolve([{udid: options.udid, ...tunnel}]) : json(binary, args)
+      let mounted = false
+      d.deps.run = async() => {
+        mounted = true
+        return ''
+      }
+      const runtime = new IosRuntime({...options, imageMounter: 'pymobiledevice3'}, d.deps)
+      cleanups.push(() => runtime.stop())
+      runtime.start()
+      await until(() => runtime.lastError !== null)
+      await runtime.stop()
+      assert.match(runtime.lastError!, /kernel go-ios tunnel|valid address\/rsdPort/)
+      assert.equal(mounted, false)
+      assert.equal(d.spawned.length, 0)
+    }
+  })
+
+  it('does not fall back to another phone for developer-image mounting', async() => {
+    const f = await fixture()
+    const d = dependencies(f)
+    const json = d.deps.json
+    d.deps.json = (binary, args) => args.includes('ls') ?
+      Promise.resolve([{udid: 'another-phone', address: 'fd00::2', rsdPort: 1234}]) :
+      json(binary, args)
+    const runtime = new IosRuntime({...options, imageMounter: 'pymobiledevice3'}, d.deps)
+    cleanups.push(() => runtime.stop())
+    runtime.start()
+    await until(() => runtime.lastError?.includes('No go-ios tunnel') === true)
     assert.equal(d.spawned.length, 0)
+  })
+
+  it('keeps mounting failures visible without falling back or starting device control', async() => {
+    const f = await fixture()
+    const d = dependencies(f)
+    const attempted: string[] = []
+    d.deps.run = async binary => {
+      attempted.push(binary)
+      throw new Error('Cryptex personalization failed')
+    }
+    const runtime = new IosRuntime({...options, imageMounter: 'pymobiledevice3'}, d.deps)
+    cleanups.push(() => runtime.stop())
+    runtime.start()
+    await until(() => runtime.lastError?.includes('Cryptex personalization failed') === true)
+    await runtime.stop()
+    assert.ok(attempted.length > 0)
+    assert.ok(attempted.every(binary => binary === options.pymobiledevice3))
+    assert.equal(d.spawned.length, 0)
+  })
+
+  it('cancels developer-image preparation on shutdown', async() => {
+    for (const imageMounter of ['go-ios', 'pymobiledevice3'] as const) {
+      const f = await fixture()
+      const d = dependencies(f)
+      let preparing = false
+      d.deps.run = (_binary, _args, _timeout, signal) => new Promise((_resolve, reject) => {
+        preparing = true
+        signal!.addEventListener('abort', () => reject(new Error('aborted')), {once: true})
+      })
+      const runtime = new IosRuntime({...options, imageMounter}, d.deps)
+      cleanups.push(() => runtime.stop())
+      runtime.start()
+      await until(() => preparing)
+      await runtime.stop()
+      assert.equal(runtime.state, 'stopped')
+      assert.equal(d.spawned.length, 0)
+    }
   })
 })
 
@@ -356,12 +443,16 @@ describe('iOS prototype executable boundary', () => {
   it('reports missing tools with a failing doctor exit code', async() => {
     const result = await new Promise<{code: number, output: string}>(resolve => {
       execFile(process.execPath, [path.resolve(import.meta.dirname, '../main.mts')
-        , '--doctor', '--go-ios', '/nonexistent/ios', '--iproxy', '/nonexistent/iproxy'],
+        , '--doctor', '--go-ios', '/nonexistent/ios', '--iproxy', '/nonexistent/iproxy'
+        , '--image-mounter', 'pymobiledevice3'
+        , '--pymobiledevice3', '/nonexistent/pymobiledevice3'],
       (error, stdout) => resolve({code: Number(error?.code || 0), output: stdout}))
     })
     assert.equal(result.code, 1)
     const report = JSON.parse(result.output)
     assert.equal(report.passed, false)
     assert.equal(report.checks.find((c: {name: string}) => c.name === 'go-ios').passed, false)
+    assert.equal(report.checks.find((c: {name: string}) =>
+      c.name === 'pymobiledevice3').passed, false)
   })
 })

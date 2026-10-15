@@ -30,6 +30,8 @@ An ordinary unsigned `.ipa` cannot be used as the runner.
 | Node.js 22.18+ or 24+; no npm dependencies needed for this service | `package.json`, native TypeScript `.mts` entry points |
 | go-ios CLI syntax | [go-ios v1.3.2 main.go](https://github.com/danielpaulus/go-ios/blob/v1.3.2/main.go) |
 | WDA runner arguments and lifetime | [runWDACommand](https://github.com/danielpaulus/go-ios/blob/v1.3.2/cmd_device_testing.go) |
+| iOS 27 Cryptex developer image support | [pymobiledevice3 v11.32.0 image mounter](https://github.com/doronz88/pymobiledevice3/blob/v11.32.0/pymobiledevice3/services/mobile_image_mounter.py) |
+| Explicit RSD endpoint from the existing kernel tunnel | [pymobiledevice3 CLI](https://github.com/doronz88/pymobiledevice3/blob/v11.32.0/pymobiledevice3/cli/cli_common.py), [go-ios tunnel fields](https://github.com/danielpaulus/go-ios/blob/v1.3.2/ios/tunnel/tunnel.go) |
 | Explicit loopback and USB-only forwarding | [iproxy](https://github.com/libimobiledevice/libusbmuxd/blob/master/tools/iproxy.c) |
 | Linux support in the later Appium integration | [Non-macOS hosts](https://appium.github.io/appium-xcuitest-driver/12.11/guides/non-macos-hosts/) |
 
@@ -42,6 +44,99 @@ signed artifact; the prototype deliberately has no guessed bundle ID default.
 On a Debian/Ubuntu Linux host, `usbmuxd`, `libusbmuxd-tools` (for `iproxy`) and
 `libimobiledevice-utils` are useful host packages. USB must reach that host;
 when using Proxmox, pass the phone through to the selected Linux VM first.
+
+### Selected trial: iPhone 16 Plus, iOS 27.0.1
+
+The intended USB host is the existing Android VM, currently documented as
+`k3s-worker-1` (`192.168.0.122`), behind Proxmox USB passthrough. Verify that
+assignment against the live infrastructure before changing passthrough. Run this
+first prototype directly on the VM host, alongside host `usbmuxd`; Kubernetes
+packaging comes after the hardware test. Keep the current Android assignments.
+
+The phone/version above were supplied by the user. A read-only CoreDevice check
+on the preparation Mac on 2026-10-15 reported iOS **27.0 (24A437)** and Developer
+Mode enabled, with a paired local-network connection. Confirm the exact patch
+version again on Linux; this Mac check does not verify the VM's USB path.
+
+iOS 27 uses a Cryptex developer image path implemented by pymobiledevice3
+v11.32.0. The checked go-ios v1.3.2 image mounter uses the earlier personalized
+image path. For this trial, install pymobiledevice3 in a private virtual
+environment and select it explicitly in both doctor and service launch:
+
+```sh
+python3 -m venv ~/.local/share/stf-ios-venv
+~/.local/share/stf-ios-venv/bin/python -m pip install 'pymobiledevice3==11.32.0'
+~/.local/share/stf-ios-venv/bin/pymobiledevice3 version
+```
+
+The prototype reads the selected phone's `address` and `rsdPort` from
+`ios tunnel ls` and passes them to `mounter auto-mount --rsd HOST PORT`.
+It does not start a second Python tunnel. A go-ios userspace tunnel cannot be
+used for this external RSD connection; use the kernel tunnel below. Initial
+image download/personalization needs outbound network access. Cryptex mounting
+and go-ios WDA launch together remain **unverified on the actual iOS 27 phone**.
+
+## Prepare WDA without a paid developer membership
+
+A free Apple Account can use an Xcode **Personal Team** for testing on a personal
+device. Apple limits this to three apps per device, and the provisioning profile
+expires after seven days; rebuild and reinstall WDA after expiry. This is a
+short prototype workflow, not unattended profile renewal. See Apple's
+[Personal Team requirements](https://developer.apple.com/help/account/basics/about-your-developer-account).
+
+Use a Mac with a compatible Xcode for signing and initial installation. The
+Linux host will run the installed runner afterwards. No Mac node or Mac process
+is part of the documented Linux runtime. No certificate/private key needs to
+be copied to the Linux host.
+
+The source selected for this trial is
+[Appium WebDriverAgent v16.15.0](https://github.com/appium/WebDriverAgent/tree/v16.15.0),
+commit `e7e2665a00633dc174d7fc579f7e606bc9ba782a`. On the preparation Mac:
+
+```sh
+git clone --branch v16.15.0 --depth 1 https://github.com/appium/WebDriverAgent.git \
+  tmp/ios-wda/WebDriverAgent
+```
+
+1. In Xcode Settings → Accounts, sign in to your Apple Account yourself. Complete
+   any Apple agreement and two-factor authentication it requests.
+2. Connect the unlocked iPhone to the Mac by USB, accept Trust, and enable
+   Developer Mode. Let Xcode finish preparing the device.
+3. Open `tmp/ios-wda/WebDriverAgent/WebDriverAgent.xcodeproj`. Select the
+   `WebDriverAgentRunner` target, enable Automatically manage signing, and select
+   your Personal Team. Set a unique runner bundle ID, for example
+   `YOUR_UNIQUE_PREFIX.stf.WebDriverAgentRunner`. Resolve any signing errors Xcode
+   reports; configure the library target's team too if requested.
+4. Select the `WebDriverAgentRunner` scheme and the actual iPhone as destination.
+   Use Product → Test to build, install and start the runner. Complete on-device
+   developer trust prompts if requested. Stop this Xcode test before moving the
+   phone to Linux.
+
+For a reproducible artifact after configuring signing, run from the STF root
+(replace the UDID with the real device identifier):
+
+```sh
+xcodebuild build-for-testing \
+  -project tmp/ios-wda/WebDriverAgent/WebDriverAgent.xcodeproj \
+  -scheme WebDriverAgentRunner -configuration Debug \
+  -destination 'id=YOUR_UDID' \
+  -derivedDataPath tmp/ios-wda/DerivedData \
+  -allowProvisioningUpdates -allowProvisioningDeviceRegistration
+```
+
+The device artifact is
+`tmp/ios-wda/DerivedData/Build/Products/Debug-iphoneos/WebDriverAgentRunner-Runner.app`.
+Inspect its `Info.plist` for the **installed** `CFBundleIdentifier` (Xcode normally
+adds `.xctrunner`) and verify `PlugIns/WebDriverAgentRunner.xctest` exists.
+Use this installed identifier for `--wda-bundle-id`, not a guessed value.
+Signing profiles, DerivedData and this local WDA checkout stay outside Git.
+If Xcode already installed the runner, do not copy the artifact just to run it.
+If installation from Linux is needed, preserve the signed `.app` contents when
+transferring it; the install command below accepts that directory.
+
+The project has been built locally with Xcode 27 without signing. Personal Team
+signing, on-device installation and Linux startup still require the real phone
+and the user's Apple Account setup.
 
 ## Prepare the phone and tunnel
 
@@ -83,7 +178,9 @@ Run from the repository root. There is no `npm install` or STF database
 requirement for this entry point:
 
 ```sh
-node tools/ios-prototype/main.mts --doctor --udid YOUR_UDID
+node tools/ios-prototype/main.mts --doctor --udid YOUR_UDID \
+  --image-mounter pymobiledevice3 \
+  --pymobiledevice3 ~/.local/share/stf-ios-venv/bin/pymobiledevice3
 ```
 
 `--doctor` exits with code 1 if a prerequisite check fails. It does not install
@@ -100,6 +197,8 @@ chmod 600 ~/.local/state/stf-ios/token
 node tools/ios-prototype/main.mts \
   --udid YOUR_UDID \
   --wda-bundle-id YOUR_INSTALLED_WDA_RUNNER_BUNDLE_ID \
+  --image-mounter pymobiledevice3 \
+  --pymobiledevice3 ~/.local/share/stf-ios-venv/bin/pymobiledevice3 \
   --token-file ~/.local/state/stf-ios/token
 ```
 
@@ -113,6 +212,8 @@ node tools/ios-prototype/main.mts \
 | `--tunnel-port` | `28100` (existing go-ios tunnel registry) |
 | `--go-ios` | `ios` |
 | `--iproxy` | `iproxy` |
+| `--image-mounter` | `go-ios`; select `pymobiledevice3` for the iOS 27 trial |
+| `--pymobiledevice3` | `pymobiledevice3`; accepts the virtual environment's executable path |
 | `--xctest-config` | `WebDriverAgentRunner.xctest` |
 
 All four host ports must be distinct and available. The WDA artifact must use
@@ -192,6 +293,7 @@ later integration work after the Linux/WDA hardware path is proven.
 | --- | --- |
 | CLI and local launch | `tools/ios-prototype/main.mts` |
 | Read-only diagnostics | `tools/ios-prototype/doctor.mts` |
+| Selected tunnel and external RSD validation | `tools/ios-prototype/tunnel.mts` |
 | Device and process lifecycle | `tools/ios-prototype/runtime.mts`, `tools/ios-prototype/process.mts` |
 | WDA session and gestures | `tools/ios-prototype/wda.mts` |
 | Authenticated API and screen proxy | `tools/ios-prototype/server.mts` |

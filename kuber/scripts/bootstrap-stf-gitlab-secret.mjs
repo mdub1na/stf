@@ -54,11 +54,11 @@ try {
   kubectl(['apply', '-f', '-'], JSON.stringify({
     apiVersion: 'v1',
     kind: 'Secret',
-    metadata: {namespace: 'devicehub', name: 'stf-gitlab-oauth'},
+    metadata: {namespace: 'stf', name: 'stf-gitlab-oauth'},
     type: 'Opaque',
     data
   }));
-  console.log('Created or updated devicehub/stf-gitlab-oauth. No workloads were switched.');
+  console.log('Created or updated stf/stf-gitlab-oauth. No workloads were switched.');
 } catch {
   console.error('GitLab Secret bootstrap failed. Check credentials, cluster and permissions.');
   process.exitCode = 1;

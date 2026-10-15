@@ -9,7 +9,7 @@ whose image has not built successfully and cannot be pulled by nodes.
 
 GitHub Actions builds the root Dockerfile on pushes to `develop` and publishes
 `ghcr.io/mdub1na/stf:<full-commit-sha>`. The base deployment image is centralized in
-the `devicehub` and `rethinkdb` kustomizations and pinned by registry digest.
+the `stf` and `rethinkdb` kustomizations and pinned by registry digest.
 The GitLab overlay separately pins the app/auth images described below.
 GitOps-only changes do not trigger a new application image build.
 
@@ -34,7 +34,7 @@ The farm's canonical address is <https://stf.finservice.tech> since 2026-10-05.
 Its DNS A-record targets `46.191.173.144`. Argo CD, LDAP administration and Appium
 Grid keep their existing domains. Cluster-internal service names are unchanged.
 
-`gitops/devicehub/stf-certificate.yaml` declares Certificate and TLS Secret
+`gitops/stf/stf-certificate.yaml` declares Certificate and TLS Secret
 `stf-finservice-tech-tls` using the existing `letsencrypt-http` Issuer. The farm
 ingress has no ingress-shim issuer annotation because Certificate ownership is
 explicitly managed by GitOps. For another domain change, issue the new
@@ -69,14 +69,13 @@ Do not disable TLS verification to work around a cached DNS answer.
 
 ## Secret bootstrap
 
-The `devicehub` slice retains historical resource names and runs STF, not
-DeviceHub. Its base image is replaced by Kustomize; apply the slice with Argo CD,
+The `stf` slice uses namespace `stf` and resource names prefixed with `stf-`. Its base image is replaced by Kustomize; apply the slice with Argo CD,
 not individual base Deployment files.
 
 Before the first source change, run:
 
 ```sh
-export KUBECONFIG='/Users/mdub1na/Desktop/devicehub home cluster/k3s-lab.yaml'
+export KUBECONFIG='/absolute/path/to/k3s-lab.yaml'
 node kuber/scripts/bootstrap-stf-secrets.mjs
 ```
 
@@ -92,8 +91,8 @@ Required Secrets:
 | Namespace | Secret | Required key |
 | --- | --- | --- |
 | openldap | openldap-credentials | LDAP_ADMIN_PASSWORD |
-| devicehub | devicehub-ldap-bind | LDAP_BIND_CREDENTIALS |
-| devicehub | devicehub-session | SECRET |
+| stf | stf-ldap-bind | LDAP_BIND_CREDENTIALS |
+| stf | stf-session | SECRET |
 
 ## GitLab login
 
@@ -165,20 +164,20 @@ Store credentials outside Git as a JSON object with `clientId` and `clientSecret
 Pass it through stdin, not shell arguments or environment literals:
 
 ```sh
-export KUBECONFIG='/Users/mdub1na/Desktop/devicehub home cluster/k3s-lab.yaml'
+export KUBECONFIG='/absolute/path/to/k3s-lab.yaml'
 node kuber/scripts/bootstrap-stf-gitlab-secret.mjs < "$HOME/.config/stf/gitlab-oauth.json"
 ```
 
 The script checks the target API, creates/updates Secret
-`devicehub/stf-gitlab-oauth`, and prints no credential values. Required keys are
+`stf/stf-gitlab-oauth`, and prints no credential values. Required keys are
 `STF_AUTH_OAUTH2_OAUTH_CLIENT_ID` and `STF_AUTH_OAUTH2_OAUTH_CLIENT_SECRET`.
-The existing `devicehub-session` Secret is retained; no session key is rotated.
+The existing `stf-session` Secret is retained; no session key is rotated.
 
 The root child Application selects `kuber/gitops/stf-gitlab`, which extends the
 LDAP base and changes only app/auth configuration, their images and the auth
 Secret reference. It does not create a second farm or change
 ADB/Appium/Ingress/storage. Before selecting it in the
-existing `devicehub` Argo CD Application:
+existing `stf` Argo CD Application:
 
 1. Build/publish the image containing the OAuth fixes, pin its digest, and verify
    node pull access. The pre-fix image cannot safely use this configuration.
@@ -190,8 +189,8 @@ existing `devicehub` Argo CD Application:
 5. Confirm a real GitLab login and STF administrator access. Administrator
    promotion/mapping must be explicit if the GitLab email differs from LDAP.
 
-For rollback, return that Application's source path to `kuber/gitops/devicehub`
-in `kuber/gitops/root/devicehub-app.yaml`, commit/push the change, then synchronize
+For rollback, return that Application's source path to `kuber/gitops/stf`
+in `kuber/gitops/root/stf-app.yaml`, commit/push the change, then synchronize
 the root and existing child. A live-only Application edit would be reverted by
 root self-heal. LDAP data, its bind Secret and the LDAP base are retained
 until GitLab login and administrative access are confirmed. Existing STF browser
@@ -214,7 +213,7 @@ Verified GitLab deployment on 2026-10-05:
   unpredictable state and S256 PKCE. State cookies are Secure/HttpOnly/SameSite=Lax.
   An unsolicited callback returned 400; `/auth/contact` returned 200; the
   unauthenticated STF API returned 401.
-- Only app/auth pods changed; the other 15 `devicehub` pods kept their identities.
+- Only app/auth pods changed; the other 15 `stf` pods kept their identities.
   Appium Grid remained ready with 16 UP nodes and zero sessions.
 - Router DNS `192.168.10.1` still cached the former STF IP during verification;
   its remaining TTL was 462 seconds at 13:42 local time. Public DNS returned
@@ -260,18 +259,18 @@ Verified login/logout correction on 2026-10-05:
 2. Temporarily suspend reconciliation on the existing root and affected child
    Applications, including `argocd-config`, so old sources cannot revert the
    source/project changes. Do not create a second root managing the same objects.
-3. Bootstrap the updated AppProject and source of the existing `devicehub-root`.
+3. Bootstrap the updated AppProject and source of the existing `stf-root`.
    Switch the existing child Applications to this repository. Do not reinstall
    the Argo CD installation in either `argocd` or `default`.
 4. Synchronize `rethinkdb` and wait for the StatefulSet and successful migration
    hook. The application is initially manual-sync. A successful hook is removed;
    verify Argo CD's operation result, not a permanently present Job.
 5. Synchronize OpenLDAP with the existing PVC and new Secret reference, then STF
-   core/providers/ingress. The `devicehub` Application remains manual-sync.
+   core/providers/ingress. The `stf` Application remains manual-sync.
 6. Validate before restoring the intended automatic synchronization policies.
 
 RethinkDB has no public ingress or NodePort. A NetworkPolicy permits driver-port
-access only from the `devicehub` and `rethinkdb` namespaces. It uses a new PVC;
+access only from the `stf` and `rethinkdb` namespaces. It uses a new PVC;
 neither the MongoDB PVC nor old application data is reused.
 
 ## Validation and cleanup
@@ -287,7 +286,7 @@ Application's cascading cleanup explicitly after STF validation, including its
 PVC and namespace. Do not delete LDAP or STF storage PVCs. Remove the old iOS
 bridge Services/Endpoints/NodePorts through the application synchronization.
 
-The copied Java tests still depend on DeviceHub's `/api/v1/autotests` API. They
+The copied Java tests still depend on the legacy `/api/v1/autotests` API. They
 are historical code pending a separate STF client adaptation, not validation
 of this rollout. iOS support and Mac mini changes are explicitly out of scope.
 

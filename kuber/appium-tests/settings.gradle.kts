@@ -12,4 +12,4 @@ dependencyResolutionManagement {
     }
 }
 
-rootProject.name = "devicehub-appium-tests"
+rootProject.name = "stf-appium-tests"

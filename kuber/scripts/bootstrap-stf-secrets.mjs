@@ -49,8 +49,8 @@ try {
     throw new Error('Refusing to bootstrap secrets into a different cluster.');
   }
 
-  const env = readResource('devicehub', 'configmap', 'devicehub-env')?.data;
-  const existingBind = readResource('devicehub', 'secret', 'devicehub-ldap-bind');
+  const env = readResource('stf', 'configmap', 'stf-env')?.data;
+  const existingBind = readResource('stf', 'secret', 'stf-ldap-bind');
   const bindPassword = existingBind?.data?.LDAP_BIND_CREDENTIALS
     ? Buffer.from(existingBind.data.LDAP_BIND_CREDENTIALS, 'base64').toString()
     : env?.LDAP_BIND_CREDENTIALS;
@@ -69,8 +69,8 @@ try {
   ], bindPassword);
 
   ensureSecret('openldap', 'openldap-credentials', 'LDAP_ADMIN_PASSWORD', bindPassword);
-  ensureSecret('devicehub', 'devicehub-ldap-bind', 'LDAP_BIND_CREDENTIALS', bindPassword);
-  ensureSecret('devicehub', 'devicehub-session', 'SECRET', randomBytes(48).toString('hex'));
+  ensureSecret('stf', 'stf-ldap-bind', 'LDAP_BIND_CREDENTIALS', bindPassword);
+  ensureSecret('stf', 'stf-session', 'SECRET', randomBytes(48).toString('hex'));
 } catch {
   console.error('Secret bootstrap failed. Check the target cluster, LDAP bind and access permissions.');
   process.exitCode = 1;

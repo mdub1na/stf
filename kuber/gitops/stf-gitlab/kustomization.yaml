@@ -1,9 +1,9 @@
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 
-# LDAP remains available in ../devicehub for an explicit GitOps rollback.
+# LDAP remains available in ../stf for an explicit GitOps rollback.
 resources:
-  - ../devicehub
+  - ../stf
 
 patches:
   - path: gitlab-config-patch.yaml
@@ -13,7 +13,7 @@ patches:
       group: apps
       version: v1
       kind: Deployment
-      name: devicehub-auth
+      name: stf-auth
     patch: |-
       - op: replace
         path: /spec/template/spec/containers/0/command
@@ -22,17 +22,17 @@ patches:
         path: /spec/template/spec/containers/0/envFrom
         value:
           - configMapRef:
-              name: devicehub-env
+              name: stf-env
           - secretRef:
-              name: devicehub-session
+              name: stf-session
           - secretRef:
               name: stf-gitlab-oauth
   - target:
       group: apps
       version: v1
       kind: Deployment
-      name: devicehub-(app|auth)
+      name: stf-(app|auth)
     patch: |-
       - op: replace
-        path: /spec/template/metadata/annotations/devicehub~1config-revision
+        path: /spec/template/metadata/annotations/stf~1config-revision
         value: stf-gitlab-oauth-v1

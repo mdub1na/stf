@@ -13,7 +13,7 @@ are outside this rollout.
   ADB pool. The farm domain is `stf.finservice.tech` since the separate
   user-requested address change on 2026-10-05.
 - Keep existing application, namespace and service names during this migration.
-  The `devicehub` deployment slice will run STF despite its historical name.
+  The `stf` deployment slice contains the base STF resources.
 - Publish workload changes through Git and synchronize them through Argo CD.
   Initial Argo CD source changes and Secrets are bootstrap exceptions.
 - Server maintenance covers only the three Kubernetes VMs. Proxmox and the
@@ -34,7 +34,7 @@ SSH access is deferred. LDAP and STF temp storage were preserved.
 
 - [x] Kubernetes API and GitHub access verified; GitHub Actions enabled.
 - [x] All three nodes Ready: Ubuntu 26.04 LTS, k3s v1.35.5+k3s1.
-- [x] Initial Argo CD sources inspected: DeviceHub repository, `kuber` branch.
+- [x] Initial Argo CD sources inspected: STF repository, `kuber` branch.
 - [ ] SSH and sudo on 192.168.0.121-123: deferred; the user will provide access
   later. The initial control-server `mdub1na` login was refused.
 - [x] Maintenance scope confirmed: Kubernetes VMs only; no Proxmox host update.
@@ -70,7 +70,7 @@ SSH access is deferred. LDAP and STF temp storage were preserved.
 - [ ] Device screen/touch, capture/release, APK install and test execution:
   pending because neither ADB server has connected devices.
 - [ ] Explicit authenticated REST API token check: a new STF token is needed;
-  old DeviceHub tokens and Java allocation APIs are not reused.
+  old STF tokens and Java allocation APIs are not reused.
 - [x] Old MongoDB Application, namespace, workloads, PVC and PV removed; iOS
   bridges removed. Root/infrastructure auto-sync restored; final state recorded.
 

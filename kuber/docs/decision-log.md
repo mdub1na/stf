@@ -8,7 +8,7 @@ This file keeps background reasoning, rejected alternatives, and explanatory con
 
 ### Kubernetes scope
 
-- Everything related to DeviceHub except iOS execution stays in Kubernetes.
+- Everything related to STF except iOS execution stays in Kubernetes.
 - iOS execution stays on the Mac mini because it depends on Apple tooling.
 
 ### Android execution model
@@ -35,7 +35,7 @@ This file keeps background reasoning, rejected alternatives, and explanatory con
 - `mitmproxy` and `mitmweb` are valid parts of the platform.
 - Traffic interception is supported where proxying and certificate trust allow it.
 - Certificate pinning remains a known limitation.
-- `mitmproxy` was moved into its own namespace to separate interception concerns from the main DeviceHub runtime.
+- `mitmproxy` was moved into its own namespace to separate interception concerns from the main STF runtime.
 
 ### Appium Grid
 
@@ -58,13 +58,13 @@ This file keeps background reasoning, rejected alternatives, and explanatory con
 - Persistent storage is used for:
   - `mongodb`
   - `openldap`
-  - `devicehub-storage-temp`
-- `devicehub-storage-plugin-apk` and `devicehub-storage-plugin-image` use `devicehub-storage-temp` as backend storage.
+  - `stf-storage-temp`
+- `stf-storage-plugin-apk` and `stf-storage-plugin-image` use `stf-storage-temp` as backend storage.
 
 ### Scaling model
 
-- `devicehub-processor`, `devicehub-storage-plugin-apk`, and `devicehub-storage-plugin-image` are scalable.
-- `adbd` and `devicehub-provider` scale only as a pair.
+- `stf-processor`, `stf-storage-plugin-apk`, and `stf-storage-plugin-image` are scalable.
+- `adbd` and `stf-provider` scale only as a pair.
 - Most other control services stay singleton in phase 1.
 
 ### Argo CD
@@ -75,8 +75,8 @@ This file keeps background reasoning, rejected alternatives, and explanatory con
 
 ### Shared AppProject
 
-- name: `devicehub-platform`
-- repo: `git@github.com:mdub1na/devicehub.git`
+- name: `stf-platform`
+- repo: `git@github.com:mdub1na/stf.git`
 - cluster: `https://kubernetes.default.svc`
 - allowed cluster-scoped resources at start: `Namespace`
 
@@ -85,8 +85,8 @@ This file keeps background reasoning, rejected alternatives, and explanatory con
 - Keep `decision-log.md` as an append-only history of decisions. Do not rewrite earlier entries to match the current implementation state; add new entries when decisions evolve.
 - Current GitOps documentation should describe the live manifest layout, not the original proposed layout.
 - Public HTTPS is now part of the implemented platform through `Traefik`, `cert-manager`, and Let's Encrypt.
-- The current Argo CD applications use `https://github.com/mdub1na/devicehub.git` with `targetRevision: kuber`.
-- Android execution now has two explicit ADB/provider pairs: `adbd` + `devicehub-provider` and `adbd-2` + `devicehub-provider-2`.
+- The current Argo CD applications use `https://github.com/mdub1na/stf.git` with `targetRevision: kuber`.
+- Android execution now has two explicit ADB/provider pairs: `adbd` + `stf-provider` and `adbd-2` + `stf-provider-2`.
 - `mitmproxy` and `observability` remain reserved GitOps slices for later work. Their namespace-only applications are intentional placeholders, not incomplete cleanup targets.
 - Remove `kuber/ios-backup`; it was an obsolete backup/working directory and included a large checked-in Selenium jar.
 - Do not move plaintext credentials to Kubernetes Secrets during this audit. Secret management remains a later hardening task.
@@ -112,12 +112,12 @@ This file keeps background reasoning, rejected alternatives, and explanatory con
 - Remove iOS bridges and launcher scripts from active deployment scope.
 - Restore root/infrastructure auto-sync; keep STF and RethinkDB manual-sync.
 - Preserve the 8 + 8 Appium nodes. Copied Java tests are historical until adapted
-  away from DeviceHub-specific allocation APIs. Devices were disconnected at
+  away from legacy allocation APIs. Devices were disconnected at
   rollout, so screen/touch/capture/APK/test checks remain pending.
 
 ### STF public domain on 2026-10-05
 
-- Change only the farm address from `devicehub.putmyhexon.ru` to
+- Change only the farm address from `stf.putmyhexon.ru` to
   `stf.finservice.tech`; keep LDAP, Argo CD and Appium Grid domains unchanged.
 - Pre-issue an explicit GitOps Certificate, then change ingress and all
   app/auth/WebSocket/storage/provider public URLs through Argo CD.
@@ -173,3 +173,16 @@ This file keeps background reasoning, rejected alternatives, and explanatory con
 
 - `Sealed Secrets` is a GitOps-friendly way to keep encrypted secret manifests in git.
 - It is intentionally deferred until secret management becomes a real implementation need.
+
+
+## Resource naming migration — 2026-10-15
+
+- Use `stf` for the application namespace, Argo CD applications (`stf-root`,
+  `stf`) and project (`stf-platform`), workload/service prefixes, secrets,
+  configuration annotations and node role labels (`stf.role`).
+- Keep the GitLab overlay, pinned images, public domain, OAuth credentials,
+  session signing key and RethinkDB data unchanged. Update the RethinkDB
+  NetworkPolicy and both Appium ADB DNS references with the namespace.
+- Copy the persistent temporary-storage directory to a new `stf` PVC before
+  removing the previous namespace. Verify the destination before cleanup.
+- Follow [the resource migration runbook](./stf-resource-migration.md).

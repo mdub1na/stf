@@ -18,9 +18,9 @@ data:
     status-endpoint = "/status"
     configs = [
       "1",
-      "{ \"platformName\": \"Android\", \"appium:automationName\": \"UiAutomator2\", \"appium:remoteAdbHost\": \"adbd.devicehub.svc.cluster.local\", \"appium:adbPort\": 5037 }",
+      "{ \"platformName\": \"Android\", \"appium:automationName\": \"UiAutomator2\", \"appium:remoteAdbHost\": \"adbd.stf.svc.cluster.local\", \"appium:adbPort\": 5037 }",
       "1",
-      "{ \"platformName\": \"Android\", \"browserName\": \"Chrome\", \"appium:automationName\": \"UiAutomator2\", \"appium:remoteAdbHost\": \"adbd.devicehub.svc.cluster.local\", \"appium:adbPort\": 5037 }"
+      "{ \"platformName\": \"Android\", \"browserName\": \"Chrome\", \"appium:automationName\": \"UiAutomator2\", \"appium:remoteAdbHost\": \"adbd.stf.svc.cluster.local\", \"appium:adbPort\": 5037 }"
     ]
 ---
 apiVersion: v1
@@ -43,7 +43,7 @@ data:
     status-endpoint = "/status"
     configs = [
       "1",
-      "{ \"platformName\": \"Android\", \"appium:automationName\": \"UiAutomator2\", \"appium:remoteAdbHost\": \"adbd-2.devicehub.svc.cluster.local\", \"appium:adbPort\": 5037 }",
+      "{ \"platformName\": \"Android\", \"appium:automationName\": \"UiAutomator2\", \"appium:remoteAdbHost\": \"adbd-2.stf.svc.cluster.local\", \"appium:adbPort\": 5037 }",
       "1",
-      "{ \"platformName\": \"Android\", \"browserName\": \"Chrome\", \"appium:automationName\": \"UiAutomator2\", \"appium:remoteAdbHost\": \"adbd-2.devicehub.svc.cluster.local\", \"appium:adbPort\": 5037 }"
+      "{ \"platformName\": \"Android\", \"browserName\": \"Chrome\", \"appium:automationName\": \"UiAutomator2\", \"appium:remoteAdbHost\": \"adbd-2.stf.svc.cluster.local\", \"appium:adbPort\": 5037 }"
     ]

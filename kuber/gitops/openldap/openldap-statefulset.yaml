@@ -20,7 +20,7 @@ spec:
           requiredDuringSchedulingIgnoredDuringExecution:
             nodeSelectorTerms:
               - matchExpressions:
-                  - key: devicehub.role
+                  - key: stf.role
                     operator: In
                     values:
                       - storage

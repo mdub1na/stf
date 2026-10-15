@@ -1,9 +1,8 @@
 # STF Kubernetes Deployment
 
-This directory contains the GitOps migration from DeviceHub to Android STF on
+This directory contains the Android STF GitOps deployment on
 the existing Proxmox/k3s infrastructure. iOS is excluded from this rollout.
-Historical `devicehub` service names are retained to preserve ADB and Appium
-connectivity. The farm's public address is <https://stf.finservice.tech>;
+Application workloads, services and node role labels use the `stf` name. The farm's public address is <https://stf.finservice.tech>;
 Argo CD, LDAP administration and Appium Grid retain their existing domains.
 
 STF was deployed on 2026-10-04; its public domain was changed on 2026-10-05. All ten
@@ -23,7 +22,7 @@ for verified results and pending work.
 - [Cluster access and service inventory](./docs/cluster-access.md)
 - [STF rollout and server maintenance plan](./docs/stf-rollout-plan.md)
 - [STF deployment runbook](./docs/stf-deployment.md)
-- [Historical DeviceHub roadmap](./docs/roadmap.md)
+- [Historical STF roadmap](./docs/roadmap.md)
 - [GitOps layout](./docs/gitops-layout.md)
 - [Decision log](./docs/decision-log.md)
 
@@ -57,7 +56,7 @@ For migration, follow the rollout plan and deployment runbook instead.
 - Android devices will be connected to the Proxmox host and passed through into one dedicated Android worker VM.
 - iOS execution is a separate future project; no Mac mini changes are included.
 - Main Kubernetes namespaces:
-  - `devicehub`
+  - `stf`
   - `rethinkdb`
   - `appium`
   - `openldap`
@@ -77,7 +76,7 @@ For migration, follow the rollout plan and deployment runbook instead.
   confirmed and its database role is `admin`; retain the LDAP base until confirmed
 - keep GitOps documentation aligned with the live manifests
 - verify screen/touch, capture/release and APK installation with connected Android devices
-- adapt the copied Java tests from DeviceHub-specific APIs to standard STF APIs
+- adapt the copied Java tests from legacy allocation APIs to standard STF APIs
 - update the three Kubernetes servers after SSH access is provided
 - implement the reserved `mitmproxy` and `observability` slices when we are ready for those layers
 - back up the bootstrapped Secrets outside Git and evaluate encrypted GitOps secret management

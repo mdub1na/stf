@@ -19,7 +19,7 @@ spec:
           requiredDuringSchedulingIgnoredDuringExecution:
             nodeSelectorTerms:
               - matchExpressions:
-                  - key: devicehub.role
+                  - key: stf.role
                     operator: In
                     values:
                       - android
@@ -40,11 +40,11 @@ spec:
             - chromedriver_autodownload
           env:
             - name: ANDROID_ADB_SERVER_HOST
-              value: adbd.devicehub.svc.cluster.local
+              value: adbd.stf.svc.cluster.local
             - name: ANDROID_ADB_SERVER_PORT
               value: "5037"
             - name: ADB_SERVER_SOCKET
-              value: tcp:adbd.devicehub.svc.cluster.local:5037
+              value: tcp:adbd.stf.svc.cluster.local:5037
           ports:
             - name: appium
               containerPort: 4733
@@ -53,7 +53,7 @@ spec:
           imagePullPolicy: IfNotPresent
           args:
             - tcp-listen:5037,fork,reuseaddr
-            - tcp:adbd.devicehub.svc.cluster.local:5037
+            - tcp:adbd.stf.svc.cluster.local:5037
           ports:
             - name: adb
               containerPort: 5037
@@ -104,7 +104,7 @@ spec:
           requiredDuringSchedulingIgnoredDuringExecution:
             nodeSelectorTerms:
               - matchExpressions:
-                  - key: devicehub.role
+                  - key: stf.role
                     operator: In
                     values:
                       - android
@@ -125,11 +125,11 @@ spec:
             - chromedriver_autodownload
           env:
             - name: ANDROID_ADB_SERVER_HOST
-              value: adbd-2.devicehub.svc.cluster.local
+              value: adbd-2.stf.svc.cluster.local
             - name: ANDROID_ADB_SERVER_PORT
               value: "5037"
             - name: ADB_SERVER_SOCKET
-              value: tcp:adbd-2.devicehub.svc.cluster.local:5037
+              value: tcp:adbd-2.stf.svc.cluster.local:5037
           ports:
             - name: appium
               containerPort: 4733
@@ -138,7 +138,7 @@ spec:
           imagePullPolicy: IfNotPresent
           args:
             - tcp-listen:5037,fork,reuseaddr
-            - tcp:adbd-2.devicehub.svc.cluster.local:5037
+            - tcp:adbd-2.stf.svc.cluster.local:5037
           ports:
             - name: adb
               containerPort: 5037

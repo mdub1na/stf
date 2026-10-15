@@ -90,7 +90,7 @@ in the Android STF rollout.
   Kubernetes VMs once SSH/sudo access is provided. Do not update Proxmox or Mac mini.
 - Back up k3s, LDAP, RethinkDB and Secrets before maintenance; update/reboot one
   Kubernetes server at a time without deleting persistent data to enable drain.
-- Copied Java tests require STF API adaptation; DeviceHub `/api/v1/autotests`
+- Copied Java tests require STF API adaptation; legacy `/api/v1/autotests`
   endpoints are not part of this deployment.
 
 ## Agreed platform stack

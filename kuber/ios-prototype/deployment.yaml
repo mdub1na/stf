@@ -40,23 +40,11 @@ spec:
         - name: state
           image: ghcr.io/mdub1na/stf:SET_IMAGE_TAG
           imagePullPolicy: IfNotPresent
-          command: [sh, -ec, 'mkdir -p /state/lockdown /state/remotepairing /state/home; chmod 700 /state/lockdown /state/remotepairing; chown 1000:1000 /state/home']
+          command: [sh, -ec, 'mkdir -p /state/remotepairing /state/home; chmod 700 /state/remotepairing; chown 1000:1000 /state/home']
           securityContext: {runAsUser: 0}
           volumeMounts:
             - {name: state, mountPath: /state}
       containers:
-        - name: usbmuxd
-          image: ghcr.io/mdub1na/stf:SET_IMAGE_TAG
-          imagePullPolicy: IfNotPresent
-          command: [/usr/sbin/usbmuxd, --foreground, --user, root]
-          securityContext: {privileged: true, runAsUser: 0}
-          resources:
-            requests: {cpu: 25m, memory: 32Mi}
-            limits: {cpu: 250m, memory: 128Mi}
-          volumeMounts:
-            - {name: usb, mountPath: /dev/bus/usb}
-            - {name: run, mountPath: /run}
-            - {name: state, mountPath: /var/lib/lockdown, subPath: lockdown}
         - name: tunnel
           image: ghcr.io/mdub1na/stf:SET_IMAGE_TAG
           imagePullPolicy: IfNotPresent
@@ -70,7 +58,7 @@ spec:
             requests: {cpu: 50m, memory: 64Mi}
             limits: {cpu: '1', memory: 512Mi}
           volumeMounts:
-            - {name: run, mountPath: /run}
+            - {name: usbmuxd, mountPath: /run/usbmuxd, readOnly: true}
             - {name: tun, mountPath: /dev/net/tun}
             - {name: state, mountPath: /state}
         - name: prototype
@@ -102,16 +90,14 @@ spec:
             initialDelaySeconds: 5
             periodSeconds: 10
           volumeMounts:
-            - {name: run, mountPath: /run}
+            - {name: usbmuxd, mountPath: /run/usbmuxd, readOnly: true}
             - {name: state, mountPath: /home/node, subPath: home}
             - {name: token, mountPath: /token, readOnly: true}
       volumes:
-        - name: usb
-          hostPath: {path: /dev/bus/usb, type: Directory}
+        - name: usbmuxd
+          hostPath: {path: /run/usbmuxd, type: Socket}
         - name: tun
           hostPath: {path: /dev/net/tun, type: CharDevice}
-        - name: run
-          emptyDir: {}
         - name: state
           persistentVolumeClaim: {claimName: ios-state}
         - name: token

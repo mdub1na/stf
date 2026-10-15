@@ -51,7 +51,7 @@ The intended USB host is the existing Android VM, currently documented as
 `k3s-worker-1` (`192.168.0.122`), behind Proxmox USB passthrough. Verify that
 assignment against the live infrastructure before changing passthrough. The
 selected launch path is now [the Kubernetes prototype](../kuber/ios-prototype/README.md),
-with its own usbmuxd and tunnel in an isolated Pod. Keep the current Android
+with the host usbmuxd socket and its own tunnel in an isolated Pod. Keep the current Android
 assignments. The host commands below remain useful for direct host diagnostics.
 
 The phone/version above were supplied by the user. A read-only CoreDevice check
@@ -283,14 +283,17 @@ selection, retry/cleanup and literal subprocess arguments:
 npm run test:ios-prototype
 ```
 
-Pending **on real Linux hardware**, record the model, iOS version, go-ios
-version, WDA build/bundle ID, host architecture and results before claiming
-support:
+The [2026-10-15 Kubernetes hardware record](../kuber/ios-prototype/validation-2026-10-15.md)
+records a successful portrait trial on iPhone 16 Plus/iOS 27.0.1. Preserve the
+exact software/artifact versions and distinguish these checks from the
+remaining recovery/cold-start scenarios:
 
-- [ ] Doctor sees the intended phone and tunnel.
-- [ ] WDA starts from the signed artifact with no Mac involved in runtime.
-- [ ] Screenshot and MJPEG show the selected phone.
-- [ ] Tap, swipe, text, Home and Settings activation work in both orientations.
+- [x] Doctor sees the intended phone and tunnel; all seven checks pass on Linux.
+- [x] WDA starts from the signed artifact with no Mac involved in runtime.
+- [x] Screenshot and MJPEG show the selected phone.
+- [x] Tap, swipe, text, Home and Settings activation work in portrait.
+- [x] Pod recreation restores readiness and screenshots with pairing retained.
+- [ ] Repeat control checks in landscape.
 - [ ] USB unplug makes control unavailable; reconnect restores readiness.
 - [ ] WDA failure recovers without orphaned processes or replayed input.
 - [ ] Phone reboot recovers after any required physical unlock.

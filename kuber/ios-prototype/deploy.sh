@@ -22,4 +22,4 @@ k -n "$namespace" create configmap ios-device \
 k -n "$namespace" create secret generic ios-api-token --from-file="token=$token_file" \
   --dry-run=client -o yaml | k apply -f -
 sed "s|ghcr.io/mdub1na/stf:SET_IMAGE_TAG|$image|g" "$manifest" | k apply -f -
-printf 'Prototype deployed; inspect the three container logs and /device readiness.\n'
+printf 'Prototype deployed; inspect tunnel/prototype logs and /device readiness.\n'

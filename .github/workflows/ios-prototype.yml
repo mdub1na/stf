@@ -1,0 +1,27 @@
+name: iOS prototype
+
+on:
+  pull_request:
+  push:
+    branches: [develop]
+
+permissions:
+  contents: read
+
+jobs:
+  prototype:
+    name: Linux prototype / Node ${{ matrix.node }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    strategy:
+      matrix:
+        node: ['22.18.0', '24']
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: ${{ matrix.node }}
+      - name: Verify the dependency-free entry point
+        run: node tools/ios-prototype/main.mts --help
+      - name: Test HTTP, WDA and process lifecycle without a device
+        run: npm run test:ios-prototype

@@ -28,6 +28,7 @@ for verified results and pending work.
 - [Historical STF roadmap](./docs/roadmap.md)
 - [GitOps layout](./docs/gitops-layout.md)
 - [Decision log](./docs/decision-log.md)
+- [Linux iOS prototype](../doc/ios-prototype.md) (standalone; hardware validation pending)
 
 ## Reading order for implementation
 

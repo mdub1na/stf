@@ -209,9 +209,14 @@ describe('Linux iOS integration', function() {
     async function() {
       const f = await fixture()
       let allowed = true
+      let viewer = owner.email
       const api = http.createServer((req, res) => {
-        assert.equal(req.url, '/api/v1/user/devices/' + serial)
         assert.equal(req.headers.cookie, 'session=signed')
+        if (req.url === '/api/v1/user') {
+          res.end(JSON.stringify({success: true, user: {email: viewer}}))
+          return
+        }
+        assert.equal(req.url, '/api/v1/user/devices/' + serial)
         res.writeHead(allowed ? 200 : 403)
         res.end(JSON.stringify({success: allowed, device: {serial, owner}}))
       })
@@ -222,6 +227,9 @@ describe('Linux iOS integration', function() {
       assert.equal(await authorizeScreen(apiUrl, origin, serial, owner,
         {...headers, origin: 'https://foreign.test'}), false)
       assert.equal(await authorizeScreen(apiUrl, origin, serial, null, headers), false)
+      viewer = 'admin@example.test'
+      assert.equal(await authorizeScreen(apiUrl, origin, serial, owner, headers), false)
+      viewer = owner.email
       let currentOwner: IosOwner | null = owner
       const screen = createScreenServer({
         client: f.client, apiUrl, publicOrigin: origin, serial

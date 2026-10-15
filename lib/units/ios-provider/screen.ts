@@ -29,6 +29,10 @@ export function createScreenServer(options: {
         }
         sockets.handleUpgrade(req, socket, head, ws => {
           let stream: AbortController | null = null
+          let alive = true
+          ws.on('pong', () => {
+            alive = true
+          })
           const stop = () => {
             stream?.abort()
             stream = null
@@ -76,6 +80,12 @@ export function createScreenServer(options: {
             }
           }
           const timer = setInterval(() => {
+            if (!alive) {
+              ws.terminate()
+              return
+            }
+            alive = false
+            ws.ping()
             authorizeScreen(
               options.apiUrl, options.publicOrigin, options.serial, owner, req.headers
             ).then(allowedNow => {

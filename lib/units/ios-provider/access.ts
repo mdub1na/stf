@@ -28,15 +28,33 @@ export async function authorizeScreen(
     return false
   }
   try {
-    const url = new URL('/api/v1/user/devices/' + encodeURIComponent(serial), apiUrl)
-    const response = await fetch(url, {
+    const identity = await fetch(new URL('/api/v1/user', apiUrl), {
       headers: credentials, signal: AbortSignal.timeout(5000), redirect: 'error'
     })
-    if (!response.ok) {
-      await response.body?.cancel()
+    if (!identity.ok) {
+      await identity.body?.cancel()
       return false
     }
-    const body = await response.json() as {
+    const viewer = await identity.json() as {success?: boolean, user?: {email?: string}}
+    if (viewer.success !== true || viewer.user?.email !== owner.email) {
+      return false
+    }
+    const url = new URL('/api/v1/user/devices/' + encodeURIComponent(serial), apiUrl)
+    const signal = AbortSignal.timeout(5000)
+    let response: Response | null = null
+    for (let attempt = 0; attempt < 4; attempt++) {
+      response = await fetch(url, {headers: credentials, signal, redirect: 'error'})
+      if (response.ok) {
+        break
+      }
+      await response.body?.cancel()
+      if (response.status !== 403 || attempt === 3) {
+        return false
+      }
+      // The wire join reply can arrive just before the processor persists its owner.
+      await new Promise(resolve => setTimeout(resolve, 50))
+    }
+    const body = await response!.json() as {
       success?: boolean, device?: {serial?: string, owner?: {email?: string}}
     }
     return body.success === true && body.device?.serial === serial &&

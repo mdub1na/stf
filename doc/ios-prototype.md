@@ -134,9 +134,22 @@ If Xcode already installed the runner, do not copy the artifact just to run it.
 If installation from Linux is needed, preserve the signed `.app` contents when
 transferring it; the install command below accepts that directory.
 
-The project has been built locally with Xcode 27 without signing. Personal Team
-signing, on-device installation and Linux startup still require the real phone
-and the user's Apple Account setup.
+Preparation record on **2026-10-15** (Mac only): WDA v16.15.0 was built for the
+selected iPhone using Xcode 27 and a free Personal Team. Deep/strict code-signing
+verification passed, and the provisioning profile includes the selected device.
+Installation with `devicectl` succeeded with installed bundle ID
+`dev.mdub1na.stf.WebDriverAgentRunner.xctrunner`. The profile expires on
+2026-10-22 at 21:07 (Asia/Yekaterinburg); this is the recorded build's expiry,
+not a renewal guarantee. A local archive also passed signature verification
+after unpacking. The signed artifact and account-specific project changes are
+kept under ignored `tmp/ios-wda/`, outside the pull request.
+
+The first launch was rejected by iOS because the Developer App certificate had
+not yet been trusted. On the phone, use Settings → General → VPN & Device
+Management → Developer App → Trust; complete any restart/unlock it requests.
+This device confirmation is required before retrying WDA. A successful Linux
+launch and device control are still pending; signing and installation alone do
+not prove the Linux path.
 
 ## Prepare the phone and tunnel
 

@@ -1,0 +1,129 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: stf-ios-prototype
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: ios-state
+  namespace: stf-ios-prototype
+spec:
+  accessModes: [ReadWriteOnce]
+  storageClassName: local-path
+  resources:
+    requests:
+      storage: 5Gi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ios-prototype
+  namespace: stf-ios-prototype
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: stf-ios-prototype
+  template:
+    metadata:
+      labels:
+        app: stf-ios-prototype
+    spec:
+      nodeSelector:
+        kubernetes.io/hostname: k3s-worker-1
+      automountServiceAccountToken: false
+      terminationGracePeriodSeconds: 30
+      initContainers:
+        - name: state
+          image: ghcr.io/mdub1na/stf:SET_IMAGE_TAG
+          imagePullPolicy: IfNotPresent
+          command: [sh, -ec, 'mkdir -p /state/lockdown /state/remotepairing /state/home; chmod 700 /state/lockdown /state/remotepairing; chown 1000:1000 /state/home']
+          securityContext: {runAsUser: 0}
+          volumeMounts:
+            - {name: state, mountPath: /state}
+      containers:
+        - name: usbmuxd
+          image: ghcr.io/mdub1na/stf:SET_IMAGE_TAG
+          imagePullPolicy: IfNotPresent
+          command: [/usr/sbin/usbmuxd, --foreground, --user, root]
+          securityContext: {privileged: true, runAsUser: 0}
+          resources:
+            requests: {cpu: 25m, memory: 32Mi}
+            limits: {cpu: 250m, memory: 128Mi}
+          volumeMounts:
+            - {name: usb, mountPath: /dev/bus/usb}
+            - {name: run, mountPath: /run}
+            - {name: state, mountPath: /var/lib/lockdown, subPath: lockdown}
+        - name: tunnel
+          image: ghcr.io/mdub1na/stf:SET_IMAGE_TAG
+          imagePullPolicy: IfNotPresent
+          command: [ios]
+          args: ['--udid=$(IOS_UDID)', --tunnel-info-port=28100, tunnel, start, --pair-record-path=/state/remotepairing]
+          env:
+            - name: IOS_UDID
+              valueFrom: {configMapKeyRef: {name: ios-device, key: udid}}
+          securityContext: {privileged: true, runAsUser: 0}
+          resources:
+            requests: {cpu: 50m, memory: 64Mi}
+            limits: {cpu: '1', memory: 512Mi}
+          volumeMounts:
+            - {name: run, mountPath: /run}
+            - {name: tun, mountPath: /dev/net/tun}
+            - {name: state, mountPath: /state}
+        - name: prototype
+          image: ghcr.io/mdub1na/stf:SET_IMAGE_TAG
+          imagePullPolicy: IfNotPresent
+          args:
+            - node
+            - tools/ios-prototype/main.mts
+            - '--udid=$(IOS_UDID)'
+            - '--wda-bundle-id=$(WDA_BUNDLE_ID)'
+            - --image-mounter=pymobiledevice3
+            - --token-file=/token/token
+          env:
+            - name: IOS_UDID
+              valueFrom: {configMapKeyRef: {name: ios-device, key: udid}}
+            - name: WDA_BUNDLE_ID
+              valueFrom: {configMapKeyRef: {name: ios-device, key: wda-bundle-id}}
+          securityContext:
+            runAsUser: 1000
+            runAsGroup: 1000
+            allowPrivilegeEscalation: false
+            capabilities: {drop: [ALL]}
+          resources:
+            requests: {cpu: 100m, memory: 256Mi}
+            limits: {cpu: '2', memory: 2Gi}
+          readinessProbe:
+            exec:
+              command: [node, -e, 'fetch("http://127.0.0.1:7400/device", {headers:{Authorization:"Bearer "+require("node:fs").readFileSync("/token/token","utf8").trim()}}).then(async r=>process.exit(r.ok&&(await r.json()).state==="ready"?0:1)).catch(()=>process.exit(1))']
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          volumeMounts:
+            - {name: run, mountPath: /run}
+            - {name: state, mountPath: /home/node, subPath: home}
+            - {name: token, mountPath: /token, readOnly: true}
+      volumes:
+        - name: usb
+          hostPath: {path: /dev/bus/usb, type: Directory}
+        - name: tun
+          hostPath: {path: /dev/net/tun, type: CharDevice}
+        - name: run
+          emptyDir: {}
+        - name: state
+          persistentVolumeClaim: {claimName: ios-state}
+        - name: token
+          secret: {secretName: ios-api-token, defaultMode: 0444}
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: ios-no-ingress
+  namespace: stf-ios-prototype
+spec:
+  podSelector:
+    matchLabels: {app: stf-ios-prototype}
+  policyTypes: [Ingress]
+  ingress: []

@@ -49,9 +49,10 @@ when using Proxmox, pass the phone through to the selected Linux VM first.
 
 The intended USB host is the existing Android VM, currently documented as
 `k3s-worker-1` (`192.168.0.122`), behind Proxmox USB passthrough. Verify that
-assignment against the live infrastructure before changing passthrough. Run this
-first prototype directly on the VM host, alongside host `usbmuxd`; Kubernetes
-packaging comes after the hardware test. Keep the current Android assignments.
+assignment against the live infrastructure before changing passthrough. The
+selected launch path is now [the Kubernetes prototype](../kuber/ios-prototype/README.md),
+with its own usbmuxd and tunnel in an isolated Pod. Keep the current Android
+assignments. The host commands below remain useful for direct host diagnostics.
 
 The phone/version above were supplied by the user. A read-only CoreDevice check
 on the preparation Mac on 2026-10-15 reported iOS **27.0 (24A437)** and Developer
@@ -144,12 +145,12 @@ not a renewal guarantee. A local archive also passed signature verification
 after unpacking. The signed artifact and account-specific project changes are
 kept under ignored `tmp/ios-wda/`, outside the pull request.
 
-The first launch was rejected by iOS because the Developer App certificate had
-not yet been trusted. On the phone, use Settings → General → VPN & Device
-Management → Developer App → Trust; complete any restart/unlock it requests.
-This device confirmation is required before retrying WDA. A successful Linux
-launch and device control are still pending; signing and installation alone do
-not prove the Linux path.
+The first launch was rejected until the user trusted the Developer App
+certificate in Settings → General → VPN & Device Management. After trust, a Mac
+preparation test returned WDA `ready: true`, created a session and fetched a
+513105-byte PNG. WDA reported iOS **27.0.1**, clarifying the shorter CoreDevice
+version above. The session and Xcode test were then stopped. This verifies the
+signed artifact on the phone; Linux startup/control remain separate checks.
 
 ## Prepare the phone and tunnel
 

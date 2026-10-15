@@ -1,0 +1,22 @@
+FROM node:24-bookworm-slim
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    ca-certificates curl unzip python3 python3-venv \
+    usbmuxd libusbmuxd-tools libimobiledevice-utils usbutils iproute2 tini \
+    && rm -rf /var/lib/apt/lists/* \
+    && curl -fL --retry 3 https://github.com/danielpaulus/go-ios/releases/download/v1.3.2/go-ios-linux.zip \
+      -o /tmp/go-ios.zip \
+    && echo 'a55fdb4c507391c0548252e01d1deb6ae3c7fd99cfbce842c6f80569cc125604  /tmp/go-ios.zip' \
+      | sha256sum -c - \
+    && unzip -q /tmp/go-ios.zip -d /tmp/go-ios \
+    && install -m 755 /tmp/go-ios/ios /usr/local/bin/ios \
+    && rm -rf /tmp/go-ios /tmp/go-ios.zip \
+    && python3 -m venv /opt/pymobiledevice3 \
+    && /opt/pymobiledevice3/bin/pip install --no-cache-dir pymobiledevice3==11.32.0
+
+ENV PATH="/opt/pymobiledevice3/bin:${PATH}"
+COPY tools/ios-prototype /opt/stf/tools/ios-prototype
+WORKDIR /opt/stf
+USER node
+ENTRYPOINT ["/usr/bin/tini", "-g", "--"]
+CMD ["node", "tools/ios-prototype/main.mts", "--help"]

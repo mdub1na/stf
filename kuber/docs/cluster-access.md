@@ -23,6 +23,13 @@ deployment changes are developed in isolated worktrees.
 
 ## Kubernetes Access
 
+Operational update on 2026-10-15: OpenLDAP and phpLDAPadmin are intentionally
+disabled through zero replica overrides in their kustomization. The LDAP PVC
+and credentials remain intact. LDAP Services have no ready endpoints; the
+retained administration Ingress is unavailable. Re-enable the replicas through
+GitOps before using LDAP or its initial secret-bootstrap script. See the
+[upgrade and observability review](./cluster-upgrades-and-observability.md).
+
 | Setting | Value |
 | --- | --- |
 | Distribution | k3s `v1.35.5+k3s1` |
@@ -85,7 +92,7 @@ administration was not changed.
 | STF UI | `https://stf.finservice.tech` | `stf`, `stf-app:3000` | Without a session, `/`: `302` to the STF login page (`200`); only `/auth/oauth/start` redirects to GitLab |
 | GitLab identity provider | `https://gitlab.finservice.tech` | External OAuth/OIDC provider | HTTPS discovery and client authentication verified |
 | Argo CD | `https://argocd.putmyhexon.ru` | `argocd`, `argocd-server:80` | `200` |
-| phpLDAPadmin | `https://ldap.putmyhexon.ru` | `openldap`, `phpldapadmin:80` | `200` |
+| phpLDAPadmin | `https://ldap.putmyhexon.ru` | `openldap`, `phpldapadmin:80` | Disabled; no backend pods |
 | Appium / Selenium Grid | `https://appium-grid.putmyhexon.ru` | `appium`, `appium-grid-router:4444` | `/status`: `200` |
 
 Normal LDAP login was confirmed by the user after the initial deployment;

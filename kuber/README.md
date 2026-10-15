@@ -10,8 +10,9 @@ Argo CD Applications now use this repository's `develop` branch and are
 Synced/Healthy. GitLab OAuth login was deployed on 2026-10-05; its redirect and
 security checks passed, and the user confirmed browser login and logout. The approved
 account was explicitly promoted to administrator; its role was verified in the
-database, while administrator UI access awaits confirmation. The LDAP base
-remains available for rollback; the 16-node Appium Grid is unchanged.
+database, while administrator UI access awaits confirmation. OpenLDAP and
+phpLDAPadmin are intentionally scaled to zero since 2026-10-15; their data and
+credentials are preserved for a deliberate rollback. The 16-node Appium Grid is unchanged.
 Device-specific checks await connected Android devices. See the rollout plan
 for verified results and pending work.
 
@@ -20,6 +21,7 @@ for verified results and pending work.
 - [Current requirements](./docs/requirements.md)
 - [Current architecture](./docs/architecture.md)
 - [Cluster access and service inventory](./docs/cluster-access.md)
+- [Cluster upgrade and observability review](./docs/cluster-upgrades-and-observability.md)
 - [STF rollout and server maintenance plan](./docs/stf-rollout-plan.md)
 - [STF deployment runbook](./docs/stf-deployment.md)
 - [Historical STF roadmap](./docs/roadmap.md)
@@ -66,17 +68,18 @@ For migration, follow the rollout plan and deployment runbook instead.
   - `Traefik`
   - `cert-manager + Let's Encrypt`
   - `Prometheus + Grafana`
-  - `Loki + Promtail`
+  - `Loki + Grafana Alloy` (proposed; observability is not deployed yet)
   - `Alertmanager`
 - `Argo CD` is used as the GitOps deployment layer for Kubernetes workloads.
 
 ## Next focus
 
 - confirm administrator UI access with the approved account; browser login is
-  confirmed and its database role is `admin`; retain the LDAP base until confirmed
+  confirmed and its database role is `admin`; LDAP stays paused unless explicitly re-enabled
 - keep GitOps documentation aligned with the live manifests
 - verify screen/touch, capture/release and APK installation with connected Android devices
 - adapt the copied Java tests from legacy allocation APIs to standard STF APIs
 - update the three Kubernetes servers after SSH access is provided
 - implement the reserved `mitmproxy` and `observability` slices when we are ready for those layers
+- follow the upgrade and observability review for measured capacity and staged version candidates
 - back up the bootstrapped Secrets outside Git and evaluate encrypted GitOps secret management

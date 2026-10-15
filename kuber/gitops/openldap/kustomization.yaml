@@ -12,3 +12,10 @@ resources:
   - phpldapadmin-deployment.yaml
   - phpldapadmin-issuer.yaml
   - phpldapadmin-ingress.yaml
+
+# Keep the directory, credentials and rollback manifests while GitLab OAuth is active.
+replicas:
+  - name: openldap
+    count: 0
+  - name: phpldapadmin
+    count: 0

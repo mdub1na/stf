@@ -69,6 +69,13 @@ Do not disable TLS verification to work around a cached DNS answer.
 
 ## Secret bootstrap
 
+OpenLDAP and phpLDAPadmin are intentionally disabled through zero replica
+overrides as of 2026-10-15. Their PVC and Secrets are retained. Routine GitLab
+OAuth deployments do not require LDAP or the initial LDAP secret bootstrap.
+To use LDAP rollback, first change both counts in
+`gitops/openldap/kustomization.yaml` to `1` and synchronize through GitOps.
+The bootstrap below performs a live LDAP bind and requires a running server.
+
 The `stf` slice uses namespace `stf` and resource names prefixed with `stf-`. Its base image is replaced by Kustomize; apply the slice with Argo CD,
 not individual base Deployment files.
 

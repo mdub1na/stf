@@ -186,3 +186,16 @@ This file keeps background reasoning, rejected alternatives, and explanatory con
 - Copy the persistent temporary-storage directory to a new `stf` PVC before
   removing the previous namespace. Verify the destination before cleanup.
 - Follow [the resource migration runbook](./stf-resource-migration.md).
+
+## Pause LDAP and review observability — 2026-10-15
+
+- Scale OpenLDAP and phpLDAPadmin to zero through Kustomize replica overrides.
+  Preserve the namespace, PVC, Secrets and TLS resources; GitLab OAuth remains
+  active. Re-enabling LDAP requires a deliberate GitOps change.
+- Keep the infrastructure Applications' original automatic sync policies after
+  deploying this change, so self-heal preserves the disabled state.
+- Record the live capacity and upgrade candidates in
+  [the cluster review](./cluster-upgrades-and-observability.md). Add metrics and
+  logs before optional tracing, mesh or search layers. Prefer Alloy over the
+  discontinued Promtail. This review does not authorize installing those layers
+  or upgrading the audited infrastructure components.

@@ -42,14 +42,21 @@ upgrade; retiring it still requires the configuration/ownership audit.
   the real STF display route: both existing and canary proxies must complete
   the WebSocket handshake with HTTP 101. No video frames are retained.
 
+Verified canary results: native sessions were created and closed on APIs 31,
+35 and 36; NGINX syntax validation passed and both proxies returned HTTP 101
+for the same live display route.
+
 ## Deployment order
 
 1. Pause root automation before temporarily changing child sources. Keep the
    original policies for restoration. Synchronize only the selected applications;
    do not synchronize the RethinkDB application or run its migration hook.
-2. Apply `gitops/bootstrap/argocd` with server-side apply and an explicit field
-   manager. The upstream install URL is pinned to `v3.5.5`; preserve live Secret
-   and ConfigMap data. Check all active Argo workloads and server/repo versions.
+2. Render the `v3.5.5`-pinned `gitops/bootstrap/argocd` and exclude every Secret
+   and ConfigMap from the upgrade payload. Apply its three CRDs server-side with
+   their existing `kubectl` field manager; apply the remaining resources with
+   the existing client-side manager. Dry-run both payloads first. Do not use
+   `force-conflicts` or change field ownership. Verify live Secret/ConfigMap data
+   is identical and check all active Argo workloads and server/repo versions.
 3. Synchronize cert-manager and check its rollout and existing Certificate
    readiness. Synchronize the Traefik patch and check ingress with valid TLS.
 4. Synchronize the STF GitLab overlay: only the dynamic proxy image changes.

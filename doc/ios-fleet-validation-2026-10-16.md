@@ -64,6 +64,19 @@ profiles, signed artifacts and account details stay outside Git.
   including Android emulator tiers. The Home correction's Linux Node 22.18/24
   tests and prototype image build passed; remaining checks are recorded on the PR.
 
+## Subsequent iOS 26 Shake regression
+
+The operator reproduced `IOS_SHAKE_MENU_UNSUPPORTED` on 13 Pro. Its system
+AssistiveTouch tree exposes the floating `AssistiveTouchNubbit` and menu actions
+as accessible `Other` nodes, not `Button`; the final Russian label is
+`Встряхнуть`, not `Встряхивание`. The correction recognizes these known controls,
+ignores hidden/disabled elements and preserves the existing unknown-menu failure
+and cleanup behavior. A new fixture covers this actual iOS 26 structure.
+
+The corrected implementation was run from Linux against the original WDA tree
+and a separately signed test application on 13 Pro. Its UIKit Shake counter
+advanced **0→1**, confirming motion delivery rather than HTTP success alone.
+
 ## Remaining verification
 
 Full shared-VM reboot, physical profile expiry/renewal, landscape,

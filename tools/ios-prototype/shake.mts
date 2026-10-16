@@ -8,12 +8,22 @@ interface Node {
   type: string
   name?: string
   label?: string
+  isAccessible?: string | boolean
+  isVisible?: string | boolean
+  isEnabled?: string | boolean
   rect: {x: number, y: number, width: number, height: number}
   children?: Node[]
 }
 
 function nodes(node: Node): Node[] {
   return [node, ...(node.children || []).flatMap(nodes)]
+}
+
+function actionable(node: Node): boolean {
+  return (node.type === 'Button' || (node.type === 'Other' &&
+    (node.isAccessible === '1' || node.isAccessible === true))) &&
+    node.isVisible !== '0' && node.isVisible !== false &&
+    node.isEnabled !== '0' && node.isEnabled !== false
 }
 
 // Real-device UIKit motion events are provided by the system AssistiveTouch Shake action.
@@ -92,7 +102,8 @@ export class Shake {
         await delay(1500, null, {signal})
       }
       let tree = await locate(this.location)
-      const nub = nodes(tree).find(n => n.type === 'Button' && n.name === 'AssistiveTouch' &&
+      const nub = nodes(tree).find(n => actionable(n) &&
+        ['AssistiveTouch', 'AssistiveTouchNubbit'].includes(n.name || '') &&
         n.rect.width <= 100 && n.rect.height <= 100)
       if (nub) {
         this.location = {x: nub.rect.x + nub.rect.width / 2, y: nub.rect.y + nub.rect.height / 2}
@@ -101,9 +112,10 @@ export class Shake {
           , y: Math.min(size.height - 170, Math.max(170, this.location.y))})
       }
       // Only known system actions are selected; unknown layouts/languages fail without tapping.
-      const actions = [['Device', 'Устройство'], ['More', 'Еще', 'Ещё'], ['Shake', 'Встряхивание']]
+      const actions = [['Device', 'Устройство'], ['More', 'Еще', 'Ещё']
+        , ['Shake', 'Встряхивание', 'Встряхнуть']]
       for (const labels of actions) {
-        const buttons = nodes(tree).filter(n => n.type === 'Button')
+        const buttons = nodes(tree).filter(actionable)
         const shake = [...buttons].reverse().find(n =>
           nodes(n).some(c => c.name === 'axaction.device.shake_DI'))
         const button = shake || buttons.find(n => labels.includes(n.name || n.label || ''))

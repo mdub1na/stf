@@ -3,7 +3,7 @@ import {describe, it} from 'node:test'
 import {Shake} from '../shake.mts'
 import type {WdaClient} from '../wda.mts'
 
-function fixture(enabled = false, unsupported = false) {
+function fixture(enabled = false, unsupported = false, ios26 = false) {
   const commands: string[][] = []
   const taps: unknown[] = []
   const original = {defaultActiveApplication: 'auto', activeAppDetectionPoint: '80,80'}
@@ -11,7 +11,9 @@ function fixture(enabled = false, unsupported = false) {
   let stage = 0
   const rect = {x: 100, y: 300, width: 70, height: 70}
   const button = (name: string, children: unknown[] = [], frame = rect) =>
-    ({type: 'Button', name, rect: frame, children})
+    ({type: ios26 ? 'Other' : 'Button'
+      , name: ios26 && name === 'AssistiveTouch' ? 'AssistiveTouchNubbit' : name
+      , isAccessible: '1', isVisible: '1', isEnabled: '1', rect: frame, children})
   const wda = {
     async call(_method: string, route: string, body: any) {
       if (route === '/appium/settings') {
@@ -37,7 +39,8 @@ function fixture(enabled = false, unsupported = false) {
           children[0] = button('Еще')
         }
         if (stage === 3) {
-          children[0] = button('Встряхивание', [{type: 'Image', name: 'axaction.device.shake_DI'}])
+          children[0] = ios26 ? button('Встряхнуть') :
+            button('Встряхивание', [{type: 'Image', name: 'axaction.device.shake_DI'}])
         }
         return {value: {type: 'Application', name: 'AssistiveTouch'
           , children: stage ? [button('AssistiveTouch', children,
@@ -61,6 +64,15 @@ function fixture(enabled = false, unsupported = false) {
 }
 
 describe('physical iPhone Shake', () => {
+  it('supports iOS 26 accessible Other controls and the Russian Shake label', async() => {
+    const f = fixture(false, false, true)
+    await f.shake.perform(f.wda, new AbortController().signal)
+    assert.equal(f.taps.length, 4)
+    assert.deepEqual(f.settings(), f.original)
+    assert.ok(f.commands.every(args => args.includes('--udid=selected-iphone')))
+    assert.equal(f.commands.at(-1)?.at(-1), 'disable')
+  })
+
   it('finds a moved control without tapping other apps and restores original settings', async() => {
     const f = fixture()
     await f.shake.perform(f.wda, new AbortController().signal)

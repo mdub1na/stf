@@ -41,7 +41,7 @@ describe('Linux iOS integration', function() {
 
   async function fixture() {
     const state = {
-      udid: serial, state: 'ready', generation: 1
+      udid: serial, state: 'ready', generation: 1, instance: 'backend-instance'
     , info: {ProductType: 'iPhone17,4', ProductVersion: '27.0.1'}
     }
     const requests: {path: string, body: any}[] = []
@@ -72,7 +72,9 @@ describe('Linux iOS integration', function() {
           chunks.push(chunk)
         }
         requests.push({path: req.url!, body: JSON.parse(Buffer.concat(chunks).toString())})
-        res.end('{"success":true}')
+        res.end(req.url?.startsWith('/installations/') ?
+          JSON.stringify({id: requests.at(-1)!.body.id || 'job', settled: false}) :
+          '{"success":true}')
       }
     })
     servers.push(backend)
@@ -165,6 +167,44 @@ describe('Linux iOS integration', function() {
     f.send(new wire.GestureStopMessage(3))
     await new Promise(resolve => setTimeout(resolve, 30))
     assert.equal(f.requests.length, 0)
+  })
+
+  it('accepts IPA blobs only and binds job status and cancellation to ownership', async function() {
+    const f = await fixture()
+    await f.join()
+    f.send(new wire.InstallMessage('https://private.invalid/app.ipa', true, '{}', 'request'), true)
+    await until(() => f.sent.some(item => item.channel === 'reply' &&
+      !wire.TransactionDoneMessage.decode(item.envelope.message).success))
+    assert.equal(f.requests.length, 0)
+    const href = '/s/blob/aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa/' + 'a'.repeat(32)
+    f.send(new wire.InstallMessage(href, true, '{}', 'request'), true)
+    await until(() => f.requests.length === 1)
+    const lease = f.requests[0]!.body.lease
+    assert.equal(f.requests[0]!.body.instance, f.state.instance)
+    assert.equal(f.requests[0]!.body.generation, f.state.generation)
+    f.send(new wire.IosInstallStatusMessage(), true)
+    await until(() => f.requests.length === 2)
+    assert.equal(f.requests[1]!.body.lease, lease)
+    await f.bridge.poll()
+    assert.equal(f.requests[2]!.path, '/installations/keepalive')
+    f.bridge.leave('test')
+    await until(() => f.requests.length === 4)
+    assert.deepEqual(f.requests[3], {path: '/installations/cancel', body: {id: 'job', lease}})
+    f.send(new wire.IosInstallCancelMessage('job'), true)
+    await new Promise(resolve => setTimeout(resolve, 20))
+    assert.equal(f.requests.length, 4)
+  })
+
+  it('invalidates commands when the backend restarts at the same generation', async function() {
+    const f = await fixture()
+    await f.join()
+    f.state.instance = 'new-backend-instance'
+    f.send(new wire.PasteMessage('stale'), true)
+    await until(() => f.sent.some(item => item.channel === 'reply' &&
+      !wire.TransactionDoneMessage.decode(item.envelope.message).success))
+    assert.equal(f.requests.length, 0)
+    await f.bridge.poll()
+    assert.equal(f.bridge.owner, null)
   })
 
   it('checks iOS ownership and group access without changing Android', async function() {

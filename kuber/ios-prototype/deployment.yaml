@@ -80,6 +80,7 @@ spec:
             - '--wda-bundle-id=$(WDA_BUNDLE_ID)'
             - --image-mounter=pymobiledevice3
             - --token-file=/token/token
+            - --storage-url=http://stf-storage-temp.stf.svc.cluster.local:3000
           env:
             - name: IOS_UDID
               valueFrom: {configMapKeyRef: {name: ios-device, key: udid}}

@@ -983,10 +983,6 @@ msgstr ""
 msgid "Launch Activity"
 msgstr ""
 
-#: res/app/src/core/install.ts:58
-msgid "Launching activity..."
-msgstr ""
-
 #: res/app/src/features/auth/SignInForm.tsx:115
 #: res/app/src/features/auth/SignInForm.tsx:116
 msgid "LDAP Username"
@@ -2284,4 +2280,79 @@ msgstr ""
 
 #: res/app/src/core/devices/enhance.ts:32
 msgid "You (or someone else) kicked the device."
+msgstr ""
+
+msgid "Another installation is in progress. Wait for it to finish."
+msgstr ""
+
+msgid "Check installation status"
+msgstr ""
+
+msgid "Checking IPA..."
+msgstr ""
+
+msgid "Installation status is unavailable. Check the status again before retrying."
+msgstr ""
+
+msgid "Installation was interrupted by a device or session disconnect."
+msgstr ""
+
+msgid "Launching app..."
+msgstr ""
+
+msgid "No installation was found in the current device session."
+msgstr ""
+
+msgid "Profile expires"
+msgstr ""
+
+msgid "Replacing WebDriverAgent from this panel is not allowed."
+msgstr ""
+
+msgid "Select a valid IPA for a physical iPhone."
+msgstr ""
+
+msgid "The app may already be installed. Check the iPhone before retrying."
+msgstr ""
+
+msgid "The app was installed but could not be opened. Open it on the iPhone and check developer trust."
+msgstr ""
+
+msgid "The app was not found on the iPhone after installation."
+msgstr ""
+
+msgid "The installation request is invalid."
+msgstr ""
+
+msgid "The IPA exceeds the 1 GiB limit."
+msgstr ""
+
+msgid "The IPA signature or provisioning profile is invalid. Upload a signed development, ad hoc, or enterprise IPA."
+msgstr ""
+
+msgid "The iPhone could not install this IPA."
+msgstr ""
+
+msgid "The provisioning profile has expired. Sign the IPA again."
+msgstr ""
+
+msgid "The uploaded file is no longer available. Upload it again."
+msgstr ""
+
+msgid "There is not enough free space on the iPhone."
+msgstr ""
+
+msgid "This app is not compatible with a physical iPhone."
+msgstr ""
+
+msgid "This app requires a newer iOS version."
+msgstr ""
+
+msgid "This iPhone is not included in the provisioning profile."
+msgstr ""
+
+msgid "Upload an IPA signed for this iPhone. STF does not sign apps."
+msgstr ""
+
+msgid "Verifying installation..."
 msgstr ""

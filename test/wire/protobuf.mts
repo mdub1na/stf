@@ -721,8 +721,9 @@ describe('wire protobuf', function() {
   })
 
   describe('enum values', function() {
-    it('should keep the MessageType values protobufjs 5 exposed', function() {
-      expect(wire.MessageType).to.eql(pbjs5MessageType)
+    it('should preserve legacy MessageType values and add iOS job messages', function() {
+      expect(wire.MessageType).to.eql({...pbjs5MessageType
+        , IosInstallStatusMessage: 97, IosInstallCancelMessage: 98})
     })
 
     it('should keep the DeviceStatus values protobufjs 5 exposed', function() {

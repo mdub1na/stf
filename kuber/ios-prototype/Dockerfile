@@ -2,7 +2,7 @@ FROM node:24-bookworm-slim
 ARG TARGETARCH
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    ca-certificates curl unzip python3 python3-venv \
+    ca-certificates curl unzip python3 python3-venv openssl \
     usbmuxd libusbmuxd-tools libimobiledevice-utils usbutils iproute2 tini \
     && rm -rf /var/lib/apt/lists/*
 RUN curl -fL --retry 3 https://github.com/danielpaulus/go-ios/releases/download/v1.3.2/go-ios-linux.zip \

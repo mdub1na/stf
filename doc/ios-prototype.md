@@ -1,8 +1,9 @@
 # Linux iOS prototype
 
 This is the first hardware feasibility step for adding iOS to this STF fork.
-It runs as a separate, single-device service on a Linux USB host. It does not
-register the phone in STF, change the deployed farm, or join Appium Grid yet.
+It runs as a separate, single-device service on a Linux USB host. The
+[STF provider](ios-provider.md) registers the phone and adds browser controls
+and signed IPA installation. Appium Grid is not connected yet.
 The prototype owns one WDA session; do not run another Appium/WDA controller
 against the same phone while using it.
 
@@ -300,10 +301,10 @@ remaining recovery/cold-start scenarios:
 - [ ] Phone reboot recovers after any required physical unlock.
 - [ ] Ctrl+C frees API/forward ports and stops the owned WDA session.
 
-Not implemented in this stage: STF device registration/reservations, browser
-controls, multi-device scheduling, Appium relay, IPA upload, automatic signing,
-profile renewal, or autonomous recovery through a passcode lock. These remain
-later integration work after the Linux/WDA hardware path is proven.
+The [STF integration](ios-provider.md) now adds device registration/ownership,
+browser controls and signed IPA upload. Multi-device scheduling, Appium relay,
+automatic signing/profile renewal and autonomous recovery through a passcode
+lock remain outside this prototype.
 
 ## Code anchors
 

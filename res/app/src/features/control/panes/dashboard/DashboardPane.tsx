@@ -12,7 +12,10 @@ export default function DashboardPane({device, control}: PaneProps) {
   const [platform] = usePlatform()
 
   if (device.platform === 'iOS') {
-    return <ClipboardCard control={control} inputOnly />
+    return <SimpleGrid type='container' cols={{base: 1, '720px': 2}} spacing='md'>
+      <ClipboardCard control={control} inputOnly />
+      <InstallCard control={control} />
+    </SimpleGrid>
   }
 
   return (

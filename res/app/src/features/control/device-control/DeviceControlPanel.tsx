@@ -30,7 +30,7 @@ export default function DeviceControlPanel({device, control, standalone}: PanePr
   useControlHotkeys(control, actions, ios)
 
   function onDragOver(event: DragEvent) {
-    if (!ios && hasFiles(event)) {
+    if (hasFiles(event)) {
       event.preventDefault()
       setDragOver(true)
     }
@@ -40,7 +40,7 @@ export default function DeviceControlPanel({device, control, standalone}: PanePr
     event.preventDefault()
     setDragOver(false)
     const files = Array.from(event.dataTransfer.files)
-    if (!ios && files.length) {
+    if (files.length) {
       installDroppedFiles(control, files)
     }
   }

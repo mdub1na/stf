@@ -4,6 +4,7 @@ export interface IosDeviceState {
   udid: string
   state: string
   generation: number
+  instance?: string
   info?: {ProductType?: string, ProductVersion?: string, DeviceName?: string}
 }
 
@@ -32,8 +33,9 @@ export class PrototypeClient {
     , redirect: 'error'
     })
     if (!response.ok) {
-      await response.body?.cancel()
-      throw new Error('iOS backend returned HTTP ' + response.status)
+      const body = await response.json().catch(() => null) as {error?: unknown} | null
+      throw new Error(typeof body?.error === 'string' && /^IOS_[A-Z_]+$/.test(body.error) ?
+        body.error : 'iOS backend returned HTTP ' + response.status)
     }
     return response
   }

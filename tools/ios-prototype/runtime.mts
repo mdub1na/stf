@@ -1,4 +1,5 @@
 import {setTimeout as delay} from 'node:timers/promises'
+import {randomUUID} from 'node:crypto'
 
 import {ManagedProcess, runCommand, runJson} from './process.mts'
 import {WdaClient} from './wda.mts'
@@ -34,6 +35,7 @@ export interface RuntimeDependencies {
 }
 
 export class IosRuntime {
+  readonly instance = randomUUID()
   readonly wda: WdaClient
   readonly options: RuntimeOptions
   state: 'waiting' | 'starting' | 'ready' | 'stopped' = 'waiting'

@@ -1,9 +1,12 @@
 import fs from 'node:fs/promises'
 import {parseArgs} from 'node:util'
+import os from 'node:os'
+import path from 'node:path'
 
 import {IosRuntime} from './runtime.mts'
 import {createServer} from './server.mts'
 import {diagnose} from './doctor.mts'
+import {Installations} from './installations.mts'
 import type {ImageMounter} from './tunnel.mts'
 
 const {values} = parseArgs({options: {
@@ -19,6 +22,8 @@ const {values} = parseArgs({options: {
 , 'mjpeg-port': {type: 'string', default: '19100'}
 , 'tunnel-port': {type: 'string', default: '28100'}
 , 'token-file': {type: 'string'}
+, 'storage-url': {type: 'string'}
+, 'install-dir': {type: 'string', default: path.join(os.homedir(), '.stf-ios-installations')}
 , help: {type: 'boolean', short: 'h'}
 , doctor: {type: 'boolean'}
 }})
@@ -35,6 +40,7 @@ if (values.help) {
     'Options: --port 7400 --wda-port 18100 --mjpeg-port 19100 --tunnel-port 28100\n' +
     '         --go-ios ios --iproxy iproxy --xctest-config WebDriverAgentRunner.xctest\n' +
     '         --image-mounter go-ios|pymobiledevice3 --pymobiledevice3 /path/to/pymobiledevice3\n' +
+    '         --storage-url http://storage:3000 --install-dir /private/installations\n' +
     'Use pymobiledevice3 for iOS 27 developer images (requires a kernel go-ios tunnel).\n' +
     'Check the Linux host without starting WDA: --doctor [--udid UDID]\n' +
     'Requires a signed, installed WDA and a running go-ios tunnel. Listens on 127.0.0.1.\n')
@@ -81,7 +87,10 @@ async function main(): Promise<void> {
   , wdaPort: ports[1]!, mjpegPort: ports[2]!, tunnelPort: ports[3]!
   , retryMs: 5000, startupMs: 60000
   })
-  const server = createServer(runtime, token)
+  const installations = values['storage-url'] ? await Installations.create({
+    storageUrl: values['storage-url'], directory: values['install-dir'], maxBytes: 1024 ** 3
+  }, runtime) : undefined
+  const server = createServer(runtime, token, installations)
   await new Promise<void>((resolve, reject) => {
     server.once('error', reject)
     server.listen(ports[0], '127.0.0.1', resolve)
@@ -96,6 +105,7 @@ async function main(): Promise<void> {
     stopping = true
     server.close()
     server.closeAllConnections()
+    await installations?.stop()
     await runtime.stop()
   }
   process.once('SIGINT', stop)

@@ -95,6 +95,7 @@ interface InstallData {
   href: string
   launch?: boolean
   manifest: unknown
+  requestId?: string
 }
 
 type ChannelEvent<D> = (channel: string, data: D) => void
@@ -146,6 +147,8 @@ interface WebsocketClientEvents {
   'shell.command': TransactionDataEvent<ShellCommandMessageFields>
   'shell.keepalive': ChannelEvent<ShellKeepAliveMessageFields>
   'device.install': TransactionDataEvent<InstallData>
+  'device.install.status': TransactionDataEvent<{id?: string}>
+  'device.install.cancel': TransactionDataEvent<{id: string}>
   'device.uninstall': TransactionDataEvent<UninstallMessageFields>
   'storage.upload': TransactionDataEvent<{url: string}>
   'forward.test': TransactionDataEvent<ForwardTestMessageFields>
@@ -1025,9 +1028,26 @@ export default function(options: WebsocketOptions) {
                 data.href
               , data.launch === true
               , JSON.stringify(data.manifest)
+              , data.requestId
               )
             )
           ])
+        })
+        .on('device.install.status', function(channel, responseChannel, data) {
+          if (!channel.startsWith('ios:')) {
+            return
+          }
+          joinChannel(responseChannel)
+          push.send([channel, wireutil.transaction(responseChannel,
+            new wire.IosInstallStatusMessage(data))])
+        })
+        .on('device.install.cancel', function(channel, responseChannel, data) {
+          if (!channel.startsWith('ios:')) {
+            return
+          }
+          joinChannel(responseChannel)
+          push.send([channel, wireutil.transaction(responseChannel,
+            new wire.IosInstallCancelMessage(data))])
         })
         .on('device.uninstall', function(channel, responseChannel, data) {
           joinChannel(responseChannel)

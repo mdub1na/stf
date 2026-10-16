@@ -3,6 +3,7 @@ import http from 'node:http'
 import {pipeline} from 'node:stream'
 
 import type {IosRuntime} from './runtime.mts'
+import {InstallError, type Installations} from './installations.mts'
 
 class InputError extends Error {
 }
@@ -47,7 +48,9 @@ async function body(req: http.IncomingMessage): Promise<any> {
   }
 }
 
-export function createServer(runtime: IosRuntime, token: string): http.Server {
+export function createServer(
+  runtime: IosRuntime, token: string, installations?: Installations
+): http.Server {
   const expected = Buffer.from('Bearer ' + token)
   return http.createServer({requestTimeout: 15000}, async(req, res) => {
     res.setHeader('Cache-Control', 'no-store')
@@ -75,9 +78,23 @@ export function createServer(runtime: IosRuntime, token: string): http.Server {
       if (route === 'GET /device') {
         json(200, {
           udid: runtime.options.udid, state: runtime.state, generation: runtime.generation
+        , instance: runtime.instance
         , error: runtime.lastError, info: runtime.info
         })
         return
+      }
+      if (req.method === 'POST' && installations) {
+        const handlers = {
+          '/installations/start': (input: any) => installations.start(input)
+        , '/installations/status': (input: any) => installations.status(input)
+        , '/installations/keepalive': (input: any) => installations.keepalive(input)
+        , '/installations/cancel': (input: any) => installations.cancel(input)
+        }
+        const handler = handlers[req.url as keyof typeof handlers]
+        if (handler) {
+          json(200, await handler(await body(req)))
+          return
+        }
       }
       if (runtime.state !== 'ready') {
         json(503, {error: 'device_not_ready', state: runtime.state})
@@ -168,6 +185,9 @@ export function createServer(runtime: IosRuntime, token: string): http.Server {
       let status = runtime.state === 'ready' ? 502 : 503
       if (error instanceof InputError) {
         status = 400
+      }
+      if (error instanceof InstallError) {
+        status = error.status
       }
       json(status, {error: (error as Error).message})
     }

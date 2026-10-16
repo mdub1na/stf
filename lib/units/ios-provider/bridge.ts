@@ -2,6 +2,7 @@ import wire from '../../wire/index.js'
 import wireutil from '../../wire/util.js'
 import wirerouter from '../../wire/router.js'
 import grouputil from '../../util/grouputil.js'
+import {randomUUID} from 'node:crypto'
 import type {IosDeviceState, PrototypeClient} from './client.js'
 import type {IosOwner} from './access.js'
 
@@ -29,6 +30,8 @@ export class IosBridge {
   private queue = Promise.resolve()
   private touch: {from: Point, to: Point, started: number} | null = null
   private multitouch = false
+  private lease = randomUUID()
+  private installId: string | null = null
   private readonly route: ReturnType<ReturnType<typeof wirerouter>['handler']>
 
   constructor(
@@ -113,6 +116,32 @@ export class IosBridge {
       .on(wire.KeyDownMessage, () => null)
       .on(wire.KeyUpMessage, (_channel, message) => this.key(message.key))
       .on(wire.KeyPressMessage, (_channel, message) => this.key(message.key))
+      .on(wire.InstallMessage, (channel, message) => {
+        const epoch = this.epoch
+        const lease = this.lease
+        this.transaction(String(channel), () => this.enqueue(epoch, async() => {
+          const artifact = /^\/s\/blob\/([a-f0-9-]{36})\/([a-f0-9]{32})$/i.exec(message.href)
+          if (!artifact || !message.requestId || !this.state?.instance) {
+            throw new Error('IOS_INSTALL_INVALID_REQUEST')
+          }
+          const job = await (await this.client.request('/installations/start', {
+            id: message.requestId, lease, artifact: {id: artifact[1], name: artifact[2]}
+          , launch: message.launch, instance: this.state.instance, generation: this.state.generation
+          })).json() as {id: string, settled: boolean}
+          if (epoch !== this.epoch || lease !== this.lease || !this.owner) {
+            await this.client.request('/installations/cancel', {id: job.id, lease})
+            throw new Error('IOS_INSTALL_INTERRUPTED')
+          }
+          this.installId = job.settled ? null : job.id
+          return job
+        }))
+      })
+      .on(wire.IosInstallStatusMessage, (channel, message) => {
+        this.installationCommand(String(channel), '/installations/status', message.id || undefined)
+      })
+      .on(wire.IosInstallCancelMessage, (channel, message) => {
+        this.installationCommand(String(channel), '/installations/cancel', message.id)
+      })
       .on(wire.ScreenCaptureMessage, channel => {
         const epoch = this.epoch
         this.transaction(String(channel), () => this.enqueue(epoch, async() => {
@@ -138,6 +167,20 @@ export class IosBridge {
 
   private point(point: Point) {
     return [point.x, point.y].every(value => Number.isFinite(value) && value >= 0 && value <= 1)
+  }
+
+  private installationCommand(channel: string, path: string, id?: string) {
+    const epoch = this.epoch
+    const lease = this.lease
+    this.transaction(channel, () => this.enqueue(epoch, async() => {
+      const job = await (await this.client.request(path, {lease, ...(id ? {id} : {})})).json() as
+        {id: string, settled: boolean} | null
+      if (epoch !== this.epoch || lease !== this.lease) {
+        throw new Error('IOS_INSTALL_INTERRUPTED')
+      }
+      this.installId = job && !job.settled ? job.id : null
+      return job
+    }))
   }
 
   private resetTouch() {
@@ -176,6 +219,9 @@ export class IosBridge {
           current.generation !== this.state?.generation || epoch !== this.epoch || !this.owner) {
         throw new Error('Device session changed')
       }
+      if (current.instance !== this.state?.instance) {
+        throw new Error('Device session changed')
+      }
       return operation()
     })
     this.queue = result.then(() => {}, () => {})
@@ -196,6 +242,7 @@ export class IosBridge {
     }
     if (!this.owner) {
       this.owner = owner
+      this.lease = randomUUID()
       this.epoch++
       this.timeout = Math.min(3600, Math.max(10, timeout || this.options.groupTimeout))
       this.broadcast(new wire.JoinGroupMessage(this.options.serial, owner))
@@ -205,6 +252,12 @@ export class IosBridge {
 
   leave(reason: string) {
     const owner = this.owner
+    const id = this.installId
+    const lease = this.lease
+    this.installId = null
+    if (id) {
+      this.client.request('/installations/cancel', {id, lease}).catch(this.report)
+    }
     this.owner = null
     this.epoch++
     this.resetTouch()
@@ -243,6 +296,8 @@ export class IosBridge {
     , wire.GestureStartMessage.$code, wire.GestureStopMessage.$code, wire.KeyDownMessage.$code
     , wire.KeyUpMessage.$code, wire.KeyPressMessage.$code, wire.TypeMessage.$code
     , wire.PasteMessage.$code, wire.ScreenCaptureMessage.$code
+    , wire.InstallMessage.$code, wire.IosInstallStatusMessage.$code
+    , wire.IosInstallCancelMessage.$code
     ]
     if (!supported.includes(envelope.type)) {
       if (envelope.channel) {
@@ -261,7 +316,7 @@ export class IosBridge {
         this.absent()
         return
       }
-      if (this.state?.generation !== state.generation) {
+      if (this.state?.generation !== state.generation || this.state?.instance !== state.instance) {
         this.absent()
       }
       if (!this.identity) {
@@ -294,6 +349,15 @@ export class IosBridge {
       }
       if (this.owner && Date.now() - this.activity > this.timeout * 1000) {
         this.leave('automatic_timeout')
+      }
+      if (this.owner && this.installId) {
+        const epoch = this.epoch
+        const job = await (await this.client.request('/installations/keepalive', {
+          lease: this.lease, id: this.installId
+        })).json() as {settled: boolean}
+        if (epoch === this.epoch && job.settled) {
+          this.installId = null
+        }
       }
     }
     catch (error) {

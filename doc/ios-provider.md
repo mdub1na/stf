@@ -134,6 +134,8 @@ Mach-O/CMS fixtures. `npm run test:component` covers browser-side file routing,
 status polling, lost acknowledgements and transaction timeouts without browser
 automation. Actual IPA acceptance and app launch still require a signed artifact
 and a real iPhone; record that separately from fixture tests.
+The [three-iPhone hardware record](ios-fleet-validation-2026-10-16.md) covers
+simultaneous ownership/streams, isolated Home, physical reconnect/reboot and Shake.
 
 ## Health, signing and recovery
 

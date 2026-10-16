@@ -322,6 +322,10 @@ export class Installations {
               throw new Error('Session changed')
             }
             await wda.call('POST', '/wda/apps/activate', {bundleId: job.manifest!.package})
+            const active = await wda.call('GET', '/wda/activeAppInfo')
+            if ((active.value as {bundleId?: string})?.bundleId !== job.manifest!.package) {
+              throw new Error('Installed app did not stay in the foreground')
+            }
           })
         }
         catch {

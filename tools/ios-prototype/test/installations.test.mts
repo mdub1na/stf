@@ -177,6 +177,10 @@ describe('IPA installation jobs', () => {
       f.input.launch = true
       let activated = false
       f.runtime.wda.call = async(method, route, body) => {
+        if (method === 'GET') {
+          assert.equal(route, '/wda/activeAppInfo')
+          return {value: {bundleId: manifest.package}}
+        }
         assert.equal(method, 'POST')
         assert.equal(route, '/wda/apps/activate')
         assert.deepEqual(body, {bundleId: manifest.package})
@@ -192,6 +196,16 @@ describe('IPA installation jobs', () => {
       assert.equal(job.state, 'installed')
       assert.equal(job.launchError, fail)
     }
+  })
+
+  it('reports an app that crashes immediately as installed with a launch warning', async() => {
+    const f = await fixture()
+    f.input.launch = true
+    f.runtime.wda.call = async() => ({value: {bundleId: 'com.apple.springboard'}})
+    await f.manager.start(f.input)
+    const job = await f.done()
+    assert.equal(job.state, 'installed')
+    assert.equal(job.launchError, true)
   })
 
   it('interrupts an installation when bridge heartbeats stop', async() => {

@@ -2452,3 +2452,7 @@ msgstr ""
 #: res/app/src/ui/IosDeviceHealth.tsx:17
 msgid "WebDriverAgent is restarting. Check device unlock and developer trust."
 msgstr ""
+
+#: res/app/src/ui/IosDeviceHealth.tsx:11
+msgid "Enable Developer Mode in Settings, Privacy & Security on the iPhone."
+msgstr ""

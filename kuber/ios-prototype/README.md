@@ -173,3 +173,9 @@ This is explicit fleet deployment, not an auto-discovery Kubernetes operator.
 A newly plugged phone appears in `ios list`, then must be prepared and added to
 the config. Unplugging one configured phone only restarts/reconnects its provider;
 other phones retain their own Pods and ownership.
+
+When phones share USB vendor/product IDs, assign Proxmox passthrough by distinct
+physical USB ports, so reconnecting one phone does not select another identical
+USB device. Verify all expected UDIDs in the VM before applying the fleet.
+Proxmox supports both ID and bus/port matching; see its
+[`qm` reference](https://pve.proxmox.com/pve-docs/qm.1.html).

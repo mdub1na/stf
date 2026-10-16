@@ -2510,3 +2510,6 @@ msgstr "Вызывает жест встряхивания, который от�
 
 msgid "Could not shake the iPhone. Keep it unlocked and use the standard AssistiveTouch menu in English or Russian. Release and reconnect the device if the session ended."
 msgstr "Не удалось потрясти iPhone. Оставьте его разблокированным и используйте стандартное меню AssistiveTouch на русском или английском языке. Если сеанс завершён, освободите устройство и подключитесь заново."
+
+msgid "Enable Developer Mode in Settings, Privacy & Security on the iPhone."
+msgstr "Включите режим разработчика на iPhone: Настройки → Конфиденциальность и безопасность."

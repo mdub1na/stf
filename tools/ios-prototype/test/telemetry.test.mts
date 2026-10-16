@@ -36,6 +36,8 @@ describe('iPhone diagnostics and WDA profiles', () => {
     assert.equal(profileStatus([], bundle, selected, now).profile, 'missing')
     assert.equal(profileStatus(null, bundle, selected, now).profile, 'unknown')
     assert.equal(profileStatus([profile('not-a-date')], bundle, selected, now).profile, 'unknown')
+    assert.equal(profileStatus([{...profile('2099-01-01'), ProvisionedDevices: selected}],
+      bundle, selected, now).profile, 'missing')
     const ambiguous = profileStatus([profile('2026-10-17T12:00:00Z')
       , profile('2026-10-20T12:00:00Z')], bundle, selected, now)
     assert.equal(ambiguous.profile, 'ambiguous')
@@ -46,6 +48,7 @@ describe('iPhone diagnostics and WDA profiles', () => {
     assert.equal(diagnosticReason('checking_usb', 'iPhone is not connected'), 'disconnected')
     assert.equal(diagnosticReason('pairing', 'InvalidHostID'), 'trust_required')
     assert.equal(diagnosticReason('session', 'DeviceLocked'), 'locked')
+    assert.equal(diagnosticReason('mounting', 'DeveloperModeDisabled'), 'developer_mode_required')
     assert.equal(diagnosticReason('wda', 'IOS_WDA_MISSING'), 'wda_missing')
     assert.equal(diagnosticReason('tunnel', 'failed'), 'tunnel_unavailable')
     assert.equal(diagnosticReason('mounting', 'failed'), 'image_mount_failed')

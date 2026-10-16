@@ -13,7 +13,8 @@ export function profileStatus(
   const matching = profiles.filter(p => {
     const id = p?.Entitlements?.['application-identifier']
     return typeof id === 'string' && id.slice(id.indexOf('.') + 1) === bundleId &&
-      (p.ProvisionsAllDevices === true || p.ProvisionedDevices?.includes(udid))
+      (p.ProvisionsAllDevices === true ||
+        (Array.isArray(p.ProvisionedDevices) && p.ProvisionedDevices.includes(udid)))
   })
   const dates = matching.map(p => {
     const value = p.ExpirationDate
@@ -43,6 +44,9 @@ export function profileStatus(
 
 export function diagnosticReason(phase: string, error: unknown): string {
   const message = String(error)
+  if (/developer.?mode/i.test(message)) {
+    return 'developer_mode_required'
+  }
   if (/pair|trust|InvalidHostID|UserDenied/i.test(message)) {
     return 'trust_required'
   }

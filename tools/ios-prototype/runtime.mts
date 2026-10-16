@@ -237,12 +237,21 @@ export class IosRuntime {
 
   lock(): Promise<{locked: boolean}> {
     return this.execute(async wda => {
-      await wda.request('POST', '/wda/lock', {})
-      const result = await this.lockState()
-      if (!result.locked) {
-        throw new Error('IOS_LOCK_FAILED')
+      if ((await this.lockState()).locked) {
+        return {locked: true}
       }
-      return result
+      // XCTest pressLockButton hangs on our iOS 26 phone. Use the same short
+      // Power IOHID event that current WDA uses internally on iOS 27.
+      await wda.call('POST', '/wda/performIoHidEvent', {page: 12, usage: 48, duration: 0.5})
+      const deadline = Date.now() + 5000
+      while (Date.now() < deadline) {
+        const result = await this.lockState()
+        if (result.locked) {
+          return result
+        }
+        await this.sleep(200)
+      }
+      throw new Error('IOS_LOCK_FAILED')
     }, true)
   }
 

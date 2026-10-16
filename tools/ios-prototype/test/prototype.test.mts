@@ -49,6 +49,8 @@ async function fixture() {
   let failure = false
   let locked = false
   let protectedLock = false
+  let lockReports = 0
+  let lockPending = false
   const image = Buffer.from('89504e470d0a1a0a', 'hex')
   const origin = await listen(http.createServer(async(req, res) => {
     const chunks: Buffer[] = []
@@ -63,10 +65,14 @@ async function fixture() {
       res.end(JSON.stringify({value: {error: 'invalid session id', message: 'Session is gone'}}))
     }
     else if (req.url?.endsWith('/wda/locked')) {
+      if (lockPending && lockReports-- <= 0) {
+        locked = true
+        lockPending = false
+      }
       res.end(JSON.stringify({value: locked}))
     }
-    else if (req.url === '/wda/lock') {
-      locked = true
+    else if (req.url?.endsWith('/wda/performIoHidEvent')) {
+      lockPending = true
       res.end(JSON.stringify({value: null}))
     }
     else if (req.url === '/wda/unlock') {
@@ -103,7 +109,9 @@ async function fixture() {
     , headers: {Authorization: 'Bearer ' + token, 'Content-Type': 'application/json', ...headers}
     , ...(typeof value === 'undefined' ? {} : {body: JSON.stringify(value)})
     })
-  return {runtime, calls, wda, api, request, image, protect: () => {
+  return {runtime, calls, wda, api, request, image, delayLock: (reports: number) => {
+    lockReports = reports
+  }, protect: () => {
     locked = true
     protectedLock = true
     runtime.telemetry.status.locked = true
@@ -142,7 +150,13 @@ describe('iOS prototype HTTP and WDA integration', () => {
 
   it('keeps lock-screen input and screenshots available', async() => {
     const f = await fixture()
+    f.delayLock(2)
     assert.deepEqual(await (await f.request('/lock', {})).json(), {locked: true})
+    const power = f.calls.filter(call => call.path.endsWith('/wda/performIoHidEvent'))
+    assert.equal(power.length, 1)
+    assert.deepEqual(power[0]!.body, {page: 12, usage: 48, duration: 0.5})
+    assert.deepEqual(await (await f.request('/lock', {})).json(), {locked: true})
+    assert.equal(f.calls.filter(call => call.path.endsWith('/wda/performIoHidEvent')).length, 1)
     assert.equal(f.runtime.telemetry.status.locked, true)
     for (const [route, input] of [
       ['/tap', {x: 0.5, y: 0.5}], ['/swipe', {from: {x: 0.5, y: 0.9}, to: {x: 0.5, y: 0.2}}]

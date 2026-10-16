@@ -85,7 +85,7 @@ export function IosControlsCard({control, device}: {control: Control, device: De
         {t('Shake phone')}
       </Button>
       <Text size='xs' c='dimmed'>{t('Triggers the shake gesture used by application debug menus.')}</Text>
-      <Group grow>
+      <Group grow preventGrowOverflow={false}>
         <Button variant='light' leftSection={<IconRefresh size={18} />}
           disabled={busy || powerAccepted !== null} onClick={() => setConfirmPower('reboot')}>
           {t('Restart iPhone')}

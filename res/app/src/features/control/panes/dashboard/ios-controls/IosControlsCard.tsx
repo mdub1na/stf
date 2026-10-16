@@ -17,13 +17,13 @@ export function IosControlsCard({control, device}: {control: Control, device: De
   const [powerAccepted, setPowerAccepted] = useState<PowerAction | null>(null)
   const locked = device.ios?.locked === true
 
-  async function screenLock() {
+  async function screenLock(unlock: boolean) {
     setBusy(true)
     setError(null)
     setLockResult(null)
     try {
-      const result = await (locked ? control.unlock() : control.lock())
-      if (locked && result.body?.locked !== false) {
+      const result = await (unlock ? control.unlock() : control.lock())
+      if (unlock && result.body?.locked !== false) {
         setError(gettext('The screen is still locked. Swipe up and enter the passcode on the device screen.'))
       }
       else {
@@ -70,10 +70,16 @@ export function IosControlsCard({control, device}: {control: Control, device: De
 
   return <WidgetCard title={t('iPhone controls')} icon={IconDeviceMobileVibration} color='blue'>
     <Stack gap='sm'>
-      <Button variant='light' leftSection={locked ? <IconLockOpen size={18} /> : <IconLock size={18} />}
-        disabled={busy || powerAccepted !== null} onClick={screenLock}>
-        {locked ? t('Unlock screen') : t('Lock screen')}
-      </Button>
+      <Group grow preventGrowOverflow={false}>
+        <Button variant='light' leftSection={<IconLock size={18} />}
+          disabled={busy || powerAccepted !== null} onClick={() => screenLock(false)}>
+          {t('Lock screen')}
+        </Button>
+        <Button variant='light' leftSection={<IconLockOpen size={18} />}
+          disabled={busy || powerAccepted !== null} onClick={() => screenLock(true)}>
+          {t('Unlock screen')}
+        </Button>
+      </Group>
       <Text size='xs' c='dimmed'>
         {t('The lock screen remains visible while the display is awake. If a passcode is required, enter it on the device screen in STF.')}
       </Text>

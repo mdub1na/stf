@@ -1,9 +1,9 @@
 import assert from 'node:assert/strict'
 import {describe, it} from 'node:test'
-import {Shake} from '../shake.mts'
+import {AssistiveTouch} from '../assistive-touch.mts'
 import type {WdaClient} from '../wda.mts'
 
-function fixture(enabled = false, unsupported = false, ios26 = false) {
+function fixture(enabled = false, unsupported = false, ios26 = false, lock = false) {
   const commands: string[][] = []
   const taps: unknown[] = []
   const original = {defaultActiveApplication: 'auto', activeAppDetectionPoint: '80,80'}
@@ -36,7 +36,7 @@ function fixture(enabled = false, unsupported = false, ios26 = false) {
           children[0] = button(unsupported ? 'SOS' : 'Устройство')
         }
         if (stage === 2) {
-          children[0] = button('Еще')
+          children[0] = button(lock ? 'Блокировка экрана' : 'Еще')
         }
         if (stage === 3) {
           children[0] = ios26 ? button('Встряхнуть') :
@@ -53,7 +53,7 @@ function fixture(enabled = false, unsupported = false, ios26 = false) {
       stage++
     }
   } as unknown as WdaClient
-  const shake = new Shake('ios', 'selected-iphone', async(_binary, args) => {
+  const shake = new AssistiveTouch('ios', 'selected-iphone', async(_binary, args) => {
     commands.push(args)
     return {AssistiveTouchEnabled: enabled}
   }, async(_binary, args) => {
@@ -70,6 +70,14 @@ describe('physical iPhone Shake', () => {
     assert.equal(f.taps.length, 4)
     assert.deepEqual(f.settings(), f.original)
     assert.ok(f.commands.every(args => args.includes('--udid=selected-iphone')))
+    assert.equal(f.commands.at(-1)?.at(-1), 'disable')
+  })
+
+  it('locks via the known iOS 26 system action and restores AssistiveTouch', async() => {
+    const f = fixture(false, false, true, true)
+    await f.shake.perform(f.wda, new AbortController().signal, 'lock')
+    assert.equal(f.taps.length, 3)
+    assert.deepEqual(f.settings(), f.original)
     assert.equal(f.commands.at(-1)?.at(-1), 'disable')
   })
 

@@ -70,7 +70,7 @@ export function createControl(target: Device, channel: string) {
     , home: keySender('input.keyPress', 'home')
     , shake: () => sendTwoWay('device.shake', {}, 65000)
     , unlock: () => sendTwoWay('device.unlock', {}, 20000)
-    , lock: () => sendTwoWay('device.lock', {}, 20000)
+    , lock: () => sendTwoWay('device.lock', {}, 65000)
     , iosPower: (action: 'reboot' | 'shutdown') => sendTwoWay('device.iosPower', {action}, 25000)
     , menu: keySender('input.keyPress', 'menu')
     , back: keySender('input.keyPress', 'back')

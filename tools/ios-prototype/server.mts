@@ -147,9 +147,16 @@ export function createServer(
       }
       const input = await body(req)
       switch (req.url) {
-      case '/lock':
-        json(200, await runtime.lock())
+      case '/lock': {
+        const abort = new AbortController()
+        res.once('close', () => {
+          if (!res.writableEnded) {
+            abort.abort()
+          }
+        })
+        json(200, await runtime.lock(abort.signal))
         return
+      }
       case '/power':
         if (!['reboot', 'shutdown'].includes(input.action)) {
           throw new InputError('action must be reboot or shutdown')

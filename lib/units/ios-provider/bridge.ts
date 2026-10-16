@@ -34,7 +34,7 @@ export class IosBridge {
   private installId: string | null = null
   private lastObservation: IosDeviceState | null = null
   private lastHealth = ''
-  private shakeAbort: AbortController | null = null
+  private actionAbort: AbortController | null = null
   private readonly route: ReturnType<ReturnType<typeof wirerouter>['handler']>
 
   constructor(
@@ -143,13 +143,13 @@ export class IosBridge {
         const epoch = this.epoch
         this.transaction(String(channel), () => this.enqueue(epoch, async() => {
           const abort = new AbortController()
-          this.shakeAbort = abort
+          this.actionAbort = abort
           try {
             await this.client.request('/shake', {},
               AbortSignal.any([abort.signal, AbortSignal.timeout(60000)]))
           }
           finally {
-            this.shakeAbort = null
+            this.actionAbort = null
           }
         }))
       })
@@ -158,8 +158,17 @@ export class IosBridge {
           (await this.client.request('/unlock', {})).json(), true))
       })
       .on(wire.IosLockMessage, channel => {
-        this.transaction(String(channel), () => this.enqueue(this.epoch, async() =>
-          (await this.client.request('/lock', {})).json(), true))
+        this.transaction(String(channel), () => this.enqueue(this.epoch, async() => {
+          const abort = new AbortController()
+          this.actionAbort = abort
+          try {
+            return await (await this.client.request('/lock', {},
+              AbortSignal.any([abort.signal, AbortSignal.timeout(60000)]))).json()
+          }
+          finally {
+            this.actionAbort = null
+          }
+        }, true))
       })
       .on(wire.IosPowerMessage, (channel, message) => {
         this.transaction(String(channel), () => this.enqueue(this.epoch, async() => {
@@ -286,7 +295,7 @@ export class IosBridge {
   }
 
   leave(reason: string) {
-    this.shakeAbort?.abort()
+    this.actionAbort?.abort()
     const owner = this.owner
     const id = this.installId
     const lease = this.lease

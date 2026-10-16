@@ -28,7 +28,7 @@ function actionable(node: Node): boolean {
 
 // Real-device UIKit motion events are provided by the system AssistiveTouch Shake action.
 // No simulated accelerometer samples or application-specific debug endpoints are used.
-export class Shake {
+export class AssistiveTouch {
   private location: Point | null = null
   private goIos: string
   private udid: string
@@ -42,17 +42,18 @@ export class Shake {
     this.run = run
   }
 
-  async perform(wda: WdaClient, signal: AbortSignal) {
+  async perform(wda: WdaClient, signal: AbortSignal, action: 'shake' | 'lock' = 'shake') {
+    const errorPrefix = action === 'shake' ? 'IOS_SHAKE' : 'IOS_LOCK'
     const args = ['--udid=' + this.udid, 'assistivetouch']
     const original = await this.json(this.goIos, [...args, 'get'], 10000, signal) as
       {AssistiveTouchEnabled?: boolean}
     if (typeof original.AssistiveTouchEnabled !== 'boolean') {
-      throw new Error('IOS_SHAKE_UNAVAILABLE')
+      throw new Error(errorPrefix + '_UNAVAILABLE')
     }
     const {value: settings} = await wda.call('GET', '/appium/settings', undefined, signal)
     const {value: size} = await wda.call('GET', '/window/size', undefined, signal)
     if (!(size.width >= 200 && size.width <= 2000 && size.height >= 200 && size.height <= 2000)) {
-      throw new Error('IOS_SHAKE_UNAVAILABLE')
+      throw new Error(errorPrefix + '_UNAVAILABLE')
     }
     const configure = async(point: Point) => {
       await wda.call('POST', '/appium/settings', {settings: {
@@ -81,14 +82,14 @@ export class Shake {
           return tree
         }
       }
-      throw new Error('IOS_SHAKE_UNAVAILABLE')
+      throw new Error(errorPrefix + '_UNAVAILABLE')
     }
     const tap = async(node: Node) => {
       signal.throwIfAborted()
       const r = node.rect
       if (!r || !Object.values(r).every(Number.isFinite) || r.width <= 0 || r.height <= 0 ||
           r.x < 0 || r.y < 0 || r.x + r.width > size.width || r.y + r.height > size.height) {
-        throw new Error('IOS_SHAKE_MENU_UNSUPPORTED')
+        throw new Error(errorPrefix + '_MENU_UNSUPPORTED')
       }
       // XCTest element.click does not reliably activate AssistiveTouch on physical iPhones.
       await wda.gesture({x: (r.x + r.width / 2) / (size.width - 1)
@@ -112,18 +113,21 @@ export class Shake {
           , y: Math.min(size.height - 170, Math.max(170, this.location.y))})
       }
       // Only known system actions are selected; unknown layouts/languages fail without tapping.
-      const actions = [['Device', 'Устройство'], ['More', 'Еще', 'Ещё']
-        , ['Shake', 'Встряхивание', 'Встряхнуть']]
+      const targetLabels = action === 'shake' ? ['Shake', 'Встряхивание', 'Встряхнуть'] :
+        ['Lock Screen', 'Блокировка экрана', 'Заблокировать экран']
+      const actions = [['Device', 'Устройство']
+        , ...(action === 'shake' ? [['More', 'Еще', 'Ещё']] : []), targetLabels]
+      const targetIcon = action === 'shake' ? 'axaction.device.shake_DI' : 'axaction.device.lock_DI'
       for (const labels of actions) {
         const buttons = nodes(tree).filter(actionable)
-        const shake = [...buttons].reverse().find(n =>
-          nodes(n).some(c => c.name === 'axaction.device.shake_DI'))
-        const button = shake || buttons.find(n => labels.includes(n.name || n.label || ''))
+        const target = [...buttons].reverse().find(n =>
+          nodes(n).some(c => c.name === targetIcon))
+        const button = target || buttons.find(n => labels.includes(n.name || n.label || ''))
         if (!button) {
-          throw new Error('IOS_SHAKE_MENU_UNSUPPORTED')
+          throw new Error(errorPrefix + '_MENU_UNSUPPORTED')
         }
         await tap(button)
-        if (shake || labels.includes('Shake')) {
+        if (target || labels === targetLabels) {
           success = true
           break
         }

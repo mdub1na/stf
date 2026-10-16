@@ -6,7 +6,7 @@ import {WdaClient, WdaError} from './wda.mts'
 import {runPowerCommand} from './power.mts'
 import {selectedTunnel, rsdEndpoint} from './tunnel.mts'
 import {Telemetry, diagnosticReason} from './telemetry.mts'
-import {Shake} from './shake.mts'
+import {AssistiveTouch} from './assistive-touch.mts'
 import type {ImageMounter} from './tunnel.mts'
 
 export interface RuntimeOptions {
@@ -54,7 +54,7 @@ export class IosRuntime {
   private children: RuntimeProcess[] = []
   private queue: Promise<unknown> = Promise.resolve()
   private dependencies: RuntimeDependencies
-  private shaker: Shake
+  private assistiveTouch: AssistiveTouch
 
   constructor(options: RuntimeOptions, dependencies?: Partial<RuntimeDependencies>) {
     this.options = {...options}
@@ -69,7 +69,7 @@ export class IosRuntime {
     , wda: this.wda
     }
     this.telemetry = new Telemetry(this.options, this.dependencies.json)
-    this.shaker = new Shake(options.goIos, options.udid
+    this.assistiveTouch = new AssistiveTouch(options.goIos, options.udid
       , this.dependencies.json, this.dependencies.run)
   }
 
@@ -231,18 +231,36 @@ export class IosRuntime {
   }
 
   shake(signal: AbortSignal): Promise<void> {
-    return this.execute(wda => this.shaker.perform(wda,
+    return this.execute(wda => this.assistiveTouch.perform(wda,
       AbortSignal.any([this.abort.signal, signal, AbortSignal.timeout(45000)])))
   }
 
-  lock(): Promise<{locked: boolean}> {
+  lock(signal: AbortSignal): Promise<{locked: boolean}> {
     return this.execute(async wda => {
       if ((await this.lockState()).locked) {
         return {locked: true}
       }
-      // XCTest pressLockButton hangs on our iOS 26 phone. Use the same short
-      // Power IOHID event that current WDA uses internally on iOS 27.
-      await wda.call('POST', '/wda/performIoHidEvent', {page: 12, usage: 48, duration: 0.5})
+      const reportedVersion = (this.info as {ProductVersion?: string})?.ProductVersion || '27'
+      const version = Number.parseInt(reportedVersion, 10)
+      if (version < 27) {
+        const active = AbortSignal.any([this.abort.signal, signal, AbortSignal.timeout(45000)])
+        try {
+          await this.assistiveTouch.perform(wda, active, 'lock')
+        }
+        catch (error) {
+          if ((error as Error).message !== 'IOS_LOCK_UNAVAILABLE') {
+            throw error
+          }
+          // WDA's cached lock flag can be false after restarting on an asleep
+          // iOS 26 phone. Wake its system UI before looking for AssistiveTouch.
+          active.throwIfAborted()
+          await wda.request('POST', '/wda/homescreen', {}, active)
+          await this.assistiveTouch.perform(wda, active, 'lock')
+        }
+      }
+      else {
+        await wda.call('POST', '/wda/performIoHidEvent', {page: 12, usage: 48, duration: 0.5})
+      }
       const deadline = Date.now() + 5000
       while (Date.now() < deadline) {
         const result = await this.lockState()
@@ -277,14 +295,18 @@ export class IosRuntime {
 
   unlock(): Promise<{locked: boolean}> {
     return this.execute(async wda => {
-      try {
-        await wda.request('POST', '/wda/unlock', {})
-      }
-      catch (error) {
-        // A passcode-protected lock cannot be dismissed by WDA. Keep its screen
-        // available for the owner to enter the code; transport errors still fail.
-        if (!(error instanceof WdaError) || error.code !== 'unknown error') {
-          throw error
+      // Activating the system home screen wakes the real iOS 26 display;
+      // pressButton(Home) alone may leave it asleep despite a false lock flag.
+      for (const path of ['/wda/homescreen', '/wda/unlock']) {
+        try {
+          await wda.request('POST', path, {})
+        }
+        catch (error) {
+          // Protected locks may reject app activation or automatic dismissal.
+          // Keep the screen available for manual entry; transport errors fail.
+          if (!(error instanceof WdaError) || error.code !== 'unknown error') {
+            throw error
+          }
         }
       }
       return this.lockState()

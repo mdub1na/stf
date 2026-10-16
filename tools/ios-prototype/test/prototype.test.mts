@@ -51,6 +51,7 @@ async function fixture() {
   let protectedLock = false
   let lockReports = 0
   let lockPending = false
+  let asleep = false
   const image = Buffer.from('89504e470d0a1a0a', 'hex')
   const origin = await listen(http.createServer(async(req, res) => {
     const chunks: Buffer[] = []
@@ -73,6 +74,13 @@ async function fixture() {
     }
     else if (req.url?.endsWith('/wda/performIoHidEvent')) {
       lockPending = true
+      res.end(JSON.stringify({value: null}))
+    }
+    else if (req.url === '/wda/homescreen') {
+      asleep = false
+      if (!protectedLock) {
+        locked = false
+      }
       res.end(JSON.stringify({value: null}))
     }
     else if (req.url === '/wda/unlock') {
@@ -109,7 +117,11 @@ async function fixture() {
     , headers: {Authorization: 'Bearer ' + token, 'Content-Type': 'application/json', ...headers}
     , ...(typeof value === 'undefined' ? {} : {body: JSON.stringify(value)})
     })
-  return {runtime, calls, wda, api, request, image, delayLock: (reports: number) => {
+  return {runtime, calls, wda, api, request, image, asleep: () => asleep, sleep: () => {
+    asleep = true
+    locked = false
+    runtime.telemetry.status.locked = false
+  }, delayLock: (reports: number) => {
     lockReports = reports
   }, protect: () => {
     locked = true
@@ -173,6 +185,13 @@ describe('iOS prototype HTTP and WDA integration', () => {
     assert.equal(f.runtime.telemetry.status.locked, true)
     f.fail()
     assert.equal((await f.request('/unlock', {})).status, 502)
+  })
+
+  it('wakes an asleep display even if the cached WDA lock flag is false', async() => {
+    const f = await fixture()
+    f.sleep()
+    assert.deepEqual(await (await f.request('/unlock', {})).json(), {locked: false})
+    assert.equal(f.asleep(), false)
   })
 
   it('targets power to one UDID and rejects commands after acceptance', async() => {

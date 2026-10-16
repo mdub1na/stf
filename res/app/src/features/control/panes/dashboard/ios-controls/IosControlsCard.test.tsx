@@ -49,6 +49,7 @@ describe('iPhone controls', () => {
     await click('Unlock screen')
     expect(host.textContent).toContain('The iPhone is unlocked.')
     await render(false)
+    expect(button('Unlock screen').disabled).toBe(false)
     control.lock.mockResolvedValue({body: {locked: true}})
     await click('Lock screen')
     expect(control.lock).toHaveBeenCalledOnce()

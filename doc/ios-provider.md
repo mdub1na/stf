@@ -164,10 +164,14 @@ Diagnostics distinguish missing USB, trust/unlock, WDA missing or expired,
 tunnel, developer-image and WDA/session startup failures. Recovery retries
 automatically. A screen lock alone keeps the phone present, owned and streaming
 while WDA remains ready. The owner can use **Lock screen / Unlock screen**;
-Locking uses a short, fixed Power IOHID event and waits for `/wda/locked`:
-stock XCTest `pressLockButton` hung on the real iOS 26 phone. Repeating Lock on
-an already locked device does not send another Power press. WDA automatically
-dismisses only a simple lock without a passcode. If it remains
+iOS 27 locks through a short fixed Power IOHID event; earlier versions use the
+standard English/Russian AssistiveTouch Lock Screen action and restore its
+settings. An asleep iOS 26 phone may need the system Home command before its
+AssistiveTouch control is available. Unlock explicitly wakes the system UI
+before WDA's unlock command. Both UI buttons stay available because WDA's cached
+lock flag can lag a sleeping screen. Repeating Lock on a known locked device
+does not send another Power press. Automatic unlock supports a simple lock
+without a passcode. If it remains
 locked, swipe and enter the code directly on the streamed device screen. STF does
 not save a passcode. Screenshots, touch, Home and text input remain available
 while locked; shaking and app activation still require an unlocked screen.

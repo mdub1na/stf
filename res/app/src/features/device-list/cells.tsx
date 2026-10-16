@@ -76,6 +76,7 @@ export function ModelCell({device, label, onImage}: {
       <span className='device-small-image'>
         <DeviceImage
           src={device.enhancedImage24}
+          w={36} h={24}
           alt=''
           loading='lazy'
           className={`device-small-image-img ${classes.smallImage} ${zoomable ? classes.zoomable : ''}`}

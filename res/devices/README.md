@@ -1,7 +1,7 @@
 # Device catalogue artwork
 
 This directory contains original, generated model-representative illustrations,
-created with the built-in imagegen tool on 2026-10-16. They are not manufacturer
+created with the built-in imagegen tool on 2026-10-16/17. They are not manufacturer
 photographs or screenshots from connected phones. Wallpapers are illustrative;
 the artwork is intended for identifying devices, not measuring their hardware.
 The prompts and final background-extraction instructions are in `prompts.json`.
@@ -10,14 +10,14 @@ The separate legacy device-db assets retain their existing license and notices.
 
 | Model | Hardware identifiers | Asset |
 | --- | --- | --- |
-| iPhone 16 Plus | Apple / iOS / iPhone17,4 | iphone-16-plus-v1.webp |
-| iPhone 13 Pro | Apple / iOS / iPhone14,2 | iphone-13-pro-v1.webp |
-| iPhone 14 Plus | Apple / iOS / iPhone14,8 | iphone-14-plus-v1.webp |
-| Galaxy A55 5G | Samsung / Android / SM-A556E | galaxy-a55-v1.webp |
-| Galaxy Z Fold4 (closed) | Samsung / Android / SM-F936B | galaxy-z-fold4-v1.webp |
-| Mi A2 | Xiaomi / Android / Mi A2 | mi-a2-v1.webp |
-| Redmi Note 13 | Xiaomi or Redmi / Android / 23124RA7EO; product sapphiren | redmi-note-13-v1.webp |
-| Huawei nova 12i | Huawei / Android / CTR-L81; product HWCTRN-Q | huawei-nova-12i-v1.webp |
+| iPhone 16 Plus | Apple / iOS / iPhone17,4 | iphone-16-plus-v2.webp |
+| iPhone 13 Pro | Apple / iOS / iPhone14,2 | iphone-13-pro-v2.webp |
+| iPhone 14 Plus | Apple / iOS / iPhone14,8 | iphone-14-plus-v2.webp |
+| Galaxy A55 5G | Samsung / Android / SM-A556E | galaxy-a55-v2.webp |
+| Galaxy Z Fold4 (closed) | Samsung / Android / SM-F936B | galaxy-z-fold4-v2.webp |
+| Mi A2 | Xiaomi / Android / Mi A2 | mi-a2-v2.webp |
+| Redmi Note 13 | Xiaomi or Redmi / Android / 23124RA7EO; product sapphiren | redmi-note-13-v2.webp |
+| Huawei nova 12i | Huawei / Android / CTR-L81; product HWCTRN-Q | huawei-nova-12i-v2.webp |
 
 The nova 12i identity was confirmed by the owner of the connected device.
 Both A55 phones use the same model asset. Regional variants are added explicitly;
@@ -50,14 +50,17 @@ and component suites, check the packed npm artifact includes the assets, and
 inspect the image on both light and dark backgrounds. A failed image request
 falls back through the shared `DeviceImage` component.
 
-## Front/back and colour feasibility — 2026-10-16
+## Paired previews and colour — 2026-10-17
 
-Two portrait views fit in the existing 104 px-high device-card photo area:
-front on the left, rear on the right. A paired asset for `icon/x120` and
-`photo/x800`, with a front-only `icon/x24`, needs no new image host or wire field.
-Separate front/rear references would make later per-colour galleries more flexible.
-The current change adds front views only; paired artwork and colour selection
-are proposed follow-up work, not an implemented capability.
+The active v2 illustrations pair the front on the left and the rear on the
+right at **all three sizes**, including `icon/x24`, as a trial requested by the
+owner. Cards keep their 104 px photo area; table and toolbar icons reserve
+36 × 24 CSS pixels so both views remain visible. Transparent alpha is preserved
+on both themes. v1 front-only assets remain available for an easy rollback.
+The image colours are model defaults, not automatic per-unit detection. The
+owner confirmed gold for 13 Pro and black for 14 Plus/16 Plus. The Huawei
+colour was observed through its vendor properties; remaining Android finishes
+are illustrative. `prompts.json` records each pair and its hardware references.
 
 An actual targeted `DeviceEnclosureColor` lockdown query returned values absent
 from the bulk go-ios information. The owner confirmed these exact finishes:

@@ -14,14 +14,14 @@ function enrich(device: datautil.Device) {
 describe('device catalogue images', function() {
   it('recognizes the inventory without replacing hardware identifiers or measurements', function() {
     const inventory = [
-      ['iOS', 'Apple', 'iPhone17,4', 'iPhone 16 Plus', 'iphone-16-plus-v1.webp']
-    , ['iOS', 'Apple', 'iPhone14,2', 'iPhone 13 Pro', 'iphone-13-pro-v1.webp']
-    , ['iOS', 'Apple', 'iPhone14,8', 'iPhone 14 Plus', 'iphone-14-plus-v1.webp']
-    , ['Android', 'samsung', 'SM-A556E', 'Galaxy A55 5G', 'galaxy-a55-v1.webp']
-    , ['Android', 'samsung', 'SM-F936B', 'Galaxy Z Fold4', 'galaxy-z-fold4-v1.webp']
-    , ['Android', 'Xiaomi', 'Mi A2', 'Mi A2', 'mi-a2-v1.webp']
-    , ['Android', 'Xiaomi', '23124RA7EO', 'Redmi Note 13', 'redmi-note-13-v1.webp']
-    , ['Android', 'HUAWEI', 'CTR-L81', 'Huawei nova 12i', 'huawei-nova-12i-v1.webp']
+      ['iOS', 'Apple', 'iPhone17,4', 'iPhone 16 Plus', 'iphone-16-plus-v2.webp']
+    , ['iOS', 'Apple', 'iPhone14,2', 'iPhone 13 Pro', 'iphone-13-pro-v2.webp']
+    , ['iOS', 'Apple', 'iPhone14,8', 'iPhone 14 Plus', 'iphone-14-plus-v2.webp']
+    , ['Android', 'samsung', 'SM-A556E', 'Galaxy A55 5G', 'galaxy-a55-v2.webp']
+    , ['Android', 'samsung', 'SM-F936B', 'Galaxy Z Fold4', 'galaxy-z-fold4-v2.webp']
+    , ['Android', 'Xiaomi', 'Mi A2', 'Mi A2', 'mi-a2-v2.webp']
+    , ['Android', 'Xiaomi', '23124RA7EO', 'Redmi Note 13', 'redmi-note-13-v2.webp']
+    , ['Android', 'HUAWEI', 'CTR-L81', 'Huawei nova 12i', 'huawei-nova-12i-v2.webp']
     ]
     for (const [platform, manufacturer, model, name, image] of inventory) {
       const device = {platform: platform!, manufacturer: manufacturer!, model: model!
@@ -40,8 +40,8 @@ describe('device catalogue images', function() {
   it('matches product aliases and rejects a conflicting manufacturer or platform', function() {
     const huawei = {platform: 'Android', manufacturer: 'HUAWEI', product: 'HWCTRN-Q'}
     const redmi = {platform: 'Android', manufacturer: 'Xiaomi', product: 'sapphiren'}
-    assert.equal(enrich(huawei).image, 'huawei-nova-12i-v1.webp')
-    assert.equal(enrich(redmi).image, 'redmi-note-13-v1.webp')
+    assert.equal(enrich(huawei).image, 'huawei-nova-12i-v2.webp')
+    assert.equal(enrich(redmi).image, 'redmi-note-13-v2.webp')
     for (const device of [
       {platform: 'iOS', manufacturer: 'samsung', model: 'SM-A556E'}
     , {platform: 'Android', manufacturer: 'Other', model: 'SM-A556E'}
@@ -88,6 +88,10 @@ describe('device image HTTP resources', function() {
         assert.equal(bytes.toString('ascii', 8, 12), 'WEBP')
         assert.equal(bytes.toString('ascii', 12, 16), 'VP8X')
         assert.ok(bytes[20]! & 0x10, 'The distributed WebP must preserve alpha')
+        const width = bytes.readUIntLE(24, 3) + 1
+        const height = bytes.readUIntLE(27, 3) + 1
+        assert.ok(width >= height * 0.9, 'Paired views need room for both phone faces')
+        assert.equal(height, {'icon/x24': 48, 'icon/x120': 240, 'photo/x800': 800}[size])
       }
     }
   })

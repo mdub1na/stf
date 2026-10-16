@@ -23,7 +23,7 @@ function DeviceNameMenu({device, actions}: {device: Device, actions: DeviceActio
     <Menu position='bottom-start' width={280} shadow='md' disabled={!hasGroup} withinPortal>
       <Menu.Target>
         <UnstyledButton className={`${classes.deviceName} stf-vnc-device-name unselectable`}>
-          <DeviceImage className={classes.deviceImage} src={device.enhancedImage24} alt='' />
+          <DeviceImage w={36} h={24} className={classes.deviceImage} src={device.enhancedImage24} alt='' />
           <Text size='sm' fw={600} truncate className='device-name-text'>{device.enhancedName}</Text>
           {hasGroup && <IconChevronDown size={14} className='caret' />}
         </UnstyledButton>
@@ -33,7 +33,7 @@ function DeviceNameMenu({device, actions}: {device: Device, actions: DeviceActio
           <Menu.Item
             key={groupDevice.serial}
             className='device-name-menu-element'
-            leftSection={<DeviceImage className={classes.menuDeviceImage}
+            leftSection={<DeviceImage w={36} h={24} className={classes.menuDeviceImage}
               src={groupDevice.enhancedImage24} alt='' />}
             rightSection={(
               <ActionIcon

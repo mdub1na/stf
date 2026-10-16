@@ -2356,3 +2356,99 @@ msgstr ""
 
 msgid "Verifying installation..."
 msgstr ""
+
+#: res/app/src/ui/IosDeviceHealth.tsx:8
+msgid "Connect the iPhone by USB."
+msgstr ""
+
+#: res/app/src/ui/IosDeviceHealth.tsx:49
+msgid "Connected to power"
+msgstr ""
+
+#: res/app/src/features/control/panes/dashboard/ios-controls/IosControlsCard.tsx:33
+msgid "Could not shake the iPhone. Keep it unlocked and use the standard AssistiveTouch menu in English or Russian. Release and reconnect the device if the session ended."
+msgstr ""
+
+#: res/app/src/ui/IosDeviceHealth.tsx:62
+msgid "Device Name"
+msgstr ""
+
+#: res/app/src/ui/IosDeviceHealth.tsx:69
+msgid "Free storage"
+msgstr ""
+
+#: res/app/src/ui/IosDeviceHealth.tsx:11
+msgid "Install the signed WebDriverAgent runner."
+msgstr ""
+
+#: res/app/src/features/control/panes/dashboard/ios-controls/IosControlsCard.tsx:25
+msgid "iPhone controls"
+msgstr ""
+
+#: res/app/src/ui/IosDeviceHealth.tsx:57
+msgid "iPhone status"
+msgstr ""
+
+#: res/app/src/ui/IosDeviceHealth.tsx:47
+msgid "On battery"
+msgstr ""
+
+#: res/app/src/ui/IosDeviceHealth.tsx:18
+msgid "Preparing the iPhone..."
+msgstr ""
+
+#: res/app/src/ui/IosDeviceHealth.tsx:78
+msgid "Several WDA profiles match this device. The earliest expiry is shown; verify the installed build."
+msgstr ""
+
+#: res/app/src/features/control/panes/dashboard/ios-controls/IosControlsCard.tsx:29
+msgid "Shake phone"
+msgstr ""
+
+#: res/app/src/ui/IosDeviceHealth.tsx:16
+msgid "The iOS developer image could not be mounted."
+msgstr ""
+
+#: res/app/src/ui/IosDeviceHealth.tsx:19
+msgid "The iPhone provider is unavailable."
+msgstr ""
+
+#: res/app/src/ui/IosDeviceHealth.tsx:13
+msgid "The WebDriverAgent profile expires soon. Prepare a newly signed WDA."
+msgstr ""
+
+#: res/app/src/ui/IosDeviceHealth.tsx:12
+msgid "The WebDriverAgent profile has expired. Rebuild and reinstall WDA."
+msgstr ""
+
+#: res/app/src/ui/IosDeviceHealth.tsx:14
+msgid "The WebDriverAgent signing profile could not be identified."
+msgstr ""
+
+#: res/app/src/ui/IosDeviceHealth.tsx:81
+msgid "To renew WDA, rebuild the runner with your Apple Team, reinstall it on this iPhone and confirm developer trust. The Linux provider reconnects automatically."
+msgstr ""
+
+#: res/app/src/features/control/panes/dashboard/ios-controls/IosControlsCard.tsx:31
+msgid "Triggers the shake gesture used by application debug menus."
+msgstr ""
+
+#: res/app/src/ui/IosDeviceHealth.tsx:9
+msgid "Unlock the iPhone and confirm Trust This Computer."
+msgstr ""
+
+#: res/app/src/ui/IosDeviceHealth.tsx:10
+msgid "Unlock the iPhone on the device."
+msgstr ""
+
+#: res/app/src/ui/IosDeviceHealth.tsx:70
+msgid "Updated"
+msgstr ""
+
+#: res/app/src/ui/IosDeviceHealth.tsx:15
+msgid "Waiting for the iPhone USB tunnel."
+msgstr ""
+
+#: res/app/src/ui/IosDeviceHealth.tsx:17
+msgid "WebDriverAgent is restarting. Check device unlock and developer trust."
+msgstr ""

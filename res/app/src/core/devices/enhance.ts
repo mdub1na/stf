@@ -170,6 +170,9 @@ export function enhanceDevice(device: Device): Device {
     device.enhancedBatteryStatus = lookup(batteryStatuses, device.battery.status)
     device.enhancedBatteryTemp = `${device.battery.temp}°C`
   }
+  else if (device.ios?.battery) {
+    device.enhancedBatteryPercentage = `${device.ios.battery.level}%`
+  }
 
   if (device.owner) {
     device.enhancedUserProfileUrl = userProfileUrl(device.owner.email)

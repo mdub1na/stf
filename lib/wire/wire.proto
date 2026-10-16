@@ -87,6 +87,7 @@ enum MessageType {
   BluetoothCleanBondedMessage = 96;
   IosInstallStatusMessage     = 97;
   IosInstallCancelMessage     = 98;
+  IosShakeMessage             = 99;
   GroupUserChangeMessage     = 1200;
   DeviceGroupChangeMessage   = 1201;
   DeviceOriginGroupMessage   = 1202;
@@ -630,6 +631,9 @@ message IosInstallStatusMessage {
 
 message IosInstallCancelMessage {
   required string id = 1;
+}
+
+message IosShakeMessage {
 }
 
 message UninstallMessage {

@@ -7,10 +7,12 @@ import {controlHref, type DeviceActions} from './device-actions'
 import {StatusButton} from './cells'
 import {DeviceContextMenu} from './DeviceContextMenu'
 import {DeviceImage} from '@/ui/DeviceImage'
+import {IosHealthBadge} from '@/ui/IosDeviceHealth'
 import classes from './DeviceList.module.css'
 
 function TileMeta({device}: {device: Device}) {
-  const battery = device.battery ? Math.floor(device.battery.level / device.battery.scale * 100) : null
+  const battery = device.ios?.battery?.level ??
+    (device.battery ? Math.floor(device.battery.level / device.battery.scale * 100) : null)
   return (
     <Group gap={4} justify='center' wrap='wrap' className={classes.tileMeta}>
       {device.version && (
@@ -55,6 +57,7 @@ const DeviceTile = memo(function DeviceTile({device, actions}: {
         {device.enhancedModel}
       </Text>
       <TileMeta device={device} />
+      <IosHealthBadge device={device} />
     </>
   )
 

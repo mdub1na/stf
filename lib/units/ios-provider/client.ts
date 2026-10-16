@@ -1,10 +1,12 @@
 import {readFile} from 'node:fs/promises'
+import type {IosDeviceStatus} from '../../util/ios-device-status.js'
 
 export interface IosDeviceState {
   udid: string
   state: string
   generation: number
   instance?: string
+  ios?: IosDeviceStatus
   info?: {ProductType?: string, ProductVersion?: string, DeviceName?: string}
 }
 

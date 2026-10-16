@@ -79,6 +79,7 @@ export function createServer(
         json(200, {
           udid: runtime.options.udid, state: runtime.state, generation: runtime.generation
         , instance: runtime.instance
+        , ios: runtime.telemetry.status
         , error: runtime.lastError, info: runtime.info
         })
         return
@@ -146,6 +147,16 @@ export function createServer(
       }
       const input = await body(req)
       switch (req.url) {
+      case '/shake': {
+        const abort = new AbortController()
+        res.once('close', () => {
+          if (!res.writableEnded) {
+            abort.abort()
+          }
+        })
+        await runtime.shake(abort.signal)
+        break
+      }
       case '/tap': {
         const position = point(input)
         await runtime.execute(wda => wda.gesture(position))

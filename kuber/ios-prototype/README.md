@@ -86,7 +86,7 @@ bash kuber/ios-prototype/integrate-stf.sh /private/path/k3s-lab.yaml \
   ghcr.io/mdub1na/stf:ios-stf-COMMIT_SHA
 ```
 
-This updates the STF app, API and WebSocket unit, then adds an unprivileged provider
+This updates the STF processor, app, API and WebSocket unit, then adds an unprivileged provider
 sidecar to the existing phone Pod. It does not change Android providers or the
 database. The example targets the existing `stf.finservice.tech` deployment;
 adjust the public origin, screen URL and internal service names for another
@@ -96,8 +96,9 @@ and iOS version come from the device.
 The provider registers an ordinary STF device with platform `iOS`. The current
 preview supports portrait viewing, single-finger taps/swipes, Home, text input
 and screenshots. iOS pages hide APK/ADB, shell, logs, file exploration and
-rotation commands. Long press, multi-touch, clipboard read, app installation,
-landscape and Appium Grid registration remain outside this preview.
+rotation commands. Signed IPA installation, diagnostics, device information and
+Shake are described in [the provider guide](../../doc/ios-provider.md). Long press,
+multi-touch, clipboard read, landscape and Appium Grid remain outside this preview.
 
 Screen traffic is exposed only through the existing dynamic proxy. The provider
 accepts the configured browser origin and authenticates the forwarded signed
@@ -123,3 +124,52 @@ kubectl --kubeconfig /private/path/k3s-lab.yaml -n stf-ios-prototype \
 # Restore stf-app, stf-api and stf-websocket with `kubectl set image` and saved digests.
 kubectl --kubeconfig /private/path/k3s-lab.yaml delete -f kuber/ios-prototype/stf-network.yaml
 ```
+
+## Several iPhones
+
+Use a private copy of [fleet.example.json](fleet.example.json). Replace image
+SHAs with published images, the HTTPS origin, worker hostnames, UDIDs and signed
+runner identifiers. Each iPhone needs its own initial WDA installation,
+Developer Mode, USB trust and Proxmox USB passthrough. The same runner bundle ID
+can be used across devices, provided each signed build's profile includes that
+phone. Keep real identifiers in the private config rather than committing them.
+
+```sh
+# Inspect devices visible to an existing provider's USB worker (read-only).
+kubectl --kubeconfig /private/k3s.yaml -n stf-ios-prototype \
+  exec deployment/ios-prototype -c prototype -- ios list
+# Review generated resources; this does not create anything.
+node kuber/ios-prototype/fleet.mts --config /private/iphones.json > /private/fleet.json
+# Deploy all listed phones. Existing private API tokens are preserved.
+node kuber/ios-prototype/fleet.mts --config /private/iphones.json \
+  --apply --kubeconfig /private/k3s.yaml
+```
+
+Update the common STF processor, WebSocket, API and app with `integrate-stf.sh`
+before applying a fleet using the new health properties/Shake message. That
+script targets the original primary phone; the fleet config supplies the image
+and screen URL for additional providers.
+
+There is one Pod with tunnel/API/bridge per **explicitly configured UDID**.
+Ports are isolated by Pod network namespaces. Resource names derive from a UDID
+hash; each phone has a distinct PVC, token, screen Service, proxy alias and
+NetworkPolicy. Only the tunnel is privileged. go-ios tunnel startup also selects
+that UDID, preventing a second agent from claiming all phones. WDA requests,
+installation jobs, ownership and cached metadata stay in the selected Pod.
+
+Use `legacy: true` only for the existing primary device: it preserves its
+`ios-prototype` deployment, `ios-state` PVC, `ios-api-token` Secret and public
+screen URL. Do not change legacy assignment or reorder its identity during
+migration. A fresh installation can omit legacy entirely. New Pods have labels
+that the old primary Service does not select, preventing screen cross-routing.
+
+The CLI renders manifests by default. `--apply` requires an explicit kubeconfig
+and creates missing token Secrets from private temporary files; tokens are not
+printed or included in generated manifests. Reapplying does not prune phones
+removed from the config, delete PVCs or rotate existing tokens. Remove a retired
+phone's resources deliberately after preserving any required state.
+
+This is explicit fleet deployment, not an auto-discovery Kubernetes operator.
+A newly plugged phone appears in `ios list`, then must be prepared and added to
+the config. Unplugging one configured phone only restarts/reconnects its provider;
+other phones retain their own Pods and ownership.

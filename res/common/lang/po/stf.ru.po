@@ -2438,3 +2438,75 @@ msgstr "Загрузите IPA, подписанный для этого iPhone.
 
 msgid "Check installation status"
 msgstr "Проверить статус установки"
+
+msgid "Connect the iPhone by USB."
+msgstr "Подключите iPhone по USB."
+
+msgid "Connected to power"
+msgstr "Подключён к питанию"
+
+msgid "Device Name"
+msgstr "Имя устройства"
+
+msgid "Free storage"
+msgstr "Свободная память"
+
+msgid "Install the signed WebDriverAgent runner."
+msgstr "Установите подписанный WebDriverAgent Runner."
+
+msgid "iPhone status"
+msgstr "Состояние iPhone"
+
+msgid "On battery"
+msgstr "От аккумулятора"
+
+msgid "Preparing the iPhone..."
+msgstr "Подготовка iPhone..."
+
+msgid "Several WDA profiles match this device. The earliest expiry is shown; verify the installed build."
+msgstr "Найдено несколько профилей WDA. Показана ближайшая дата окончания; проверьте установленную сборку."
+
+msgid "The iOS developer image could not be mounted."
+msgstr "Не удалось подключить образ разработчика iOS."
+
+msgid "The iPhone provider is unavailable."
+msgstr "Сервис подключения iPhone недоступен."
+
+msgid "The WebDriverAgent profile expires soon. Prepare a newly signed WDA."
+msgstr "Срок действия профиля WebDriverAgent скоро закончится. Подготовьте заново подписанный WDA."
+
+msgid "The WebDriverAgent profile has expired. Rebuild and reinstall WDA."
+msgstr "Срок действия профиля WebDriverAgent истёк. Пересоберите и переустановите WDA."
+
+msgid "The WebDriverAgent signing profile could not be identified."
+msgstr "Не удалось определить профиль подписи WebDriverAgent."
+
+msgid "To renew WDA, rebuild the runner with your Apple Team, reinstall it on this iPhone and confirm developer trust. The Linux provider reconnects automatically."
+msgstr "Для продления подписи WDA пересоберите Runner со своей Apple Team, переустановите его на этот iPhone и подтвердите доверие разработчику. Сервис на Linux подключится автоматически."
+
+msgid "Unlock the iPhone and confirm Trust This Computer."
+msgstr "Разблокируйте iPhone и подтвердите «Доверять этому компьютеру»."
+
+msgid "Unlock the iPhone on the device."
+msgstr "Разблокируйте iPhone на самом устройстве."
+
+msgid "Updated"
+msgstr "Обновлено"
+
+msgid "Waiting for the iPhone USB tunnel."
+msgstr "Ожидание USB-туннеля iPhone."
+
+msgid "WebDriverAgent is restarting. Check device unlock and developer trust."
+msgstr "WebDriverAgent перезапускается. Проверьте разблокировку устройства и доверие разработчику."
+
+msgid "iPhone controls"
+msgstr "Управление iPhone"
+
+msgid "Shake phone"
+msgstr "Потрясти телефон"
+
+msgid "Triggers the shake gesture used by application debug menus."
+msgstr "Вызывает жест встряхивания, который открывает отладочное меню приложения."
+
+msgid "Could not shake the iPhone. Keep it unlocked and use the standard AssistiveTouch menu in English or Russian. Release and reconnect the device if the session ended."
+msgstr "Не удалось потрясти iPhone. Оставьте его разблокированным и используйте стандартное меню AssistiveTouch на русском или английском языке. Если сеанс завершён, освободите устройство и подключитесь заново."

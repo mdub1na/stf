@@ -32,6 +32,9 @@ export class IosBridge {
   private multitouch = false
   private lease = randomUUID()
   private installId: string | null = null
+  private lastObservation: IosDeviceState | null = null
+  private lastHealth = ''
+  private shakeAbort: AbortController | null = null
   private readonly route: ReturnType<ReturnType<typeof wirerouter>['handler']>
 
   constructor(
@@ -136,6 +139,20 @@ export class IosBridge {
           return job
         }))
       })
+      .on(wire.IosShakeMessage, channel => {
+        const epoch = this.epoch
+        this.transaction(String(channel), () => this.enqueue(epoch, async() => {
+          const abort = new AbortController()
+          this.shakeAbort = abort
+          try {
+            await this.client.request('/shake', {},
+              AbortSignal.any([abort.signal, AbortSignal.timeout(60000)]))
+          }
+          finally {
+            this.shakeAbort = null
+          }
+        }))
+      })
       .on(wire.IosInstallStatusMessage, (channel, message) => {
         this.installationCommand(String(channel), '/installations/status', message.id || undefined)
       })
@@ -216,6 +233,7 @@ export class IosBridge {
       }
       const current = await this.client.device()
       if (current.udid !== this.options.serial || current.state !== 'ready' ||
+          current.ios?.locked ||
           current.generation !== this.state?.generation || epoch !== this.epoch || !this.owner) {
         throw new Error('Device session changed')
       }
@@ -251,6 +269,7 @@ export class IosBridge {
   }
 
   leave(reason: string) {
+    this.shakeAbort?.abort()
     const owner = this.owner
     const id = this.installId
     const lease = this.lease
@@ -298,6 +317,7 @@ export class IosBridge {
     , wire.PasteMessage.$code, wire.ScreenCaptureMessage.$code
     , wire.InstallMessage.$code, wire.IosInstallStatusMessage.$code
     , wire.IosInstallCancelMessage.$code
+    , wire.IosShakeMessage.$code
     ]
     if (!supported.includes(envelope.type)) {
       if (envelope.channel) {
@@ -312,8 +332,13 @@ export class IosBridge {
   async poll() {
     try {
       const state = await this.client.device()
-      if (state.udid !== this.options.serial || state.state !== 'ready') {
+      if (state.udid !== this.options.serial) {
+        throw new Error('iOS backend selected a different phone')
+      }
+      this.lastObservation = state
+      if (state.state !== 'ready' || state.ios?.locked === true) {
         this.absent()
+        this.publishHealth(state)
         return
       }
       if (this.state?.generation !== state.generation || this.state?.instance !== state.instance) {
@@ -347,6 +372,7 @@ export class IosBridge {
       else {
         this.broadcast(new wire.DeviceHeartbeatMessage(this.options.serial))
       }
+      this.publishHealth(state)
       if (this.owner && Date.now() - this.activity > this.timeout * 1000) {
         this.leave('automatic_timeout')
       }
@@ -362,7 +388,24 @@ export class IosBridge {
     }
     catch (error) {
       this.absent()
+      if (this.lastObservation?.ios) {
+        this.publishHealth({...this.lastObservation, ios: {...this.lastObservation.ios
+          , reason: 'provider_unavailable', updatedAt: new Date().toISOString()}})
+      }
       this.report(error)
+    }
+  }
+
+  private publishHealth(state: IosDeviceState) {
+    if (!state.ios) {
+      return
+    }
+    const value = JSON.stringify(state.ios)
+    if (value !== this.lastHealth) {
+      this.broadcast(new wire.DevicePropertiesMessage(this.options.serial, [
+        new wire.DeviceProperty('stf.ios.status', value)
+      ]))
+      this.lastHealth = value
     }
   }
 

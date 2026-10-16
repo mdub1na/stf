@@ -20,6 +20,7 @@ import {gettext, translate, useTranslation} from '@/core/i18n'
 import {DeviceImage, deviceImageUrl} from '@/ui/DeviceImage'
 import {notifyFailure} from '@/ui/notify'
 import {WidgetCard} from '@/ui/WidgetCard'
+import {IosDeviceHealth} from '@/ui/IosDeviceHealth'
 import type {PaneProps} from '../../types'
 import classes from './InfoPane.module.css'
 
@@ -299,6 +300,7 @@ export default function InfoPane({device, control}: PaneProps) {
 
   return (
     <div className={`stf-info selectable ${classes.masonry}`}>
+      {device.platform === 'iOS' && <div className={classes.item}><IosDeviceHealth device={device} /></div>}
       {sections.filter(section => device.platform !== 'iOS' ||
         ['physical', 'display', 'hardware', 'platform'].includes(section.id)).map((section) => (
         <WidgetCard

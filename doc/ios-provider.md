@@ -134,3 +134,69 @@ Mach-O/CMS fixtures. `npm run test:component` covers browser-side file routing,
 status polling, lost acknowledgements and transaction timeouts without browser
 automation. Actual IPA acceptance and app launch still require a signed artifact
 and a real iPhone; record that separately from fixture tests.
+
+## Health, signing and recovery
+
+`GET /device` includes a bounded `ios` status object: preparation phase, actionable
+reason, retry count, last-ready time, device name, lock state, battery, free/total
+storage, telemetry time and WDA signing metadata. The provider selects the UDID
+for **every** device command. Battery and storage refresh about every 30 seconds;
+installed WDA and profiles refresh on connection and every 30 minutes. Failed
+reads retain their previous values and timestamps. Private `--state-dir`
+(default `~/.stf-ios`) preserves that metadata across Pod restarts on the PVC.
+
+WDA expiry comes from installed provisioning profiles matching the exact runner
+application identifier and the selected device. Multiple matching profiles are
+reported as ambiguous with the earliest date; the service cannot prove which
+one signed the installed app. Missing/unreadable profiles are not presented as
+valid. An expiry warning starts 48 hours before the reported UTC expiry.
+
+The STF bridge publishes the existing `DevicePropertiesMessage` with reserved
+property `stf.ios.status`. The processor validates and saves it only on iOS
+records; WebSocket updates the device card and control/info panes. Metadata also
+updates while an already registered phone is disconnected. A phone that has
+never completed WDA preparation has no STF identity yet: inspect its private
+API/Pod logs during onboarding.
+
+Diagnostics distinguish missing USB, trust/unlock, WDA missing or expired,
+tunnel, developer-image and WDA/session startup failures. Recovery retries
+automatically. Locking the phone releases its owner and viewers; unlock it and
+claim it again after preparation. Old commands and IPA jobs are not replayed.
+After a full device reboot, physical unlock may be required by iOS before USB
+services become available. A lost Proxmox USB assignment must be restored at the
+hypervisor; a provider cannot recover hardware absent from the VM.
+
+To renew a Personal Team runner:
+
+1. Reconnect the selected iPhone to the signing Mac and open the same WDA project.
+2. Select the existing Team and runner bundle ID, enable automatic signing,
+   then build/install the runner for that device. Keep the same identifier.
+3. Confirm developer trust/Developer Mode on the device if iOS requests it.
+4. Return USB to the Linux VM, unlock and confirm computer trust when prompted.
+5. The provider reconnects without a Mac runtime node. Check the new expiry in STF.
+
+Do not delete PVC pairing state or replace the runner through App Upload as a
+renewal shortcut. A profile alone cannot renew the app's code signature.
+
+## Shake on physical iPhones
+
+The iPhone dashboard has **Shake phone**. It invokes the system AssistiveTouch
+Shake action, which sends UIKit motion events to the foreground application.
+It does not synthesize CoreMotion accelerometer samples; apps listening only to
+raw sensor data may require a different debug trigger.
+
+The command is an owned transaction (`device.shake` → `IosShakeMessage` → private
+`POST /shake`). It shares the input queue, checks the runtime instance/generation,
+and cancels further gestures if ownership is released. UI waits for the result
+and displays a failure rather than claiming a successful shake.
+
+AssistiveTouch is enabled only for the operation when necessary. WDA inspects
+points without tapping to locate its separate system process, then uses bounds
+from its actual accessibility elements. It selects only known Device, More and
+Shake actions; English and Russian standard menus are supported. Customized or
+unrecognized menus fail explicitly. Existing WDA application-detection settings
+and the original AssistiveTouch enabled state are restored on success, failure
+and request cancellation. No WDA fork/re-signing is needed for this command.
+
+See [Apple's AssistiveTouch guide](https://support.apple.com/en-am/guide/iphone/iph96b21954/ios)
+and [Appium's shake limitation](https://appium.github.io/appium-xcuitest-driver/latest/reference/execute-methods/#mobile-shake).

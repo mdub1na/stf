@@ -24,6 +24,7 @@ import cookieSession from './middleware/cookie-session.js'
 import ip from './middleware/remote-ip.js'
 import auth from './middleware/auth.js'
 import {allowIosPacket} from './ios-access.js'
+import {readIosProperties} from '../../util/ios-device-status.js'
 import jwtutil from '../../util/jwtutil.js'
 
 import apiutil from '../../util/apiutil.js'
@@ -149,6 +150,7 @@ interface WebsocketClientEvents {
   'device.install': TransactionDataEvent<InstallData>
   'device.install.status': TransactionDataEvent<{id?: string}>
   'device.install.cancel': TransactionDataEvent<{id: string}>
+  'device.shake': TransactionDataEvent<Record<string, never>>
   'device.uninstall': TransactionDataEvent<UninstallMessageFields>
   'storage.upload': TransactionDataEvent<{url: string}>
   'forward.test': TransactionDataEvent<ForwardTestMessageFields>
@@ -461,6 +463,12 @@ export default function(options: WebsocketOptions) {
           important: true
         , data: message
         })
+      })
+      .on(wire.DevicePropertiesMessage, function(_channel, message) {
+        const ios = readIosProperties(message.properties)
+        if (ios) {
+          socket.emit('device.change', {important: false, data: {serial: message.serial, ios}})
+        }
       })
       .on(wire.TransactionProgressMessage, function(channel, message) {
         socket.emit('tx.progress', channel.toString(), message)
@@ -1032,6 +1040,13 @@ export default function(options: WebsocketOptions) {
               )
             )
           ])
+        })
+        .on('device.shake', function(channel, responseChannel) {
+          if (!channel.startsWith('ios:')) {
+            return
+          }
+          joinChannel(responseChannel)
+          push.send([channel, wireutil.transaction(responseChannel, new wire.IosShakeMessage())])
         })
         .on('device.install.status', function(channel, responseChannel, data) {
           if (!channel.startsWith('ios:')) {

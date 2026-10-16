@@ -68,6 +68,7 @@ export function createControl(target: Device, channel: string) {
     , keyUp: keySender('input.keyUp')
     , keyPress: keySender('input.keyPress')
     , home: keySender('input.keyPress', 'home')
+    , shake: () => sendTwoWay('device.shake', {}, 65000)
     , menu: keySender('input.keyPress', 'menu')
     , back: keySender('input.keyPress', 'back')
     , appSwitch: keySender('input.keyPress', 'app_switch')

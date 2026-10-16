@@ -24,6 +24,7 @@ const {values} = parseArgs({options: {
 , 'token-file': {type: 'string'}
 , 'storage-url': {type: 'string'}
 , 'install-dir': {type: 'string', default: path.join(os.homedir(), '.stf-ios-installations')}
+, 'state-dir': {type: 'string', default: path.join(os.homedir(), '.stf-ios')}
 , help: {type: 'boolean', short: 'h'}
 , doctor: {type: 'boolean'}
 }})
@@ -86,6 +87,7 @@ async function main(): Promise<void> {
   , imageMounter, pymobiledevice3: values.pymobiledevice3
   , wdaPort: ports[1]!, mjpegPort: ports[2]!, tunnelPort: ports[3]!
   , retryMs: 5000, startupMs: 60000
+  , stateDirectory: values['state-dir']
   })
   const installations = values['storage-url'] ? await Installations.create({
     storageUrl: values['storage-url'], directory: values['install-dir'], maxBytes: 1024 ** 3

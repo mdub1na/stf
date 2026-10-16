@@ -22,10 +22,12 @@ export class WdaClient {
     this.timeout = timeout
   }
 
-  async request(method: string, path: string, body?: unknown): Promise<WdaResponse> {
+  async request(
+    method: string, path: string, body?: unknown, signal?: AbortSignal
+  ): Promise<WdaResponse> {
     const response = await fetch(this.origin + path, {
       method
-    , signal: AbortSignal.timeout(this.timeout)
+    , signal: AbortSignal.any([AbortSignal.timeout(this.timeout), ...(signal ? [signal] : [])])
     , ...(typeof body === 'undefined' ? {} : {
         headers: {'Content-Type': 'application/json'}
       , body: JSON.stringify(body)
@@ -56,15 +58,20 @@ export class WdaClient {
     }
   }
 
-  call(method: string, path: string, body?: unknown): Promise<WdaResponse> {
+  call(method: string, path: string, body?: unknown, signal?: AbortSignal): Promise<WdaResponse> {
     if (!this.sessionId) {
       throw new Error('WDA session is not ready')
     }
-    return this.request(method, '/session/' + encodeURIComponent(this.sessionId) + path, body)
+    return this.request(method, '/session/' + encodeURIComponent(this.sessionId) + path,
+      body, signal)
   }
 
-  async gesture(from: {x: number, y: number}, to = from, duration = 50): Promise<void> {
-    const {value: size} = await this.call('GET', '/window/size')
+  async gesture(
+    from: {x: number, y: number}, to: {x: number, y: number} | null = null
+    , duration = 50, signal?: AbortSignal
+  ): Promise<void> {
+    const target = to || from
+    const {value: size} = await this.call('GET', '/window/size', undefined, signal)
     if (!(size?.width > 0 && size?.height > 0)) {
       throw new Error('WDA did not return a valid window size')
     }
@@ -79,11 +86,11 @@ export class WdaClient {
     , actions: [
         {type: 'pointerMove', duration: 0, origin: 'viewport', ...position(from)}
       , {type: 'pointerDown', button: 0}
-      , ...(from === to ? [{type: 'pause', duration}] : [
-          {type: 'pointerMove', duration, origin: 'viewport', ...position(to)}
+      , ...(from === target ? [{type: 'pause', duration}] : [
+          {type: 'pointerMove', duration, origin: 'viewport', ...position(target)}
         ])
       , {type: 'pointerUp', button: 0}
       ]
-    }]})
+    }]}, signal)
   }
 }

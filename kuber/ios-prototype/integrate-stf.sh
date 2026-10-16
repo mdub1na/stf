@@ -20,6 +20,11 @@ trap 'rm -f "$patch_file"' EXIT
 sed "s|ghcr.io/mdub1na/stf:SET_STF_IMAGE_TAG|$stf_image|g" \
   "$manifest_dir/stf-integration.yaml" > "$patch_file"
 
+# Persist iOS health properties before providers begin publishing them.
+kubectl --kubeconfig "$cluster_config" -n stf set image \
+  --request-timeout=15s deployment/stf-processor "stf-processor=$stf_image"
+kubectl --kubeconfig "$cluster_config" -n stf rollout status deployment/stf-processor \
+  --request-timeout=610s --timeout=600s
 # Enable ownership checks before publishing the phone to STF.
 kubectl --kubeconfig "$cluster_config" -n stf set image \
   --request-timeout=15s deployment/stf-websocket "stf-websocket=$stf_image"

@@ -5,7 +5,8 @@ import {WebSocket} from 'ws'
 import wire from '../../lib/wire/index.js'
 import wireutil from '../../lib/wire/util.js'
 import {IosBridge} from '../../lib/units/ios-provider/bridge.js'
-import {PrototypeClient} from '../../lib/units/ios-provider/client.js'
+import {PrototypeClient, type IosDeviceState} from '../../lib/units/ios-provider/client.js'
+import type {IosDeviceStatus} from '../../lib/util/ios-device-status.js'
 import {MjpegDecoder} from '../../lib/units/ios-provider/mjpeg.js'
 import {authorizeScreen, type IosOwner} from '../../lib/units/ios-provider/access.js'
 import {createScreenServer} from '../../lib/units/ios-provider/screen.js'
@@ -40,7 +41,7 @@ describe('Linux iOS integration', function() {
   })
 
   async function fixture() {
-    const state = {
+    const state: IosDeviceState = {
       udid: serial, state: 'ready', generation: 1, instance: 'backend-instance'
     , info: {ProductType: 'iPhone17,4', ProductVersion: '27.0.1'}
     }
@@ -193,6 +194,36 @@ describe('Linux iOS integration', function() {
     f.send(new wire.IosInstallCancelMessage('job'), true)
     await new Promise(resolve => setTimeout(resolve, 20))
     assert.equal(f.requests.length, 4)
+  })
+
+  it('sends Shake only through the owned transaction and rejects stale sessions', async function() {
+    const f = await fixture()
+    f.send(new wire.IosShakeMessage(), true)
+    await new Promise(resolve => setTimeout(resolve, 20))
+    assert.equal(f.requests.length, 0)
+    await f.join()
+    f.send(new wire.IosShakeMessage(), true)
+    await until(() => f.requests.length === 1)
+    assert.equal(f.requests[0]!.path, '/shake')
+    f.state.instance = 'replacement'
+    f.send(new wire.IosShakeMessage(), true)
+    await new Promise(resolve => setTimeout(resolve, 20))
+    assert.equal(f.requests.length, 1)
+  })
+
+  it('publishes health while disconnected and releases ownership when locked', async function() {
+    const f = await fixture()
+    await f.join()
+    f.state.ios = {reason: 'locked', locked: true} as IosDeviceStatus
+    await f.bridge.poll()
+    assert.equal(f.bridge.owner, null)
+    assert.ok(f.sent.some(item => item.envelope.type === wire.DeviceAbsentMessage.$code))
+    f.state.state = 'waiting'
+    f.state.ios.reason = 'disconnected'
+    await f.bridge.poll()
+    const health = f.sent.filter(item => item.envelope.type === wire.DevicePropertiesMessage.$code)
+    const message = wire.DevicePropertiesMessage.decode(health.at(-1)!.envelope.message)
+    assert.equal(JSON.parse(message.properties[0]!.value).reason, 'disconnected')
   })
 
   it('invalidates commands when the backend restarts at the same generation', async function() {

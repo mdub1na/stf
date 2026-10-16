@@ -1,0 +1,93 @@
+name: iOS prototype
+
+on:
+  pull_request:
+    paths:
+      - tools/ios-prototype/**
+      - kuber/ios-prototype/**
+      - .github/workflows/ios-prototype.yml
+      - doc/ios-prototype.md
+      - package.json
+      - lib/**
+      - res/app/src/**
+      - test/units/ios-provider.mts
+  push:
+    branches: [develop]
+
+permissions:
+  contents: read
+
+jobs:
+  prototype:
+    name: Linux prototype / Node ${{ matrix.node }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    strategy:
+      matrix:
+        node: ['22.18.0', '24']
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: ${{ matrix.node }}
+      - name: Verify the dependency-free entry point
+        run: node tools/ios-prototype/main.mts --help
+      - name: Test HTTP, WDA and process lifecycle without a device
+        run: npm run test:ios-prototype
+
+  image:
+    name: Linux USB prototype image
+    if: github.event_name == 'push' || github.event.pull_request.head.repo.full_name == github.repository
+    needs: prototype
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+      - uses: docker/setup-buildx-action@v4
+      - uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - uses: docker/build-push-action@v7
+        with:
+          context: .
+          file: kuber/ios-prototype/Dockerfile
+          platforms: linux/amd64
+          push: true
+          tags: ghcr.io/${{ github.repository }}:ios-prototype-${{ github.event.pull_request.head.sha || github.sha }}
+          cache-from: type=gha,scope=ios-prototype-amd64
+          cache-to: type=gha,mode=max,scope=ios-prototype-amd64
+
+  stf-image:
+    name: STF iOS integration image
+    if: github.event_name == 'push' || github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+      - uses: docker/setup-buildx-action@v4
+      - uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - uses: docker/build-push-action@v7
+        with:
+          context: .
+          file: Dockerfile
+          platforms: linux/amd64
+          push: true
+          tags: ghcr.io/${{ github.repository }}:ios-stf-${{ github.event.pull_request.head.sha || github.sha }}
+          cache-from: type=gha,scope=ios-stf-amd64
+          cache-to: type=gha,mode=max,scope=ios-stf-amd64

@@ -143,6 +143,9 @@ msgstr ""
 msgid "Annotated"
 msgstr ""
 
+msgid "Another installation is in progress. Wait for it to finish."
+msgstr ""
+
 #: res/app/src/features/settings/devices/DevicesSettings.tsx:46
 msgid "Any"
 msgstr ""
@@ -299,6 +302,12 @@ msgstr ""
 msgid "Check errors below"
 msgstr ""
 
+msgid "Check installation status"
+msgstr ""
+
+msgid "Checking IPA..."
+msgstr ""
+
 #: res/app/src/features/group-list/columns.tsx:85
 #: res/app/src/features/settings/groups/GroupSchedule.tsx:62
 msgid "Class"
@@ -331,6 +340,10 @@ msgstr ""
 msgid "Cold"
 msgstr ""
 
+#: res/app/src/features/control/panes/dashboard/ios-controls/IosControlsCard.tsx:105
+msgid "Confirm"
+msgstr ""
+
 #: res/app/src/features/settings/devices/DevicesSettings.tsx:194
 #: res/app/src/features/settings/groups/GroupList.tsx:177
 #: res/app/src/features/settings/users/UsersSettings.tsx:268
@@ -343,6 +356,10 @@ msgstr ""
 msgid "Conflicts"
 msgstr ""
 
+#: res/app/src/ui/IosDeviceHealth.tsx:8
+msgid "Connect the iPhone by USB."
+msgstr ""
+
 #: res/app/src/core/devices/enhance.ts:20
 #: res/app/src/core/devices/enhance.ts:7
 #: res/app/src/features/control/panes/info/InfoPane.tsx:234
@@ -351,6 +368,10 @@ msgstr ""
 
 #: res/app/src/ui/AppLayout.tsx:105
 msgid "Connected successfully."
+msgstr ""
+
+#: res/app/src/ui/IosDeviceHealth.tsx:49
+msgid "Connected to power"
 msgstr ""
 
 #: res/app/src/features/group-list/GroupListPage.tsx:128
@@ -390,6 +411,14 @@ msgstr ""
 
 #: res/app/src/features/control/panes/info/InfoPane.tsx:288
 msgid "Cores"
+msgstr ""
+
+#: res/app/src/features/control/panes/dashboard/ios-controls/IosControlsCard.tsx:34
+msgid "Could not change the screen lock. Check the iPhone connection and try again."
+msgstr ""
+
+#: res/app/src/features/control/panes/dashboard/ios-controls/IosControlsCard.tsx:33
+msgid "Could not shake the iPhone. Keep it unlocked and use the standard AssistiveTouch menu in English or Russian. Release and reconnect the device if the session ended."
 msgstr ""
 
 #: res/app/src/features/control/panes/info/InfoPane.tsx:283
@@ -521,6 +550,10 @@ msgstr ""
 msgid "Device list"
 msgstr ""
 
+#: res/app/src/ui/IosDeviceHealth.tsx:62
+msgid "Device Name"
+msgstr ""
+
 #: res/app/src/features/settings/devices/DevicesSettings.tsx:52
 msgid "Device notes state"
 msgstr ""
@@ -622,6 +655,10 @@ msgstr ""
 msgid "Enable Bluetooth"
 msgstr ""
 
+#: res/app/src/ui/IosDeviceHealth.tsx:11
+msgid "Enable Developer Mode in Settings, Privacy & Security on the iPhone."
+msgstr ""
+
 #: res/app/src/features/control/panes/automation/DeviceSettingsCard.tsx:127
 msgid "Enable WiFi"
 msgstr ""
@@ -711,6 +748,10 @@ msgstr ""
 
 #: res/app/src/features/control/panes/info/InfoPane.tsx:218
 msgid "FPS"
+msgstr ""
+
+#: res/app/src/ui/IosDeviceHealth.tsx:69
+msgid "Free storage"
 msgstr ""
 
 #: res/app/src/features/control/panes/info/InfoPane.tsx:289
@@ -932,12 +973,19 @@ msgstr ""
 msgid "Information"
 msgstr ""
 
+#: res/app/src/ui/IosDeviceHealth.tsx:11
+msgid "Install the signed WebDriverAgent runner."
+msgstr ""
+
 #: res/app/src/core/install.ts:159
 msgid "Installation canceled by user."
 msgstr ""
 
 #: res/app/src/core/install.ts:157
 msgid "Installation failed due to an unknown error."
+msgstr ""
+
+msgid "Installation status is unavailable. Check the status again before retrying."
 msgstr ""
 
 #: res/app/src/core/install.ts:156
@@ -949,8 +997,19 @@ msgstr ""
 msgid "Installation timed out."
 msgstr ""
 
+msgid "Installation was interrupted by a device or session disconnect."
+msgstr ""
+
 #: res/app/src/core/install.ts:57
 msgid "Installing app..."
+msgstr ""
+
+#: res/app/src/features/control/panes/dashboard/ios-controls/IosControlsCard.tsx:25
+msgid "iPhone controls"
+msgstr ""
+
+#: res/app/src/ui/IosDeviceHealth.tsx:57
+msgid "iPhone status"
 msgstr ""
 
 #: res/app/src/ui/Pager.tsx:61
@@ -983,8 +1042,7 @@ msgstr ""
 msgid "Launch Activity"
 msgstr ""
 
-#: res/app/src/core/install.ts:58
-msgid "Launching activity..."
+msgid "Launching app..."
 msgstr ""
 
 #: res/app/src/features/auth/SignInForm.tsx:115
@@ -1010,6 +1068,10 @@ msgstr ""
 #: res/app/src/features/settings/devices/DevicesSettings.tsx:225
 #: res/app/src/features/settings/groups/GroupDevices.tsx:40
 msgid "Location"
+msgstr ""
+
+#: res/app/src/features/control/panes/dashboard/ios-controls/IosControlsCard.tsx:75
+msgid "Lock screen"
 msgstr ""
 
 #: res/app/src/features/auth/SignInForm.tsx:161
@@ -1203,16 +1265,15 @@ msgstr ""
 msgid "No Groups"
 msgstr ""
 
+msgid "No installation was found in the current device session."
+msgstr ""
+
 #: res/app/src/features/control/panes/logs/LogsPane.tsx:28
 msgid "No log entries match the filters"
 msgstr ""
 
 #: res/app/src/features/control/panes/dashboard/shell/ShellCard.tsx:98
 msgid "No output"
-msgstr ""
-
-#: res/app/src/features/control/panes/info/InfoPane.tsx:104
-msgid "No photo available"
 msgstr ""
 
 #: res/app/src/features/control/panes/advanced/PortForwardingCard.tsx:94
@@ -1273,6 +1334,10 @@ msgstr ""
 #: res/app/src/ui/modals.tsx:67
 #: res/app/src/ui/modals.tsx:88
 msgid "OK"
+msgstr ""
+
+#: res/app/src/ui/IosDeviceHealth.tsx:47
+msgid "On battery"
 msgstr ""
 
 #: res/app/src/core/common.ts:20
@@ -1421,6 +1486,14 @@ msgstr ""
 msgid "Power"
 msgstr ""
 
+#: res/app/src/features/control/panes/dashboard/ios-controls/IosControlsCard.tsx:95
+msgid "Power off iPhone"
+msgstr ""
+
+#: res/app/src/features/control/panes/dashboard/ios-controls/IosControlsCard.tsx:101
+msgid "Power off this iPhone? Control will end. Turning it on again requires physical access."
+msgstr ""
+
 #: res/app/src/features/control/panes/info/InfoPane.tsx:203
 msgid "Power Source"
 msgstr ""
@@ -1429,6 +1502,10 @@ msgstr ""
 #: res/app/src/core/devices/enhance.ts:23
 #: res/app/src/features/control/ControlPage.tsx:288
 msgid "Preparing"
+msgstr ""
+
+#: res/app/src/ui/IosDeviceHealth.tsx:18
+msgid "Preparing the iPhone..."
 msgstr ""
 
 #: res/app/src/features/settings/devices/DevicesSettings.tsx:50
@@ -1456,6 +1533,9 @@ msgstr ""
 #: res/app/src/features/control/panes/info/InfoPane.tsx:263
 #: res/app/src/features/device-list/columns.tsx:263
 msgid "Product"
+msgstr ""
+
+msgid "Profile expires"
 msgstr ""
 
 #: res/app/src/core/install.ts:56
@@ -1570,6 +1650,9 @@ msgstr ""
 msgid "Repetitions must be > 0 for this Class"
 msgstr ""
 
+msgid "Replacing WebDriverAgent from this panel is not allowed."
+msgstr ""
+
 #: res/app/src/features/control/panes/dashboard/navigation/NavigationCard.tsx:65
 #: res/app/src/features/settings/general/GeneralSettings.tsx:104
 #: res/app/src/ui/ColumnChoice.tsx:87
@@ -1590,6 +1673,14 @@ msgstr ""
 
 #: res/app/src/features/control/panes/advanced/MaintenanceCard.tsx:35
 msgid "Restart Device"
+msgstr ""
+
+#: res/app/src/features/control/panes/dashboard/ios-controls/IosControlsCard.tsx:91
+msgid "Restart iPhone"
+msgstr ""
+
+#: res/app/src/features/control/panes/dashboard/ios-controls/IosControlsCard.tsx:102
+msgid "Restart this iPhone? Control will end. After startup, iOS may require the first unlock on the phone."
 msgstr ""
 
 #: res/app/src/features/control/screen/DeviceScreen.tsx:167
@@ -1702,6 +1793,9 @@ msgstr ""
 msgid "Search"
 msgstr ""
 
+msgid "Select a valid IPA for a physical iPhone."
+msgstr ""
+
 #: res/app/src/features/settings/groups/GroupList.tsx:154
 #: res/app/src/features/settings/groups/shared/ObjectsTable.tsx:137
 #: res/app/src/features/settings/users/UsersSettings.tsx:232
@@ -1742,6 +1836,14 @@ msgstr ""
 
 #: res/app/src/features/settings/general/GeneralSettings.tsx:101
 msgid "Settings cleared"
+msgstr ""
+
+#: res/app/src/ui/IosDeviceHealth.tsx:78
+msgid "Several WDA profiles match this device. The earliest expiry is shown; verify the installed build."
+msgstr ""
+
+#: res/app/src/features/control/panes/dashboard/ios-controls/IosControlsCard.tsx:29
+msgid "Shake phone"
 msgstr ""
 
 #: res/app/src/features/control/panes/dashboard/shell/ShellCard.tsx:46
@@ -1886,6 +1988,15 @@ msgstr ""
 msgid "Text"
 msgstr ""
 
+msgid "The app may already be installed. Check the iPhone before retrying."
+msgstr ""
+
+msgid "The app was installed but could not be opened. Open it on the iPhone and check developer trust."
+msgstr ""
+
+msgid "The app was not found on the iPhone after installation."
+msgstr ""
+
 #: res/app/src/features/control/screen/DeviceScreen.tsx:163
 msgid "The current view is marked secure and cannot be viewed remotely."
 msgstr ""
@@ -1896,6 +2007,54 @@ msgstr ""
 
 #: res/app/src/core/install.ts:168
 msgid "The existing package could not be deleted."
+msgstr ""
+
+msgid "The installation request is invalid."
+msgstr ""
+
+#: res/app/src/ui/IosDeviceHealth.tsx:16
+msgid "The iOS developer image could not be mounted."
+msgstr ""
+
+msgid "The IPA exceeds the 1 GiB limit."
+msgstr ""
+
+msgid "The IPA signature or provisioning profile is invalid. Upload a signed development, ad hoc, or enterprise IPA."
+msgstr ""
+
+#: res/app/src/features/control/panes/dashboard/ios-controls/IosControlsCard.tsx:111
+msgid "The iPhone accepted the power-off command."
+msgstr ""
+
+#: res/app/src/features/control/panes/dashboard/ios-controls/IosControlsCard.tsx:111
+msgid "The iPhone accepted the restart command."
+msgstr ""
+
+msgid "The iPhone could not install this IPA."
+msgstr ""
+
+#: res/app/src/features/control/panes/dashboard/ios-controls/IosControlsCard.tsx:64
+msgid "The iPhone did not confirm the power command. Check its connection before trying again."
+msgstr ""
+
+#: res/app/src/features/control/panes/dashboard/ios-controls/IosControlsCard.tsx:81
+msgid "The iPhone is locked."
+msgstr ""
+
+#: res/app/src/ui/IosDeviceHealth.tsx:10
+msgid "The iPhone is locked. Open control and use Unlock screen."
+msgstr ""
+
+#: res/app/src/features/control/panes/dashboard/ios-controls/IosControlsCard.tsx:81
+msgid "The iPhone is unlocked."
+msgstr ""
+
+#: res/app/src/ui/IosDeviceHealth.tsx:19
+msgid "The iPhone provider is unavailable."
+msgstr ""
+
+#: res/app/src/features/control/panes/dashboard/ios-controls/IosControlsCard.tsx:78
+msgid "The lock screen remains visible while the display is awake. If a passcode is required, enter it on the device screen in STF."
 msgstr ""
 
 #: res/app/src/core/install.ts:180
@@ -2010,12 +2169,19 @@ msgstr ""
 msgid "The parser was unable to retrieve the AndroidManifest.xml file."
 msgstr ""
 
+msgid "The provisioning profile has expired. Sign the IPA again."
+msgstr ""
+
 #: res/app/src/core/install.ts:165
 msgid "The requested shared user does not exist."
 msgstr ""
 
 #: res/app/src/features/settings/groups/GroupSchedule.tsx:56
 msgid "The schedule can only be changed while the group is pending"
+msgstr ""
+
+#: res/app/src/features/control/panes/dashboard/ios-controls/IosControlsCard.tsx:27
+msgid "The screen is still locked. Swipe up and enter the passcode on the device screen."
 msgstr ""
 
 #: res/app/src/core/install.ts:196
@@ -2030,12 +2196,39 @@ msgstr ""
 msgid "The system failed to install the package because the user is restricted from installing apps."
 msgstr ""
 
+msgid "The uploaded file is no longer available. Upload it again."
+msgstr ""
+
 #: res/app/src/core/install.ts:162
 msgid "The URI passed in is invalid."
 msgstr ""
 
+#: res/app/src/ui/IosDeviceHealth.tsx:13
+msgid "The WebDriverAgent profile expires soon. Prepare a newly signed WDA."
+msgstr ""
+
+#: res/app/src/ui/IosDeviceHealth.tsx:12
+msgid "The WebDriverAgent profile has expired. Rebuild and reinstall WDA."
+msgstr ""
+
+#: res/app/src/ui/IosDeviceHealth.tsx:14
+msgid "The WebDriverAgent signing profile could not be identified."
+msgstr ""
+
+msgid "There is not enough free space on the iPhone."
+msgstr ""
+
+msgid "This app is not compatible with a physical iPhone."
+msgstr ""
+
+msgid "This app requires a newer iOS version."
+msgstr ""
+
 #: res/app/src/features/control/panes/explorer/ExplorerPane.tsx:265
 msgid "This folder is empty"
+msgstr ""
+
+msgid "This iPhone is not included in the provisioning profile."
 msgstr ""
 
 #: res/app/src/features/control/panes/logs/LogsPane.tsx:111
@@ -2056,6 +2249,10 @@ msgstr ""
 msgid "Title"
 msgstr ""
 
+#: res/app/src/ui/IosDeviceHealth.tsx:81
+msgid "To renew WDA, rebuild the runner with your Apple Team, reinstall it on this iPhone and confirm developer trust. The Linux provider reconnects automatically."
+msgstr ""
+
 #: res/app/src/features/device-list/DeviceStats.tsx:39
 msgid "Total Devices"
 msgstr ""
@@ -2066,6 +2263,10 @@ msgstr ""
 
 #: res/app/src/features/group-list/GroupStats.tsx:38
 msgid "Total groups"
+msgstr ""
+
+#: res/app/src/features/control/panes/dashboard/ios-controls/IosControlsCard.tsx:31
+msgid "Triggers the shake gesture used by application debug menus."
 msgstr ""
 
 #: res/app/src/features/settings/devices/DevicesSettings.tsx:44
@@ -2107,8 +2308,23 @@ msgstr ""
 msgid "Unknown reason."
 msgstr ""
 
+#: res/app/src/features/control/panes/dashboard/ios-controls/IosControlsCard.tsx:75
+msgid "Unlock screen"
+msgstr ""
+
+#: res/app/src/ui/IosDeviceHealth.tsx:9
+msgid "Unlock the iPhone and confirm Trust This Computer."
+msgstr ""
+
 #: res/app/src/core/devices/enhance.ts:45
 msgid "Unspecified Failure"
+msgstr ""
+
+#: res/app/src/ui/IosDeviceHealth.tsx:70
+msgid "Updated"
+msgstr ""
+
+msgid "Upload an IPA signed for this iPhone. STF does not sign apps."
 msgstr ""
 
 #: res/app/src/features/control/panes/dashboard/install/InstallCard.tsx:205
@@ -2166,6 +2382,9 @@ msgstr ""
 msgid "Using Fallback"
 msgstr ""
 
+msgid "Verifying installation..."
+msgstr ""
+
 #: res/app/src/features/control/panes/info/InfoPane.tsx:276
 msgid "Version"
 msgstr ""
@@ -2202,6 +2421,10 @@ msgstr ""
 msgid "Waiting for log entries"
 msgstr ""
 
+#: res/app/src/ui/IosDeviceHealth.tsx:15
+msgid "Waiting for the iPhone USB tunnel."
+msgstr ""
+
 #: res/app/src/features/settings/general/AlertMessageSettings.tsx:24
 #: res/app/src/features/settings/groups/actions.ts:33
 #: res/app/src/features/settings/users/UsersSettings.tsx:158
@@ -2215,6 +2438,10 @@ msgstr ""
 
 #: res/app/src/ui/AppLayout.tsx:276
 msgid "Web"
+msgstr ""
+
+#: res/app/src/ui/IosDeviceHealth.tsx:17
+msgid "WebDriverAgent is restarting. Check device unlock and developer trust."
 msgstr ""
 
 #: res/app/src/core/common.ts:23

@@ -1,0 +1,20 @@
+{
+  "prototypeImage": "ghcr.io/mdub1na/stf:ios-prototype-0000000000000000000000000000000000000000",
+  "stfImage": "ghcr.io/mdub1na/stf:ios-stf-0000000000000000000000000000000000000000",
+  "publicOrigin": "https://stf.example.test",
+  "devices": [
+    {
+      "udid": "00000000-0000000000000001",
+      "node": "usb-node",
+      "wdaBundleId": "com.example.WebDriverAgentRunner.xctrunner",
+      "marketName": "Lab iPhone 1",
+      "legacy": true
+    },
+    {
+      "udid": "00000000-0000000000000002",
+      "node": "usb-node",
+      "wdaBundleId": "com.example.WebDriverAgentRunner.xctrunner",
+      "marketName": "Lab iPhone 2"
+    }
+  ]
+}

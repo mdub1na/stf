@@ -15,6 +15,8 @@ describe('device catalogue images', function() {
   it('recognizes the inventory without replacing hardware identifiers or measurements', function() {
     const inventory = [
       ['iOS', 'Apple', 'iPhone17,4', 'iPhone 16 Plus', 'iphone-16-plus-v1.webp']
+    , ['iOS', 'Apple', 'iPhone14,2', 'iPhone 13 Pro', 'iphone-13-pro-v1.webp']
+    , ['iOS', 'Apple', 'iPhone14,8', 'iPhone 14 Plus', 'iphone-14-plus-v1.webp']
     , ['Android', 'samsung', 'SM-A556E', 'Galaxy A55 5G', 'galaxy-a55-v1.webp']
     , ['Android', 'samsung', 'SM-F936B', 'Galaxy Z Fold4', 'galaxy-z-fold4-v1.webp']
     , ['Android', 'Xiaomi', 'Mi A2', 'Mi A2', 'mi-a2-v1.webp']

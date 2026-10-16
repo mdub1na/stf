@@ -13,6 +13,14 @@ export const deviceCatalog: CatalogDevice[] = [
   , name: 'iPhone 16 Plus', image: 'iphone-16-plus-v1.webp'
   }
 , {
+    platform: 'ios', manufacturers: ['apple'], models: ['iphone14,2']
+  , name: 'iPhone 13 Pro', image: 'iphone-13-pro-v1.webp'
+  }
+, {
+    platform: 'ios', manufacturers: ['apple'], models: ['iphone14,8']
+  , name: 'iPhone 14 Plus', image: 'iphone-14-plus-v1.webp'
+  }
+, {
     platform: 'android', manufacturers: ['samsung'], models: ['sm-a556e']
   , name: 'Galaxy A55 5G', image: 'galaxy-a55-v1.webp'
   }

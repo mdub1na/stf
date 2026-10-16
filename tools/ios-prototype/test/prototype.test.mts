@@ -106,6 +106,17 @@ describe('iOS prototype HTTP and WDA integration', () => {
     assert.equal(f.calls.length, 1)
   })
 
+  it('uses the device home-screen endpoint instead of a hardware Home button', async() => {
+    const f = await fixture()
+    assert.equal((await f.request('/home', {})).status, 200)
+    assert.deepEqual(f.calls.slice(1), [
+      {method: 'POST', path: '/wda/homescreen', body: {}}
+    ])
+    f.runtime.state = 'waiting'
+    assert.equal((await f.request('/home', {})).status, 503)
+    assert.equal(f.calls.length, 2)
+  })
+
   it('converts normalized coordinates to WDA points and preserves swipe duration', async() => {
     const f = await fixture()
     const response = await f.request('/swipe', {

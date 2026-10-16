@@ -176,7 +176,7 @@ export function createServer(
         await runtime.execute(wda => wda.call('POST', '/wda/keys', {value: [input.text]}))
         break
       case '/home':
-        await runtime.execute(wda => wda.call('POST', '/wda/pressButton', {name: 'home'}))
+        await runtime.execute(wda => wda.request('POST', '/wda/homescreen', {}))
         break
       case '/apps/activate':
         if (typeof input.bundleId !== 'string' || !/^[\w.-]{1,255}$/.test(input.bundleId)) {

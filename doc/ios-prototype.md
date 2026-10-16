@@ -22,8 +22,8 @@ against the same phone while using it.
 
 ## Requirements and verified sources
 
-Start with a real iPhone running iOS 18 or later, Developer Mode enabled, a
-trusted USB connection to the Linux host, and a valid development-signed WDA.
+Start with a real iPhone running iOS 18 or later, Developer Mode and UI Automation
+enabled, a trusted USB connection to the Linux host, and a valid development-signed WDA.
 An ordinary unsigned `.ipa` cannot be used as the runner.
 
 | Dependency or behavior | Source checked for this prototype |
@@ -34,6 +34,7 @@ An ordinary unsigned `.ipa` cannot be used as the runner.
 | iOS 27 Cryptex developer image support | [pymobiledevice3 v11.32.0 image mounter](https://github.com/doronz88/pymobiledevice3/blob/v11.32.0/pymobiledevice3/services/mobile_image_mounter.py) |
 | Explicit RSD endpoint from the existing kernel tunnel | [pymobiledevice3 CLI](https://github.com/doronz88/pymobiledevice3/blob/v11.32.0/pymobiledevice3/cli/cli_common.py), [go-ios tunnel fields](https://github.com/danielpaulus/go-ios/blob/v1.3.2/ios/tunnel/tunnel.go) |
 | Explicit loopback and USB-only forwarding | [iproxy](https://github.com/libimobiledevice/libusbmuxd/blob/master/tools/iproxy.c) |
+| Separate Developer Mode and UI Automation switches | [Appium device preparation](https://github.com/appium/appium-xcuitest-driver/blob/master/docs/getting-started/device-setup.md#required-settings) |
 | Linux support in the later Appium integration | [Non-macOS hosts](https://appium.github.io/appium-xcuitest-driver/12.11/guides/non-macos-hosts/) |
 
 The go-ios commands were checked against the **v1.3.2 source**, not against a
@@ -103,7 +104,8 @@ git clone --branch v16.15.0 --depth 1 https://github.com/appium/WebDriverAgent.g
 1. In Xcode Settings → Accounts, sign in to your Apple Account yourself. Complete
    any Apple agreement and two-factor authentication it requests.
 2. Connect the unlocked iPhone to the Mac by USB, accept Trust, and enable
-   Developer Mode. Let Xcode finish preparing the device.
+   Developer Mode. Also enable Settings → Developer → Enable UI Automation.
+   These are separate switches. Let Xcode finish preparing the device.
 3. Open `tmp/ios-wda/WebDriverAgent/WebDriverAgent.xcodeproj`. Select the
    `WebDriverAgentRunner` target, enable Automatically manage signing, and select
    your Personal Team. Set a unique runner bundle ID, for example
@@ -157,6 +159,9 @@ signed artifact on the phone; Linux startup/control remain separate checks.
 
 Connect and unlock the phone, accept **Trust this computer**, and enable
 Developer Mode, completing any restart and on-device confirmation it requests.
+Also enable **Settings → Developer → Enable UI Automation**. If WDA is ready
+and streams images but taps, swipes or Home do not change the actual screen,
+check this switch before treating successful command responses as proof of input.
 
 ```sh
 ios list

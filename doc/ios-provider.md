@@ -172,6 +172,8 @@ To renew a Personal Team runner:
 2. Select the existing Team and runner bundle ID, enable automatic signing,
    then build/install the runner for that device. Keep the same identifier.
 3. Confirm developer trust/Developer Mode on the device if iOS requests it.
+   Also check Settings → Developer → Enable UI Automation; it is a separate
+   required switch, as described in [Appium's device preparation guide](https://github.com/appium/appium-xcuitest-driver/blob/master/docs/getting-started/device-setup.md#required-settings).
 4. Return USB to the Linux VM, unlock and confirm computer trust when prompted.
 5. The provider reconnects without a Mac runtime node. Check the new expiry in STF.
 

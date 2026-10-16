@@ -130,7 +130,10 @@ kubectl --kubeconfig /private/path/k3s-lab.yaml delete -f kuber/ios-prototype/st
 Use a private copy of [fleet.example.json](fleet.example.json). Replace image
 SHAs with published images, the HTTPS origin, worker hostnames, UDIDs and signed
 runner identifiers. Each iPhone needs its own initial WDA installation,
-Developer Mode, USB trust and Proxmox USB passthrough. The same runner bundle ID
+Developer Mode, Settings → Developer → Enable UI Automation, USB trust and
+Proxmox USB passthrough. Verify an actual input result after onboarding; a ready
+WDA session and working images alone do not prove that input is enabled.
+The same runner bundle ID
 can be used across devices, provided each signed build's profile includes that
 phone. Keep real identifiers in the private config rather than committing them.
 

@@ -179,7 +179,9 @@ simulated side/volume chord. The UI reports command acceptance, not completed
 startup/shutdown. Power off requires physical access to turn the phone on again.
 Acceptance invalidates queued commands; a real disconnect ends ownership and
 viewers. Reconnect and claim again after recovery. Old commands and IPA jobs are
-not replayed. go-ios v1.3.2 may exit zero on a power error: the provider also
+not replayed. The iOS screen client retries temporary WebSocket failures with
+bounded backoff while the current user still owns a ready, present device;
+release and unmount cancel pending retries. go-ios v1.3.2 may exit zero on a power error: the provider also
 requires its explicit `ok` log acknowledgement and rejects error logs.
 After a full device reboot, physical unlock may be required by iOS before USB
 services become available. A lost Proxmox USB assignment must be restored at the

@@ -16,7 +16,7 @@ export default function DashboardPane({device, control}: PaneProps) {
   if (device.platform === 'iOS') {
     return <SimpleGrid type='container' cols={{base: 1, '720px': 2}} spacing='md'>
       <IosDeviceHealth device={device} />
-      <IosControlsCard control={control} />
+      <IosControlsCard control={control} device={device} />
       <ClipboardCard control={control} inputOnly />
       <InstallCard control={control} />
     </SimpleGrid>

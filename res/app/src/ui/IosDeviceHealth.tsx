@@ -7,7 +7,7 @@ import {WidgetCard} from './WidgetCard'
 const reasons: Record<string, string> = {
   disconnected: gettext('Connect the iPhone by USB.')
   , trust_required: gettext('Unlock the iPhone and confirm Trust This Computer.')
-  , locked: gettext('Unlock the iPhone on the device.')
+  , locked: gettext('The iPhone is locked. Open control and use Unlock screen.')
   , developer_mode_required: gettext('Enable Developer Mode in Settings, Privacy & Security on the iPhone.')
   , wda_missing: gettext('Install the signed WebDriverAgent runner.')
   , wda_profile_expired: gettext('The WebDriverAgent profile has expired. Rebuild and reinstall WDA.')

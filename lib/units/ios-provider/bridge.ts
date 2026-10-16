@@ -153,6 +153,23 @@ export class IosBridge {
           }
         }))
       })
+      .on(wire.IosUnlockMessage, channel => {
+        this.transaction(String(channel), () => this.enqueue(this.epoch, async() =>
+          (await this.client.request('/unlock', {})).json(), true))
+      })
+      .on(wire.IosLockMessage, channel => {
+        this.transaction(String(channel), () => this.enqueue(this.epoch, async() =>
+          (await this.client.request('/lock', {})).json(), true))
+      })
+      .on(wire.IosPowerMessage, (channel, message) => {
+        this.transaction(String(channel), () => this.enqueue(this.epoch, async() => {
+          if (!['reboot', 'shutdown'].includes(message.action)) {
+            throw new Error('IOS_POWER_INVALID_ACTION')
+          }
+          return (await this.client.request('/power', {action: message.action},
+            AbortSignal.timeout(20000))).json()
+        }, true))
+      })
       .on(wire.IosInstallStatusMessage, (channel, message) => {
         this.installationCommand(String(channel), '/installations/status', message.id || undefined)
       })
@@ -177,7 +194,7 @@ export class IosBridge {
           }
           const body = await response.json() as {resources: {file: unknown}}
           return body.resources.file
-        }))
+        }, true))
       })
     this.route = router.handler()
   }
@@ -217,7 +234,7 @@ export class IosBridge {
   private command(path: string, body: unknown, replyChannel?: string) {
     const operation = () => this.enqueue(this.epoch, async() => {
       await this.client.request(path, body)
-    })
+    }, ['/tap', '/swipe', '/home', '/text'].includes(path))
     if (replyChannel) {
       this.transaction(replyChannel, operation)
     }
@@ -226,14 +243,14 @@ export class IosBridge {
     }
   }
 
-  private enqueue<T>(epoch: number, operation: () => Promise<T>): Promise<T> {
+  private enqueue<T>(epoch: number, operation: () => Promise<T>, allowLocked = false): Promise<T> {
     const result = this.queue.then(async() => {
       if (!this.owner || epoch !== this.epoch) {
         throw new Error('Device session ended')
       }
       const current = await this.client.device()
       if (current.udid !== this.options.serial || current.state !== 'ready' ||
-          current.ios?.locked ||
+          (!allowLocked && current.ios?.locked) ||
           current.generation !== this.state?.generation || epoch !== this.epoch || !this.owner) {
         throw new Error('Device session changed')
       }
@@ -318,6 +335,7 @@ export class IosBridge {
     , wire.InstallMessage.$code, wire.IosInstallStatusMessage.$code
     , wire.IosInstallCancelMessage.$code
     , wire.IosShakeMessage.$code
+    , wire.IosUnlockMessage.$code, wire.IosLockMessage.$code, wire.IosPowerMessage.$code
     ]
     if (!supported.includes(envelope.type)) {
       if (envelope.channel) {
@@ -336,7 +354,7 @@ export class IosBridge {
         throw new Error('iOS backend selected a different phone')
       }
       this.lastObservation = state
-      if (state.state !== 'ready' || state.ios?.locked === true) {
+      if (state.state !== 'ready') {
         this.absent()
         this.publishHealth(state)
         return

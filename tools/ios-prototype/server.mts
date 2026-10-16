@@ -125,7 +125,7 @@ export function createServer(
         return
       }
       if (route === 'GET /screenshot') {
-        const {value} = await runtime.execute(wda => wda.call('GET', '/screenshot'))
+        const {value} = await runtime.execute(wda => wda.call('GET', '/screenshot'), true)
         if (typeof value !== 'string') {
           throw new Error('WDA did not return an image')
         }
@@ -147,6 +147,18 @@ export function createServer(
       }
       const input = await body(req)
       switch (req.url) {
+      case '/lock':
+        json(200, await runtime.lock())
+        return
+      case '/power':
+        if (!['reboot', 'shutdown'].includes(input.action)) {
+          throw new InputError('action must be reboot or shutdown')
+        }
+        json(200, await runtime.power(input.action))
+        return
+      case '/unlock':
+        json(200, await runtime.unlock())
+        return
       case '/shake': {
         const abort = new AbortController()
         res.once('close', () => {
@@ -159,24 +171,24 @@ export function createServer(
       }
       case '/tap': {
         const position = point(input)
-        await runtime.execute(wda => wda.gesture(position))
+        await runtime.execute(wda => wda.gesture(position), true)
         break
       }
       case '/swipe': {
         const from = point(input.from)
         const to = point(input.to)
         const duration = number(input.durationMs ?? 500, 50, 5000)
-        await runtime.execute(wda => wda.gesture(from, to, duration))
+        await runtime.execute(wda => wda.gesture(from, to, duration), true)
         break
       }
       case '/text':
         if (typeof input.text !== 'string' || input.text.length > 4096) {
           throw new InputError('text must be a string of at most 4096 characters')
         }
-        await runtime.execute(wda => wda.call('POST', '/wda/keys', {value: [input.text]}))
+        await runtime.execute(wda => wda.call('POST', '/wda/keys', {value: [input.text]}), true)
         break
       case '/home':
-        await runtime.execute(wda => wda.request('POST', '/wda/homescreen', {}))
+        await runtime.execute(wda => wda.request('POST', '/wda/homescreen', {}), true)
         break
       case '/apps/activate':
         if (typeof input.bundleId !== 'string' || !/^[\w.-]{1,255}$/.test(input.bundleId)) {

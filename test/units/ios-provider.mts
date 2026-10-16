@@ -73,9 +73,14 @@ describe('Linux iOS integration', function() {
           chunks.push(chunk)
         }
         requests.push({path: req.url!, body: JSON.parse(Buffer.concat(chunks).toString())})
-        res.end(req.url?.startsWith('/installations/') ?
-          JSON.stringify({id: requests.at(-1)!.body.id || 'job', settled: false}) :
-          '{"success":true}')
+        let response = {success: true} as object
+        if (req.url?.startsWith('/installations/')) {
+          response = {id: requests.at(-1)!.body.id || 'job', settled: false}
+        }
+        else if (req.url === '/unlock') {
+          response = {locked: false}
+        }
+        res.end(JSON.stringify(response))
       }
     })
     servers.push(backend)
@@ -211,19 +216,58 @@ describe('Linux iOS integration', function() {
     assert.equal(f.requests.length, 1)
   })
 
-  it('publishes health while disconnected and releases ownership when locked', async function() {
+  it('retains lock-screen access until a real disconnect', async function() {
     const f = await fixture()
     await f.join()
+    const disconnects = f.disconnects()
     f.state.ios = {reason: 'locked', locked: true} as IosDeviceStatus
     await f.bridge.poll()
-    assert.equal(f.bridge.owner, null)
-    assert.ok(f.sent.some(item => item.envelope.type === wire.DeviceAbsentMessage.$code))
+    assert.equal(f.bridge.owner?.email, owner.email)
+    assert.ok(!f.sent.some(item => item.envelope.type === wire.DeviceAbsentMessage.$code))
+    assert.equal(f.disconnects(), disconnects)
+    f.send(new wire.IosUnlockMessage(), true)
+    f.send(new wire.IosLockMessage(), true)
+    f.send(new wire.KeyPressMessage('home'))
+    f.send(new wire.PasteMessage('123456'), true)
+    await until(() => f.requests.length === 4)
+    assert.deepEqual(f.requests.map(req => req.path), ['/unlock', '/lock', '/home', '/text'])
+    f.send(new wire.IosShakeMessage(), true)
+    await new Promise(resolve => setTimeout(resolve, 30))
+    assert.equal(f.requests.length, 4)
     f.state.state = 'waiting'
     f.state.ios.reason = 'disconnected'
     await f.bridge.poll()
+    assert.equal(f.bridge.owner, null)
+    assert.ok(f.sent.some(item => item.envelope.type === wire.DeviceAbsentMessage.$code))
     const health = f.sent.filter(item => item.envelope.type === wire.DevicePropertiesMessage.$code)
     const message = wire.DevicePropertiesMessage.decode(health.at(-1)!.envelope.message)
     assert.equal(JSON.parse(message.properties[0]!.value).reason, 'disconnected')
+  })
+
+  it('requires current ownership for screen lock and power', async function() {
+    const f = await fixture()
+    const messages = [new wire.IosUnlockMessage(), new wire.IosLockMessage()
+      , new wire.IosPowerMessage('reboot'), new wire.IosPowerMessage('shutdown')]
+    for (const message of messages) {
+      f.send(message, true)
+    }
+    await new Promise(resolve => setTimeout(resolve, 30))
+    assert.equal(f.requests.length, 0)
+    await f.join()
+    f.state.ios = {reason: 'locked', locked: true} as IosDeviceStatus
+    for (const message of messages) {
+      f.send(message, true)
+    }
+    await until(() => f.requests.length === 4)
+    assert.deepEqual(f.requests.map(req => req.path), ['/unlock', '/lock', '/power', '/power'])
+    assert.deepEqual(f.requests.slice(2).map(req => req.body.action), ['reboot', 'shutdown'])
+    f.send(new wire.IosPowerMessage('erase'), true)
+    f.state.instance = 'replacement'
+    for (const message of messages) {
+      f.send(message, true)
+    }
+    await new Promise(resolve => setTimeout(resolve, 40))
+    assert.equal(f.requests.length, 4)
   })
 
   it('invalidates commands when the backend restarts at the same generation', async function() {
@@ -247,7 +291,12 @@ describe('Linux iOS integration', function() {
     const load = async() => device
     assert.equal(await allowIosPacket('group.invite', device.channel, user, load), true)
     assert.equal(await allowIosPacket('input.keyPress', device.channel, user, load), false)
+    assert.equal(await allowIosPacket('device.unlock', device.channel, user, load), false)
+    assert.equal(await allowIosPacket('device.iosPower', device.channel, user, load), false)
     device.owner = owner
+    assert.equal(await allowIosPacket('device.unlock', device.channel, user, load), true)
+    assert.equal(await allowIosPacket('device.lock', device.channel, user, load), true)
+    assert.equal(await allowIosPacket('device.iosPower', device.channel, user, load), true)
     assert.equal(await allowIosPacket('input.keyPress', device.channel, user, load), true)
     assert.equal(await allowIosPacket('group.kick', device.channel,
       {...user, email: 'other@example.test'}, load), false)

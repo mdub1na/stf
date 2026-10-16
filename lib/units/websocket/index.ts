@@ -151,6 +151,9 @@ interface WebsocketClientEvents {
   'device.install.status': TransactionDataEvent<{id?: string}>
   'device.install.cancel': TransactionDataEvent<{id: string}>
   'device.shake': TransactionDataEvent<Record<string, never>>
+  'device.unlock': TransactionDataEvent<Record<string, never>>
+  'device.lock': TransactionDataEvent<Record<string, never>>
+  'device.iosPower': TransactionDataEvent<{action: string}>
   'device.uninstall': TransactionDataEvent<UninstallMessageFields>
   'storage.upload': TransactionDataEvent<{url: string}>
   'forward.test': TransactionDataEvent<ForwardTestMessageFields>
@@ -1047,6 +1050,28 @@ export default function(options: WebsocketOptions) {
           }
           joinChannel(responseChannel)
           push.send([channel, wireutil.transaction(responseChannel, new wire.IosShakeMessage())])
+        })
+        .on('device.unlock', function(channel, responseChannel) {
+          if (!channel.startsWith('ios:')) {
+            return
+          }
+          joinChannel(responseChannel)
+          push.send([channel, wireutil.transaction(responseChannel, new wire.IosUnlockMessage())])
+        })
+        .on('device.lock', function(channel, responseChannel) {
+          if (!channel.startsWith('ios:')) {
+            return
+          }
+          joinChannel(responseChannel)
+          push.send([channel, wireutil.transaction(responseChannel, new wire.IosLockMessage())])
+        })
+        .on('device.iosPower', function(channel, responseChannel, data) {
+          if (!channel.startsWith('ios:') || !['reboot', 'shutdown'].includes(data?.action)) {
+            return
+          }
+          joinChannel(responseChannel)
+          push.send([channel, wireutil.transaction(responseChannel,
+            new wire.IosPowerMessage(data.action))])
         })
         .on('device.install.status', function(channel, responseChannel, data) {
           if (!channel.startsWith('ios:')) {

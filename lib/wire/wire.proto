@@ -88,6 +88,9 @@ enum MessageType {
   IosInstallStatusMessage     = 97;
   IosInstallCancelMessage     = 98;
   IosShakeMessage             = 99;
+  IosUnlockMessage            = 100;
+  IosLockMessage              = 101;
+  IosPowerMessage             = 102;
   GroupUserChangeMessage     = 1200;
   DeviceGroupChangeMessage   = 1201;
   DeviceOriginGroupMessage   = 1202;
@@ -634,6 +637,16 @@ message IosInstallCancelMessage {
 }
 
 message IosShakeMessage {
+}
+
+message IosUnlockMessage {
+}
+
+message IosLockMessage {
+}
+
+message IosPowerMessage {
+  required string action = 1;
 }
 
 message UninstallMessage {

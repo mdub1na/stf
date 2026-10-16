@@ -162,8 +162,22 @@ API/Pod logs during onboarding.
 
 Diagnostics distinguish missing USB, trust/unlock, WDA missing or expired,
 tunnel, developer-image and WDA/session startup failures. Recovery retries
-automatically. Locking the phone releases its owner and viewers; unlock it and
-claim it again after preparation. Old commands and IPA jobs are not replayed.
+automatically. A screen lock alone keeps the phone present, owned and streaming
+while WDA remains ready. The owner can use **Lock screen / Unlock screen**;
+WDA automatically dismisses only a simple lock without a passcode. If it remains
+locked, swipe and enter the code directly on the streamed device screen. STF does
+not save a passcode. Screenshots, touch, Home and text input remain available
+while locked; shaking and app activation still require an unlocked screen.
+An asleep display may provide black frames; unlocking wakes it.
+
+**Restart iPhone** and **Power off iPhone** require an in-product confirmation
+and the current owner. They use go-ios diagnostics for the selected UDID, not a
+simulated side/volume chord. The UI reports command acceptance, not completed
+startup/shutdown. Power off requires physical access to turn the phone on again.
+Acceptance invalidates queued commands; a real disconnect ends ownership and
+viewers. Reconnect and claim again after recovery. Old commands and IPA jobs are
+not replayed. go-ios v1.3.2 may exit zero on a power error: the provider also
+requires its explicit `ok` log acknowledgement and rejects error logs.
 After a full device reboot, physical unlock may be required by iOS before USB
 services become available. A lost Proxmox USB assignment must be restored at the
 hypervisor; a provider cannot recover hardware absent from the VM.

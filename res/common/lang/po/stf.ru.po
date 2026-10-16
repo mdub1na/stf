@@ -2513,3 +2513,57 @@ msgstr "Не удалось потрясти iPhone. Оставьте его р�
 
 msgid "Enable Developer Mode in Settings, Privacy & Security on the iPhone."
 msgstr "Включите режим разработчика на iPhone: Настройки → Конфиденциальность и безопасность."
+
+msgid "Unlock screen"
+msgstr "Разблокировать экран"
+
+msgid "The iPhone is locked. Open control and use Unlock screen."
+msgstr "iPhone заблокирован. Откройте управление и нажмите «Разблокировать экран»."
+
+msgid "If a passcode is required, enter it on the device screen in STF."
+msgstr "Если требуется код-пароль, введите его на экране устройства в STF."
+
+msgid "Could not unlock the iPhone. Check its connection and try again."
+msgstr "Не удалось разблокировать iPhone. Проверьте подключение и повторите попытку."
+
+msgid "The screen is still locked. Swipe up and enter the passcode on the device screen."
+msgstr "Экран остаётся заблокированным. Проведите вверх и введите код-пароль на экране устройства."
+
+msgid "The iPhone is unlocked."
+msgstr "iPhone разблокирован."
+
+msgid "Lock screen"
+msgstr "Заблокировать экран"
+
+msgid "Confirm"
+msgstr "Подтвердить"
+
+msgid "The iPhone is locked."
+msgstr "iPhone заблокирован."
+
+msgid "The lock screen remains visible while the display is awake. If a passcode is required, enter it on the device screen in STF."
+msgstr "Экран блокировки виден, пока дисплей активен. Если нужен код-пароль, введите его на экране устройства в STF."
+
+msgid "Could not change the screen lock. Check the iPhone connection and try again."
+msgstr "Не удалось изменить блокировку экрана. Проверьте подключение iPhone и повторите попытку."
+
+msgid "Restart iPhone"
+msgstr "Перезагрузить iPhone"
+
+msgid "Power off iPhone"
+msgstr "Выключить iPhone"
+
+msgid "Power off this iPhone? Control will end. Turning it on again requires physical access."
+msgstr "Выключить этот iPhone? Управление завершится. Для повторного включения нужен физический доступ к телефону."
+
+msgid "Restart this iPhone? Control will end. After startup, iOS may require the first unlock on the phone."
+msgstr "Перезагрузить этот iPhone? Управление завершится. После запуска iOS может потребовать первую разблокировку на самом телефоне."
+
+msgid "The iPhone did not confirm the power command. Check its connection before trying again."
+msgstr "iPhone не подтвердил команду питания. Проверьте подключение перед повторной попыткой."
+
+msgid "The iPhone accepted the power-off command."
+msgstr "iPhone принял команду выключения."
+
+msgid "The iPhone accepted the restart command."
+msgstr "iPhone принял команду перезагрузки."

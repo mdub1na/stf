@@ -2,7 +2,8 @@ import {setTimeout as delay} from 'node:timers/promises'
 import {randomUUID} from 'node:crypto'
 
 import {ManagedProcess, runCommand, runJson} from './process.mts'
-import {WdaClient} from './wda.mts'
+import {WdaClient, WdaError} from './wda.mts'
+import {runPowerCommand} from './power.mts'
 import {selectedTunnel, rsdEndpoint} from './tunnel.mts'
 import {Telemetry, diagnosticReason} from './telemetry.mts'
 import {Shake} from './shake.mts'
@@ -32,6 +33,7 @@ interface RuntimeProcess {
 export interface RuntimeDependencies {
   json: typeof runJson
   run: typeof runCommand
+  power: typeof runPowerCommand
   start: (binary: string, args: string[]) => RuntimeProcess
   wda: WdaClient
   log: (message: string) => void
@@ -60,6 +62,7 @@ export class IosRuntime {
     this.dependencies = {
       json: runJson
     , run: runCommand
+    , power: runPowerCommand
     , start: (binary, args) => new ManagedProcess(binary, args)
     , log: message => process.stderr.write(message + '\n')
     , ...dependencies
@@ -232,10 +235,57 @@ export class IosRuntime {
       AbortSignal.any([this.abort.signal, signal, AbortSignal.timeout(45000)])))
   }
 
-  execute<T>(action: (wda: WdaClient) => Promise<T>): Promise<T> {
+  lock(): Promise<{locked: boolean}> {
+    return this.execute(async wda => {
+      await wda.request('POST', '/wda/lock', {})
+      const result = await this.lockState()
+      if (!result.locked) {
+        throw new Error('IOS_LOCK_FAILED')
+      }
+      return result
+    }, true)
+  }
+
+  private async lockState(): Promise<{locked: boolean}> {
+    const {value: locked} = await this.wda.call('GET', '/wda/locked')
+    if (typeof locked !== 'boolean') {
+      throw new Error('IOS_LOCK_STATE_UNAVAILABLE')
+    }
+    this.telemetry.status.locked = locked
+    this.telemetry.phase('ready', locked ? 'locked' : 'ready')
+    return {locked}
+  }
+
+  power(action: 'reboot' | 'shutdown'): Promise<{accepted: boolean}> {
+    return this.execute(async() => {
+      await this.dependencies.power(this.options.goIos, this.args(action), this.abort.signal)
+      this.state = 'waiting'
+      this.generation++
+      this.telemetry.phase('recovering', 'provider_unavailable')
+      return {accepted: true}
+    }, true)
+  }
+
+  unlock(): Promise<{locked: boolean}> {
+    return this.execute(async wda => {
+      try {
+        await wda.request('POST', '/wda/unlock', {})
+      }
+      catch (error) {
+        // A passcode-protected lock cannot be dismissed by WDA. Keep its screen
+        // available for the owner to enter the code; transport errors still fail.
+        if (!(error instanceof WdaError) || error.code !== 'unknown error') {
+          throw error
+        }
+      }
+      return this.lockState()
+    }, true)
+  }
+
+  execute<T>(action: (wda: WdaClient) => Promise<T>, allowLocked = false): Promise<T> {
     const generation = this.generation
     const work = this.queue.then(async() => {
-      if (this.state !== 'ready' || this.telemetry.status.locked ||
+      if (this.state !== 'ready' || (!allowLocked && this.telemetry.status.locked) ||
           generation !== this.generation) {
         throw new Error('iPhone is not ready')
       }

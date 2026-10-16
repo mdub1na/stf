@@ -47,6 +47,8 @@ async function until(predicate: () => boolean): Promise<void> {
 async function fixture() {
   const calls: Array<{method: string, path: string, body: any}> = []
   let failure = false
+  let locked = false
+  let protectedLock = false
   const image = Buffer.from('89504e470d0a1a0a', 'hex')
   const origin = await listen(http.createServer(async(req, res) => {
     const chunks: Buffer[] = []
@@ -59,6 +61,23 @@ async function fixture() {
     if (failure) {
       res.writeHead(500)
       res.end(JSON.stringify({value: {error: 'invalid session id', message: 'Session is gone'}}))
+    }
+    else if (req.url?.endsWith('/wda/locked')) {
+      res.end(JSON.stringify({value: locked}))
+    }
+    else if (req.url === '/wda/lock') {
+      locked = true
+      res.end(JSON.stringify({value: null}))
+    }
+    else if (req.url === '/wda/unlock') {
+      if (protectedLock) {
+        res.writeHead(500)
+        res.end(JSON.stringify({value: {error: 'unknown error', message: 'Still locked'}}))
+      }
+      else {
+        locked = false
+        res.end(JSON.stringify({value: null}))
+      }
     }
     else if (req.url === '/session' && req.method === 'POST') {
       res.end(JSON.stringify({value: {sessionId: 'owned-session'}}))
@@ -84,7 +103,11 @@ async function fixture() {
     , headers: {Authorization: 'Bearer ' + token, 'Content-Type': 'application/json', ...headers}
     , ...(typeof value === 'undefined' ? {} : {body: JSON.stringify(value)})
     })
-  return {runtime, calls, wda, api, request, image, fail: () => {
+  return {runtime, calls, wda, api, request, image, protect: () => {
+    locked = true
+    protectedLock = true
+    runtime.telemetry.status.locked = true
+  }, fail: () => {
     failure = true
   }}
 }
@@ -115,6 +138,59 @@ describe('iOS prototype HTTP and WDA integration', () => {
     f.runtime.state = 'waiting'
     assert.equal((await f.request('/home', {})).status, 503)
     assert.equal(f.calls.length, 2)
+  })
+
+  it('keeps lock-screen input and screenshots available', async() => {
+    const f = await fixture()
+    assert.deepEqual(await (await f.request('/lock', {})).json(), {locked: true})
+    assert.equal(f.runtime.telemetry.status.locked, true)
+    for (const [route, input] of [
+      ['/tap', {x: 0.5, y: 0.5}], ['/swipe', {from: {x: 0.5, y: 0.9}, to: {x: 0.5, y: 0.2}}]
+    , ['/text', {text: '123456'}], ['/home', {}]
+    ] as const) {
+      assert.equal((await f.request(route, input)).status, 200)
+    }
+    assert.equal((await f.request('/screenshot')).status, 200)
+    assert.equal((await f.request('/apps/activate', {bundleId: 'test.app'})).status, 502)
+    assert.deepEqual(await (await f.request('/unlock', {})).json(), {locked: false})
+    assert.equal(f.runtime.telemetry.status.locked, false)
+    f.protect()
+    assert.deepEqual(await (await f.request('/unlock', {})).json(), {locked: true})
+    assert.equal(f.runtime.telemetry.status.locked, true)
+    f.fail()
+    assert.equal((await f.request('/unlock', {})).status, 502)
+  })
+
+  it('targets power to one UDID and rejects commands after acceptance', async() => {
+    const f = await fixture()
+    for (const action of ['reboot', 'shutdown'] as const) {
+      const calls: string[][] = []
+      const runtime = new IosRuntime(options, {wda: f.wda, power: async(_binary, args) => {
+        calls.push(args)
+      }})
+      runtime.state = 'ready'
+      runtime.telemetry.status.locked = true
+      const origin = await listen(createServer(runtime, token))
+      const request = (action: string) => fetch(origin + '/power', {method: 'POST', headers: {
+        Authorization: 'Bearer ' + token, 'Content-Type': 'application/json'
+      }, body: JSON.stringify({action})})
+      assert.equal((await request('erase')).status, 400)
+      assert.equal(calls.length, 0)
+      assert.deepEqual(await (await request(action)).json(), {accepted: true})
+      assert.deepEqual(calls, [[
+        '--udid=' + options.udid, '--tunnel-info-port=' + options.tunnelPort, action
+      ]])
+      assert.equal(runtime.state, 'waiting')
+      assert.equal(runtime.generation, 1)
+      assert.equal((await request(action)).status, 503)
+    }
+    const runtime = new IosRuntime(options, {wda: f.wda, power: async() => {
+      throw new Error('IOS_POWER_FAILED')
+    }})
+    runtime.state = 'ready'
+    await assert.rejects(runtime.power('reboot'), /IOS_POWER_FAILED/)
+    assert.equal(runtime.state, 'ready')
+    assert.equal(runtime.generation, 0)
   })
 
   it('converts normalized coordinates to WDA points and preserves swipe duration', async() => {
@@ -219,6 +295,7 @@ describe('iOS prototype lifecycle', () => {
       wda: f.wda
     , log: () => null
     , run: async() => ''
+    , power: async() => {}
     , json: async(_binary, args) => {
         commands.push(args)
         if (args[0] === 'list') {

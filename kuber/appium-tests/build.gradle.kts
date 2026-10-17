@@ -41,7 +41,8 @@ mapOf(
   "stfAndroidTest" to "stf-capture",
   "stfAppiumAndroidTest" to "stf-chrome",
   "stfAppiumSettingsTest" to "stf-android-settings",
-  "stfAppiumIosSettingsTest" to "stf-ios-settings"
+  "stfAppiumIosSettingsTest" to "stf-ios-settings",
+  "stfAppiumIosDemo" to "stf-ios-demo"
 ).forEach { (taskName, tag) ->
   tasks.register<Test>(taskName) {
     description = "Runs the $tag smoke test; missing infrastructure fails the task."

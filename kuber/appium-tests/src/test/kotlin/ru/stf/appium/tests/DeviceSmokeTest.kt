@@ -52,6 +52,27 @@ class DeviceSmokeTest {
   }
 
   @Test
+  @Tag("stf-ios-demo")
+  fun `shows an iOS test in the STF live screen`() = onStf("iOS") { device ->
+    val cycles = config.positiveInt("STF_DEMO_CYCLES", 8)
+    require(cycles <= 20) { "STF_DEMO_CYCLES must be at most 20 to keep the reservation bounded" }
+    withDriver(config, "ios-demo", { factory.ios(device) }) { driver ->
+      driver.activateApp("com.apple.Preferences")
+      WebDriverWait(driver, config.wait).until {
+        (driver.executeScript("mobile: activeAppInfo") as Map<*, *>)["bundleId"] == "com.apple.Preferences"
+      }
+      repeat(cycles) { cycle ->
+        println("STF live demo: cycle ${cycle + 1}/$cycles")
+        driver.executeScript("mobile: swipe", mapOf("direction" to "up"))
+        Thread.sleep(4000)
+        driver.executeScript("mobile: swipe", mapOf("direction" to "down"))
+        Thread.sleep(4000)
+      }
+      assertTrue(driver.getScreenshotAs(org.openqa.selenium.OutputType.BYTES).isNotEmpty(), "Demo screenshot should be available")
+    }
+  }
+
+  @Test
   @Tag("stf-chrome")
   fun `opens a web page in Android Chrome`() = onStf("Android") { device ->
     withDriver(config, "android-chrome", { factory.android(device, browser = true) }) { driver ->

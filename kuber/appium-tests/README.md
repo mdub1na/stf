@@ -44,6 +44,7 @@ account when CI must not share the operator's reservations.
 | `stfAppiumSettingsTest` | Android Settings through STF and Grid |
 | `stfAppiumAndroidTest` | Android Chrome browser smoke through STF and Grid |
 | `stfAppiumIosSettingsTest` | iOS Settings through STF and an XCUITest node |
+| `stfAppiumIosDemo` | Slow iOS Settings swipes for viewing in STF |
 | `localAndroidTest` | Android Settings on an explicit `ANDROID_UDID` |
 | `localIosTest` | iOS Settings on an explicit `IOS_UDID` and `IOS_PLATFORM_VERSION` |
 
@@ -105,9 +106,9 @@ needed to build/sign WDA; it does not need to run these sessions. See the
 The existing STF runtime owns one WDA session. Connecting an ordinary second
 WDA client directly would replace it, so the prepared [iOS node trial](ios-node/README.md)
 uses a loopback session adapter. It preserves the STF session and restores its
-settings on Appium teardown. One iPhone relay passed native Settings, scrolling
-and screenshot tests through the public Grid with concurrent STF viewing. The
-other two preview iPhones are not registered with Appium.
+settings on Appium teardown. All three preview iPhones have dedicated Grid relays
+and Appium sidecars. The Grid has seven Android nodes (four in pool 1, three in
+pool 2) and three iOS nodes; each iOS relay is bound to one physical phone.
 
 `IOS_WDA_URL` is an advanced override resolved by the Appium server, not by the
 test machine. Omit it for the prepared sidecar, which has its own loopback default.
@@ -117,6 +118,19 @@ Do not point it directly to the STF runtime's WDA on a shared phone.
 
 To watch the test in the STF UI, sign in as the account that owns `STF_TOKEN`.
 The phone screen streams during the test and closes when ownership is released.
+For an observable demo, leave the device list open and run:
+
+```sh
+./gradlew stfAppiumIosDemo
+```
+
+Use the same STF URL, token and public Grid endpoint as the Settings smoke.
+Optionally pin `STF_SERIAL` to the phone you want to watch. Once the test reserves
+it, open that phone's control page in STF. The demo opens Settings and alternates
+up/down swipes with four-second pauses for eight cycles (about one minute).
+`STF_DEMO_CYCLES` accepts 1–20 cycles. Avoid manual input during the demo; it
+shares the screen and WDA session with STF. Appium quits and ownership is released
+on completion or failure. The demo is opt-in and excluded from `test`/CI.
 
 Gradle writes JUnit XML under `build/test-results/<task>` and HTML under
 `build/reports/tests/<task>/index.html`. On failure, page source and screenshot
@@ -124,4 +138,4 @@ are collected independently before Appium quit. Cleanup errors are attached to
 the original failure; they do not hide it. No automatic UI-test retry is used.
 
 The [2026-10-18 validation record](../docs/appium-validation-2026-10-18.md)
-separates real-device results from the single-phone iOS results and remaining rollout work.
+records real-device runs, fleet size, concurrent screen evidence and remaining work.

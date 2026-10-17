@@ -199,8 +199,8 @@ on each; see the [validation record](./appium-validation-2026-10-18.md).
 
 | Pool | Replicas | ADB server | Exposed UiAutomator2 system ports |
 | --- | --- | --- | --- |
-| `android-appium-node-1` | `8` | `adbd.stf.svc.cluster.local:5037` | `8200-8209` on `adbd` |
-| `android-appium-node-2` | `8` | `adbd-2.stf.svc.cluster.local:5037` | `8200-8209` on `adbd-2` |
+| `android-appium-node-1` | `4` | `adbd.stf.svc.cluster.local:5037` | `8200-8209` on `adbd` |
+| `android-appium-node-2` | `3` | `adbd-2.stf.svc.cluster.local:5037` | `8200-8209` on `adbd-2` |
 
 The upgraded pods contain Appium `appium/appium:v3.8.0-p1` (Node 24 LTS,
 UiAutomator2 8.7.0), an ADB proxy, and Selenium relay
@@ -210,11 +210,11 @@ Appium on pod-local port `4733`. Native and Chrome stereotypes share
 per pod. Port ranges are scoped to each ADB server; concurrent sessions sharing
 an ADB server need distinct `appium:systemPort` values.
 
-The 2026-10-18 iOS trial added one device-bound relay,
-`appium/ios-appium-ios-prototype`, for the selected Linux iPhone. Current Grid
-capacity is 16 Android nodes plus one iOS node. Its generated resources and
-rollback are described in [the node runbook](../appium-tests/ios-node/README.md);
-the two other iPhones remain outside Appium.
+On 2026-10-18 the operator requested seven Android nodes and three iOS nodes.
+All three Linux iPhone runtimes now have an Appium sidecar and a dedicated
+single-session Grid relay. Current capacity is **7 Android + 3 iOS**; all ten
+nodes report UP. Generated resources and rollback are described in
+[the node runbook](../appium-tests/ios-node/README.md).
 
 The earlier Grid `/status` check returned `ready=true`, 16 nodes `UP` (8 per pool),
 and zero active sessions. The control-plane services in namespace `appium` are:
@@ -230,9 +230,16 @@ and zero active sessions. The control-plane services in namespace `appium` are:
 Kotlin/Gradle tests use standard STF capture/release endpoints; see
 [`../appium-tests/README.md`](../appium-tests/README.md). Android Settings passed
 18/18 sequential runs on six connected phones across both ADB pools on
-2026-10-18. One Linux iOS sidecar/relay also passed three final Grid runs with concurrent
-STF viewing; the other iPhones remain outside Appium. See the
+2026-10-18. The initial Linux iOS sidecar/relay passed three final Grid runs with
+concurrent STF viewing, followed by registration of the two other iPhones. See the
 [validation record](./appium-validation-2026-10-18.md).
+
+Appium reconciliation is temporarily paused with the Application annotation
+`argocd.argoproj.io/skip-reconcile: "true"` while the capacity and ingress changes
+are pending in the Appium PR. This prevents `develop` from restoring 16 Android
+nodes. After merging the PR, remove this annotation from `argocd/appium` and
+verify synchronization, seven Android replicas and three private iOS relays.
+The iOS preview resources are applied separately, outside the Appium GitOps tree.
 
 ## Argo CD And Installed Components
 

@@ -1,0 +1,103 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: stf-coordinator
+  labels:
+    app.kubernetes.io/name: stf-coordinator
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: stf-coordinator
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: stf-coordinator
+    spec:
+      automountServiceAccountToken: false
+      terminationGracePeriodSeconds: 120
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
+        fsGroupChangePolicy: OnRootMismatch
+      containers:
+        - name: coordinator
+          # Pin a reviewed STF build containing coordinator and fenced lease support.
+          image: SET_IMAGE_DIGEST
+          imagePullPolicy: IfNotPresent
+          command: [stf, coordinator]
+          args:
+            - --host=0.0.0.0
+            - --port=8080
+            - --public-url=http://stf-coordinator.stf.svc.cluster.local:8080
+            - --stf-api-url=http://stf-api.stf.svc.cluster.local:3000/api/v1
+            - --appium-grid-url=http://appium-grid-router.appium.svc.cluster.local:4444
+            - --stf-token-file=/secrets/stf-token
+            - --api-token-file=/secrets/api-token
+            - --state-file=/state/coordinator.json
+            - --adb-pools-file=/config/adb-pools.json
+            - --lease-ttl-seconds=180
+            - --heartbeat-interval-seconds=30
+            - --poll-interval-seconds=1
+            - --max-duration-seconds=21600
+            - --max-parallel=10
+            - --upstream-timeout-seconds=30
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: [ALL]
+          ports:
+            - name: http
+              containerPort: 8080
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: "1"
+              memory: 512Mi
+          startupProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            failureThreshold: 30
+            periodSeconds: 2
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: http
+            periodSeconds: 5
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            periodSeconds: 10
+          volumeMounts:
+            - name: state
+              mountPath: /state
+            - name: credentials
+              mountPath: /secrets
+              readOnly: true
+            - name: adb-pools
+              mountPath: /config
+              readOnly: true
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: state
+          persistentVolumeClaim:
+            claimName: stf-coordinator-state
+        - name: credentials
+          secret:
+            secretName: stf-coordinator-credentials
+            defaultMode: 0440
+        - name: adb-pools
+          configMap:
+            name: stf-coordinator-adb-pools
+        - name: tmp
+          emptyDir: {}

@@ -1525,6 +1525,62 @@ paths:
         - accessTokenAuth: []
   # I do know this is against REST principal to use verb as endpoint. But I feel it is more easy to
   # understand in comparision of using PUT/PATCH
+  /user/devices/{serial}/automation/renew:
+    x-swagger-router-controller: user
+    post:
+      summary: Renew an existing fenced automation lease
+      operationId: renewAutomationLease
+      tags:
+        - user
+      parameters:
+        - name: serial
+          in: path
+          required: true
+          type: string
+        - name: lease
+          in: body
+          required: true
+          schema:
+            $ref: "#/definitions/AutomationLeaseRenewPayload"
+      responses:
+        "200":
+          description: Provider acknowledged the lease operation
+          schema:
+            $ref: "#/definitions/Response"
+        default:
+          description: "400 invalid request; 401 unauthorized; 403 nonowner; 404 unknown device; 409 stale lease; 504 provider timeout"
+          schema:
+            $ref: "#/definitions/UnexpectedErrorResponse"
+      security:
+        - accessTokenAuth: []
+  /user/devices/{serial}/automation/release:
+    x-swagger-router-controller: user
+    post:
+      summary: Release an existing fenced automation lease
+      operationId: releaseAutomationLease
+      tags:
+        - user
+      parameters:
+        - name: serial
+          in: path
+          required: true
+          type: string
+        - name: lease
+          in: body
+          required: true
+          schema:
+            $ref: "#/definitions/AutomationLeaseReleasePayload"
+      responses:
+        "200":
+          description: Provider acknowledged the lease operation
+          schema:
+            $ref: "#/definitions/Response"
+        default:
+          description: "400 invalid request; 401 unauthorized; 403 nonowner; 404 unknown device; 409 stale lease; 504 provider timeout"
+          schema:
+            $ref: "#/definitions/UnexpectedErrorResponse"
+      security:
+        - accessTokenAuth: []
   /user/devices/{serial}/remoteConnect:
     x-swagger-router-controller: user
     post:
@@ -2532,9 +2588,35 @@ definitions:
       serial:
         description: Device Serial
         type: string
+      leaseId:
+        description: Optional coordinator fence; renew and release require this exact ID
+        type: string
+        pattern: '^[A-Za-z0-9_-]{1,128}$'
       timeout:
         description: Device timeout in ms. If device is kept idle for this period, it will be automatically disconnected. Default is provider group timeout
         type: integer
+  AutomationLeaseReleasePayload:
+    type: object
+    required:
+      - leaseId
+    properties:
+      leaseId:
+        type: string
+        pattern: '^[A-Za-z0-9_-]{1,128}$'
+  AutomationLeaseRenewPayload:
+    type: object
+    required:
+      - leaseId
+      - timeout
+    properties:
+      leaseId:
+        type: string
+        pattern: '^[A-Za-z0-9_-]{1,128}$'
+      timeout:
+        description: Lease duration from renewal in milliseconds; never captures an unowned device
+        type: integer
+        minimum: 1
+        maximum: 2147483647
   GroupPayload:
     description: Payload object for creating/updating a group
     properties:

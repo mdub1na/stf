@@ -114,6 +114,7 @@ export interface DeviceDocument {
   remoteConnect: boolean
   remoteConnectUrl: string | null
   usage: string | null
+  automationLeaseId?: string | null
   usageChangedAt?: Date
   logs_enabled: boolean
   restoreOwner?: DeviceRestoreOwner | null

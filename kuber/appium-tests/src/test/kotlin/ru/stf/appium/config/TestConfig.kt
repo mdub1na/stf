@@ -3,6 +3,7 @@ package ru.stf.appium.config
 import java.net.URI
 import java.nio.file.Path
 import java.time.Duration
+import java.util.UUID
 
 class TestConfig(private val environment: Map<String, String> = System.getenv()) {
   fun value(name: String, default: String = ""): String = environment[name]?.trim()?.takeIf { it.isNotEmpty() } ?: default
@@ -10,6 +11,14 @@ class TestConfig(private val environment: Map<String, String> = System.getenv())
   fun positiveInt(name: String, default: Int): Int = value(name, default.toString()).let {
     requireNotNull(it.toIntOrNull()?.takeIf { n -> n > 0 }) { "$name must be a positive integer" }
   }
+
+  val coordinatorEnabled: Boolean get() = value("COORDINATOR_URL").isNotEmpty()
+  val coordinatorUrl: URI get() = httpUri(required("COORDINATOR_URL"))
+  val coordinatorToken: String get() = required("COORDINATOR_TOKEN")
+  val coordinatorRunId: String by lazy { value("COORDINATOR_RUN_ID", "local-${UUID.randomUUID()}") }
+  val coordinatorQueueWait: Duration get() = Duration.ofSeconds(positiveInt("COORDINATOR_QUEUE_TIMEOUT_SECONDS", 300).toLong())
+  val coordinatorMaxDuration: Duration get() = Duration.ofSeconds(positiveInt("COORDINATOR_MAX_DURATION_SECONDS", 21_600).toLong())
+  val coordinatorCleanupWait: Duration get() = Duration.ofSeconds(positiveInt("COORDINATOR_CLEANUP_TIMEOUT_SECONDS", 90).toLong())
 
   val appiumUrl: URI get() = httpUri(value("APPIUM_SERVER_URL", "http://127.0.0.1:4723"))
   val stfUrl: URI get() = normalizeStfUrl(required("STF_BASE_URL"))

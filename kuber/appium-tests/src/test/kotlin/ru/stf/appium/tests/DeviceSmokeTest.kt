@@ -10,6 +10,7 @@ import org.openqa.selenium.interactions.PointerInput
 import org.openqa.selenium.interactions.Sequence
 import java.time.Duration
 import ru.stf.appium.config.TestConfig
+import ru.stf.appium.coordinator.CoordinatorClient
 import ru.stf.appium.stf.CapturedDevice
 import ru.stf.appium.stf.DeviceSelector
 import ru.stf.appium.stf.StfClient
@@ -23,13 +24,13 @@ class DeviceSmokeTest {
 
   @Test
   @Tag("stf-capture")
-  fun `reserves and releases an Android device`() = onStf("Android") { device ->
+  fun `reserves and releases an Android device`() = onStf("Android") { device, _ ->
     assertFalse(device.serial.isBlank())
   }
 
   @Test
   @Tag("stf-android-settings")
-  fun `opens Android Settings through STF and Appium Grid`() = onStf("Android") { device ->
+  fun `opens Android Settings through STF and Appium Grid`() = onStf("Android") { device, factory ->
     withDriver(config, "android-settings", { factory.android(device) }) { driver ->
       driver.activateApp(config.value("ANDROID_APP_PACKAGE", "com.android.settings"))
       WebDriverWait(driver, config.wait).until { it.pageSource.orEmpty().contains("com.android.settings") }
@@ -40,7 +41,7 @@ class DeviceSmokeTest {
 
   @Test
   @Tag("stf-ios-settings")
-  fun `opens iOS Settings through STF and Appium Grid`() = onStf("iOS") { device ->
+  fun `opens iOS Settings through STF and Appium Grid`() = onStf("iOS") { device, factory ->
     withDriver(config, "ios-settings", { factory.ios(device) }) { driver ->
       driver.activateApp(config.value("IOS_BUNDLE_ID", "com.apple.Preferences"))
       WebDriverWait(driver, config.wait).until {
@@ -56,7 +57,7 @@ class DeviceSmokeTest {
 
   @Test
   @Tag("stf-android-demo")
-  fun `shows an Android test in the STF live screen`() = onStf("Android") { device ->
+  fun `shows an Android test in the STF live screen`() = onStf("Android") { device, factory ->
     val cycles = config.positiveInt("STF_DEMO_CYCLES", 8)
     require(cycles <= 20) { "STF_DEMO_CYCLES must be at most 20 to keep the reservation bounded" }
     withDriver(config, "android-demo", { factory.android(device) }) { driver ->
@@ -88,7 +89,7 @@ class DeviceSmokeTest {
 
   @Test
   @Tag("stf-ios-demo")
-  fun `shows an iOS test in the STF live screen`() = onStf("iOS") { device ->
+  fun `shows an iOS test in the STF live screen`() = onStf("iOS") { device, factory ->
     val cycles = config.positiveInt("STF_DEMO_CYCLES", 8)
     require(cycles <= 20) { "STF_DEMO_CYCLES must be at most 20 to keep the reservation bounded" }
     withDriver(config, "ios-demo", { factory.ios(device) }) { driver ->
@@ -109,7 +110,7 @@ class DeviceSmokeTest {
 
   @Test
   @Tag("stf-chrome")
-  fun `opens a web page in Android Chrome`() = onStf("Android") { device ->
+  fun `opens a web page in Android Chrome`() = onStf("Android") { device, factory ->
     withDriver(config, "android-chrome", { factory.android(device, browser = true) }) { driver ->
       driver.get(config.value("TEST_TARGET_URL", "https://example.com"))
       val title = config.value("TEST_EXPECTED_TITLE", "Example")
@@ -141,7 +142,18 @@ class DeviceSmokeTest {
     }
   }
 
-  private fun onStf(platform: String, test: (CapturedDevice) -> Unit) {
+  private fun onStf(platform: String, test: (CapturedDevice, DriverFactory) -> Unit) {
+    if (config.coordinatorEnabled) {
+      val selector = DeviceSelector(platform, config.value("STF_SERIAL"),
+        config.value(if (platform == "iOS") "STF_IOS_MODEL" else "STF_MODEL"), config.value("STF_PROVIDER"))
+      CoordinatorClient(config.coordinatorUrl, config.coordinatorToken).acquire(selector, config.coordinatorRunId,
+        config.coordinatorQueueWait, config.coordinatorMaxDuration, config.coordinatorCleanupWait).use { reservation ->
+        println("Running $platform test through coordinator on model=${reservation.lease.device.model}")
+        test(reservation.lease.device, DriverFactory(config, reservation))
+        reservation.checkHealthy()
+      }
+      return
+    }
     val allowedSerials = if (platform == "iOS") factory.iosDeviceSerials() else null
     if (platform == "iOS" && allowedSerials == null) {
       require(config.value("STF_SERIAL").isNotEmpty()) { "STF_SERIAL is required for a direct iOS node" }
@@ -150,7 +162,7 @@ class DeviceSmokeTest {
       config.value(if (platform == "iOS") "STF_IOS_MODEL" else "STF_MODEL"), config.value("STF_PROVIDER"), allowedSerials)
     StfClient(config.stfUrl, config.token).capture(selector, config.leaseMillis, config.captureWait).use { reservation ->
       println("Running $platform test on model=${reservation.device.model}, provider=${reservation.device.provider}")
-      test(reservation.device)
+      test(reservation.device, factory)
     }
   }
 }

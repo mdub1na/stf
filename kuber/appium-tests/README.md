@@ -46,6 +46,9 @@ account when CI must not share the operator's reservations.
 | `stfAppiumIosSettingsTest` | iOS Settings through STF and an XCUITest node |
 | `stfAppiumIosDemo` | Slow iOS Settings swipes for viewing in STF |
 | `stfAppiumAndroidDemo` | Slow Android Settings swipes for viewing in STF |
+| `coordinatorAndroidTest` | Android Settings through coordinator allocation and WebDriver gateway |
+| `coordinatorIosTest` | iOS Settings through coordinator allocation and WebDriver gateway |
+| `coordinatorAndroidDemo` / `coordinatorIosDemo` | Observable Settings swipes through coordinator |
 | `localAndroidTest` | Android Settings on an explicit `ANDROID_UDID` |
 | `localIosTest` | iOS Settings on an explicit `IOS_UDID` and `IOS_PLATFORM_VERSION` |
 
@@ -71,8 +74,8 @@ The `localAndroidTest` task now opens Settings rather than Chrome.
 
 A reservation conflict tries another candidate. Authentication/server errors
 fail immediately. These are allocation retries, not retries of failed UI tests.
-Keep each smoke within its idle reservation timeout; long suites need a
-coordinator that manages lease duration and ownership.
+Keep direct STF smoke tests within their idle reservation timeout. The optional
+coordinator mode below renews ownership throughout longer runs.
 
 ## Android routing and parallel execution
 
@@ -87,7 +90,8 @@ Unknown provider names fail rather than silently choosing the wrong ADB server.
 `APPIUM_SYSTEM_PORT` defaults to `8200`. Sequential runs can reuse it. Concurrent
 runs on the same ADB server must set different ports from its exposed
 `8200-8209` range. Grid node count alone does not reserve system ports. These
-smoke tasks use one Gradle fork and do not schedule a parallel device matrix.
+direct smoke tasks use one Gradle fork and do not schedule a parallel device matrix.
+Coordinator mode obtains an authoritative port from the service instead.
 
 For browser smoke, optional `TEST_TARGET_URL` defaults to `https://example.com`
 and `TEST_EXPECTED_TITLE` to `Example`. `ANDROID_BROWSER_NAME` defaults to
@@ -142,3 +146,79 @@ the original failure; they do not hide it. No automatic UI-test retry is used.
 
 The [2026-10-18 validation record](../docs/appium-validation-2026-10-18.md)
 records real-device runs, fleet size, concurrent screen evidence and remaining work.
+
+## Coordinator prototype
+
+`COORDINATOR_URL` switches farm tests to the `stf coordinator` allocation API.
+A coordinator credential replaces the personal STF token in this mode. The
+runner does not call STF or query Grid directly. Explicit `coordinator*` tasks
+fail if coordinator configuration is absent, so there is no silent direct-mode
+fallback.
+
+```sh
+export COORDINATOR_URL=https://coordinator.example.com
+# Supply COORDINATOR_TOKEN through your shell or CI secret store.
+export COORDINATOR_RUN_ID=build-123
+./gradlew coordinatorAndroidTest
+./gradlew coordinatorIosTest
+```
+
+The existing `STF_SERIAL`, `STF_MODEL`, `STF_IOS_MODEL` and `STF_PROVIDER` filters
+are sent to the coordinator. It queues requests, reserves devices and assigns
+ADB ports. Returned capabilities override local connection settings such as
+`APPIUM_SYSTEM_PORT`, remote ADB and iOS WDA/OS overrides. Application-specific
+settings remain in the runner. The returned WebDriver gateway must have the same
+origin and API prefix as `COORDINATOR_URL`; tokens are never put in endpoint URLs.
+
+The client creates an idempotent request, polls allocation, starts heartbeat
+renewals, then creates Appium through the lease-specific gateway. Heartbeats
+continue during commands and `driver.quit()`. After quit, the client stops
+renewing, releases the lease and polls until cleanup has completed. A failed
+heartbeat blocks subsequent commands and fails the test; quit/release are still
+attempted. A quarantined device or unfinished cleanup also fails the task.
+A queue timeout cancels its request, including an allocation that raced with
+cancellation. Server expiry covers abrupt worker termination.
+
+| Variable | Default / meaning |
+| --- | --- |
+| `COORDINATOR_URL` | Coordinator root URL or `/api/v1`; enables coordinator mode |
+| `COORDINATOR_TOKEN` | Required coordinator secret; sent in Authorization headers |
+| `COORDINATOR_RUN_ID` | Generated local identifier; use the CI run identifier in pipelines |
+| `COORDINATOR_QUEUE_TIMEOUT_SECONDS` | `300`; maximum wait for allocation |
+| `COORDINATOR_MAX_DURATION_SECONDS` | `21600` (6 hours); request maximum duration, subject to server policy |
+| `COORDINATOR_CLEANUP_TIMEOUT_SECONDS` | `90`; wait for confirmed cleanup |
+| `APPIUM_NEW_COMMAND_TIMEOUT_SECONDS` | `120`; direct-mode gap between commands; coordinator supplies its authoritative value |
+| `APPIUM_READ_TIMEOUT_SECONDS` | `240`; coordinator WebDriver HTTP request timeout |
+
+A healthy worker can renew for hours, up to the request deadline. The server
+controls heartbeat frequency and lease TTL. Heartbeats do not keep an idle
+Appium session alive. In coordinator mode the new-command timeout is controlled
+by the service (currently 120 seconds); a local environment override cannot
+change it. A legitimate longer pause needs a corresponding coordinator policy
+change. Our Settings smoke/demo scenarios remain intentionally short.
+
+### Independent parallel workers
+
+The launcher starts separate Gradle/JVM processes with isolated build/cache,
+JUnit reports, logs and failure artifacts on Linux/macOS. Interrupting the
+launcher terminates each worker process group; server lease expiry handles
+workers unable to finish cleanup:
+
+```sh
+python3 run-coordinator-workers.py --android-workers 2 --ios-workers 1 --run-id build-123
+# For watching simultaneous swipes in STF:
+python3 run-coordinator-workers.py --android-workers 2 --ios-workers 1 --demo
+# Inspect the worker plan without contacting any service:
+python3 run-coordinator-workers.py --android-workers 2 --ios-workers 1 --dry-run
+```
+
+Workers request the same run ID but independent requests and leases. Excess
+workers wait for suitable phones; they do not borrow each other's sessions.
+Use `--android-tests` or `--ios-tests` for JUnit `--tests` filters within the task's
+platform tag. This prototype repeats the selected Settings scenario per worker;
+it does not automatically shard a larger application suite. CI can instead
+launch independent jobs and shard application test classes itself.
+The `appiumWorkerId` Gradle property isolates output directories for externally
+launched workers too. Ordinary single-process tasks keep their existing report
+paths. Coordinator and direct STF runs must not compete independently for the
+same phones in a production pipeline.

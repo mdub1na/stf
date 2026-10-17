@@ -56,6 +56,15 @@ STF entry point. No browser automation or temporary API modifications were used.
   otherwise static/asleep display, the same connection delivered a fresh frame.
   A transient first WDA session could restart once more during recovery; old
   ownership was released and the stable recovered phone was reclaimed.
+- A physical iPhone USB unplug/replug also recovered automatically, without a
+  manual provider restart. A new reservation and authenticated JPEG stream
+  succeeded after reconnecting.
+- During that physical trial, the VM kernel also recorded an Android USB
+  disconnect/re-enumeration. The Android remained visible in host USB but the
+  standard ADB container did not rediscover it. Restarting only that ADB
+  container restored discovery; both phones could then be claimed and their
+  public screens delivered JPEG frames. This trial therefore does not establish
+  uninterrupted Android operation across a shared USB disconnect.
 
 ## Native `stf local`
 
@@ -79,8 +88,9 @@ Nginx and minimal-capability volume initialization without physical devices.
 - Compose hardware testing used one iPhone and one Android; simultaneous real
   multi-iPhone testing belongs to the earlier Kubernetes record. Two absent
   configured phones establish isolation/startup behavior, not that hardware matrix.
-- Physical USB unplug/replug and a complete VM reboot are separate follow-up
-  checks; socket replacement and container recreation were exercised here.
+- A complete VM reboot remains a separate follow-up check. Physical iPhone USB
+  recovery, socket replacement and container recreation were exercised here;
+  Android hotplug after the shared disconnect required an ADB restart as above.
 - Power-off/reboot buttons and passcode entry were not repeated in this local
   packaging trial. Existing provider limitations still apply.
 - No upstream PR was created for this local-launch work.

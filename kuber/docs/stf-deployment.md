@@ -31,8 +31,9 @@ if package visibility changes.
 ## Public address
 
 The farm's canonical address is <https://stf.finservice.tech> since 2026-10-05.
-Its DNS A-record targets `46.191.173.144`. Argo CD, LDAP administration and Appium
-Grid keep their existing domains. Cluster-internal service names are unchanged.
+Its DNS A-record targets `46.191.173.144`. Appium Grid uses
+`appium-grid.finservice.tech` since 2026-10-18. Argo CD and LDAP administration
+keep their existing domains. Cluster-internal service names are unchanged.
 
 `gitops/stf/stf-certificate.yaml` declares Certificate and TLS Secret
 `stf-finservice-tech-tls` using the existing `letsencrypt-http` Issuer. The farm

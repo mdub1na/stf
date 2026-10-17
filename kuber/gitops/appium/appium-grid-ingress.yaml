@@ -1,7 +1,7 @@
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
-  name: appium-grid
+  name: appium-grid-finservice
   annotations:
     cert-manager.io/issuer: letsencrypt-http
     traefik.ingress.kubernetes.io/router.entrypoints: web,websecure
@@ -9,10 +9,10 @@ spec:
   ingressClassName: traefik
   tls:
     - hosts:
-        - appium-grid.putmyhexon.ru
-      secretName: appium-grid-putmyhexon-ru-tls
+        - appium-grid.finservice.tech
+      secretName: appium-grid-finservice-tech-tls
   rules:
-    - host: appium-grid.putmyhexon.ru
+    - host: appium-grid.finservice.tech
       http:
         paths:
           - path: /

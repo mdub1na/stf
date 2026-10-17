@@ -6,6 +6,9 @@ import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.openqa.selenium.support.ui.WebDriverWait
+import org.openqa.selenium.interactions.PointerInput
+import org.openqa.selenium.interactions.Sequence
+import java.time.Duration
 import ru.stf.appium.config.TestConfig
 import ru.stf.appium.stf.CapturedDevice
 import ru.stf.appium.stf.DeviceSelector
@@ -48,6 +51,38 @@ class DeviceSmokeTest {
       driver.executeScript("mobile: swipe", mapOf("direction" to "up"))
       driver.executeScript("mobile: swipe", mapOf("direction" to "down"))
       assertTrue(driver.getScreenshotAs(org.openqa.selenium.OutputType.BYTES).isNotEmpty(), "Settings screenshot should be available")
+    }
+  }
+
+  @Test
+  @Tag("stf-android-demo")
+  fun `shows an Android test in the STF live screen`() = onStf("Android") { device ->
+    val cycles = config.positiveInt("STF_DEMO_CYCLES", 8)
+    require(cycles <= 20) { "STF_DEMO_CYCLES must be at most 20 to keep the reservation bounded" }
+    withDriver(config, "android-demo", { factory.android(device) }) { driver ->
+      driver.activateApp("com.android.settings")
+      WebDriverWait(driver, config.wait).until { it.pageSource.orEmpty().contains("com.android.settings") }
+      val size = driver.manage().window().size
+      fun swipe(up: Boolean) {
+        val finger = PointerInput(PointerInput.Kind.TOUCH, "demo")
+        val x = size.width / 2
+        val top = (size.height * 0.3).toInt()
+        val bottom = (size.height * 0.75).toInt()
+        val gesture = Sequence(finger, 0)
+          .addAction(finger.createPointerMove(Duration.ZERO, PointerInput.Origin.viewport(), x, if (up) bottom else top))
+          .addAction(finger.createPointerDown(0))
+          .addAction(finger.createPointerMove(Duration.ofMillis(600), PointerInput.Origin.viewport(), x, if (up) top else bottom))
+          .addAction(finger.createPointerUp(0))
+        driver.perform(listOf(gesture))
+      }
+      repeat(cycles) { cycle ->
+        println("STF Android live demo: cycle ${cycle + 1}/$cycles")
+        swipe(true)
+        Thread.sleep(4000)
+        swipe(false)
+        Thread.sleep(4000)
+      }
+      assertTrue(driver.getScreenshotAs(org.openqa.selenium.OutputType.BYTES).isNotEmpty(), "Demo screenshot should be available")
     }
   }
 

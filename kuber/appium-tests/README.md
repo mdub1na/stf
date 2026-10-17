@@ -45,6 +45,7 @@ account when CI must not share the operator's reservations.
 | `stfAppiumAndroidTest` | Android Chrome browser smoke through STF and Grid |
 | `stfAppiumIosSettingsTest` | iOS Settings through STF and an XCUITest node |
 | `stfAppiumIosDemo` | Slow iOS Settings swipes for viewing in STF |
+| `stfAppiumAndroidDemo` | Slow Android Settings swipes for viewing in STF |
 | `localAndroidTest` | Android Settings on an explicit `ANDROID_UDID` |
 | `localIosTest` | iOS Settings on an explicit `IOS_UDID` and `IOS_PLATFORM_VERSION` |
 
@@ -122,6 +123,8 @@ For an observable demo, leave the device list open and run:
 
 ```sh
 ./gradlew stfAppiumIosDemo
+# Or Android:
+./gradlew stfAppiumAndroidDemo
 ```
 
 Use the same STF URL, token and public Grid endpoint as the Settings smoke.

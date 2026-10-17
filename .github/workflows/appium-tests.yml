@@ -1,0 +1,46 @@
+name: Appium test harness
+
+on:
+  pull_request:
+    paths:
+      - kuber/appium-tests/**
+      - kuber/gitops/appium/**
+      - .github/workflows/appium-tests.yml
+  push:
+    branches: [develop]
+    paths:
+      - kuber/appium-tests/**
+      - kuber/gitops/appium/**
+      - .github/workflows/appium-tests.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  regression:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961 # v5
+        with:
+          distribution: temurin
+          java-version: '21'
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
+        with:
+          node-version: '24'
+      - name: Kotlin allocation and session regressions
+        working-directory: kuber/appium-tests
+        run: ./gradlew test --console=plain
+      - name: Shared WDA session regressions
+        run: node --test kuber/appium-tests/ios-node/wda-session-proxy.test.mjs
+      - name: Validate Grid manifests
+        run: kubectl kustomize kuber/gitops/appium > /tmp/appium-rendered.yaml
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        if: always()
+        with:
+          name: appium-regression-results
+          path: |
+            kuber/appium-tests/build/reports/tests/test
+            kuber/appium-tests/build/test-results/test

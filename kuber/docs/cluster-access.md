@@ -7,7 +7,8 @@ checks were repeated during the login cutover; other infrastructure details reta
 This document records access details after the Android STF GitOps rollout.
 The cluster now deploys from `mdub1na/stf`, `develop`. Passwords, tokens, private
 keys and kubeconfig certificate data are not copied here. Application resources use namespace `stf` and the `stf-` prefix. STF uses `stf.finservice.tech`;
-Argo CD, LDAP administration and Grid domains are unchanged.
+Appium Grid moved to `appium-grid.finservice.tech` on 2026-10-18; other
+service domains retain their recorded baseline.
 
 ## Repositories
 
@@ -93,7 +94,7 @@ administration was not changed.
 | GitLab identity provider | `https://gitlab.finservice.tech` | External OAuth/OIDC provider | HTTPS discovery and client authentication verified |
 | Argo CD | `https://argocd.putmyhexon.ru` | `argocd`, `argocd-server:80` | `200` |
 | phpLDAPadmin | `https://ldap.putmyhexon.ru` | `openldap`, `phpldapadmin:80` | Disabled; no backend pods |
-| Appium / Selenium Grid | `https://appium-grid.putmyhexon.ru` | `appium`, `appium-grid-router:4444` | `/status`: `200` |
+| Appium / Selenium Grid | `https://appium-grid.finservice.tech` | `appium`, `appium-grid-router:4444` | `/status`: `200` |
 
 Normal LDAP login was confirmed by the user after the initial deployment;
 GitLab OAuth replaced it on 2026-10-05. GitLab login created the approved account;
@@ -190,9 +191,9 @@ adb -H 127.0.0.1 -P 15037 devices -l
 adb -H 127.0.0.1 -P 15038 devices -l
 ```
 
-Both new STF providers reached their corresponding ADB servers successfully;
-both returned an empty device list. No actual Appium session was run after
-cutover because no Android device is connected.
+The initial cutover had no connected Android phones. On 2026-10-18 both ADB
+pools reported six phones in total, and real Appium Settings sessions passed
+on each; see the [validation record](./appium-validation-2026-10-18.md).
 
 ## Appium Grid Layout
 
@@ -220,10 +221,11 @@ and zero active sessions. The control-plane services in namespace `appium` are:
 | `appium-grid-session-queue` | `5559` |
 | `appium-grid-event-bus` | `4442`, `4443` |
 
-Historical Java/Gradle tests and their old STF setup are in
-[`../appium-tests/README.md`](../appium-tests/README.md). Their
-`/api/v1/autotests` allocation API is absent from STF and must be adapted before
-these tests can validate the new deployment.
+Kotlin/Gradle tests use standard STF capture/release endpoints; see
+[`../appium-tests/README.md`](../appium-tests/README.md). Android Settings passed
+18/18 sequential runs on six connected phones across both ADB pools on
+2026-10-18. The iOS sidecar trial remains pending; see the
+[validation record](./appium-validation-2026-10-18.md).
 
 ## Argo CD And Installed Components
 

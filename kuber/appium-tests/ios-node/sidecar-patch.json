@@ -1,0 +1,65 @@
+{
+  "spec": {
+    "template": {
+      "spec": {
+        "containers": [
+          {
+            "name": "appium",
+            "image": "appium/appium:v3.8.0-p1@sha256:aa0af4543b763c69da31388251bbea2347ae8e01f8d0516cf6b35c35a2c9fe3e",
+            "command": [
+              "sh",
+              "-ec"
+            ],
+            "args": [
+              "mkdir -p \"$APPIUM_HOME\"; appium driver install xcuitest@12.18.1; node /opt/stf-appium/wda-session-proxy.mjs & exec appium --address 0.0.0.0 --port 4723 --use-drivers xcuitest --default-capabilities '{\"appium:webDriverAgentUrl\":\"http://127.0.0.1:18101\",\"appium:skipLogCapture\":true,\"appium:autoLaunch\":false}'"
+            ],
+            "env": [
+              {
+                "name": "APPIUM_HOME",
+                "value": "/tmp/stf-ios-appium"
+              }
+            ],
+            "ports": [
+              {
+                "name": "appium",
+                "containerPort": 4723
+              }
+            ],
+            "resources": {
+              "requests": {
+                "cpu": "100m",
+                "memory": "512Mi"
+              },
+              "limits": {
+                "cpu": "2",
+                "memory": "2Gi"
+              }
+            },
+            "readinessProbe": {
+              "httpGet": {
+                "path": "/status",
+                "port": "appium"
+              },
+              "periodSeconds": 10
+            },
+            "volumeMounts": [
+              {
+                "name": "appium-config",
+                "mountPath": "/opt/stf-appium",
+                "readOnly": true
+              }
+            ]
+          }
+        ],
+        "volumes": [
+          {
+            "name": "appium-config",
+            "configMap": {
+              "name": "ios-appium-config"
+            }
+          }
+        ]
+      }
+    }
+  }
+}

@@ -18,6 +18,7 @@ RUN python3 -m venv /opt/pymobiledevice3 \
 ENV PATH="/opt/pymobiledevice3/bin:${PATH}"
 COPY tools/ios-prototype /opt/stf/tools/ios-prototype
 COPY lib/util/ios-device-status.ts /opt/stf/lib/util/ios-device-status.ts
+COPY lib/util/ios-config.ts /opt/stf/lib/util/ios-config.ts
 WORKDIR /opt/stf
 USER node
 RUN ios version && iproxy --version && pymobiledevice3 version \

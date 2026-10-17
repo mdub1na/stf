@@ -4,9 +4,15 @@ The provider registers an iPhone in the existing STF device list and uses STF
 ownership, groups and transactions for browser control. A Mac is used to build
 and sign WebDriverAgent (WDA) and test apps; it is not a runtime node.
 
+For a local installation without Kubernetes, start with the
+[Linux Compose/native quick start](../docker/ios/README.md). It builds matching
+images, accepts a shared device configuration and generates private local state.
+The Kubernetes examples below describe the original hardware trial deployment.
+
 ## Processes and source
 
-The single-device Kubernetes deployment has three containers on the Linux USB
+The runtime has three roles, independent of the deployment system. The original
+single-device Kubernetes deployment runs them as three containers on the Linux USB
 worker. See [deployment.yaml](../kuber/ios-prototype/deployment.yaml) and the
 [STF sidecar patch](../kuber/ios-prototype/stf-integration.yaml).
 
@@ -28,7 +34,7 @@ the STF-authenticated WebSocket on 17440. Raw WDA and the prototype API are not
 public ingress endpoints. Each WDA recovery changes a generation; each API
 process has a new instance UUID. Commands from the previous session are dropped.
 
-## Launch
+## Manual launch (Kubernetes service addresses in this example)
 
 The prototype entry point needs no npm dependencies:
 

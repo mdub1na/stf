@@ -40,7 +40,7 @@ describe('Linux iOS integration', function() {
     }
   })
 
-  async function fixture() {
+  async function fixture(marketName = 'iPhone 16 Plus') {
     const state: IosDeviceState = {
       udid: serial, state: 'ready', generation: 1, instance: 'backend-instance'
     , info: {ProductType: 'iPhone17,4', ProductVersion: '27.0.1'}
@@ -87,7 +87,7 @@ describe('Linux iOS integration', function() {
     const client = new PrototypeClient(await listen(backend), 'a'.repeat(32))
     let disconnects = 0
     const bridge = new IosBridge({
-      serial, name: 'Linux', marketName: 'iPhone 16 Plus', screenUrl: 'wss://stf/screen'
+      serial, name: 'Linux', marketName, screenUrl: 'wss://stf/screen'
     , storageUrl: 'http://127.0.0.1:1', groupTimeout: 900
     }, client, (channel, data) => sent.push({channel, envelope: wire.Envelope.decode(data)}),
     () => {
@@ -97,10 +97,10 @@ describe('Linux iOS integration', function() {
       bridge.handle(channel, transaction ?
         wireutil.transaction('reply', message) : wireutil.envelope(message))
     }
-    const join = async() => {
+    const join = async(timeout = 900000) => {
       await bridge.poll()
       send(new wire.DeviceRegisteredMessage(serial), false, bridge.solo)
-      send(new wire.GroupMessage(owner, 900, [
+      send(new wire.GroupMessage(owner, timeout, [
         new wire.DeviceRequirement('serial', serial, wire.RequirementType.EXACT)
       ]), true)
       await until(() => bridge.owner !== null)
@@ -127,6 +127,32 @@ describe('Linux iOS integration', function() {
     assert.ok(f.sent.some(item => item.channel === 'reply' &&
       item.envelope.type === wire.TransactionDoneMessage.$code &&
       wire.TransactionDoneMessage.decode(item.envelope.message).success))
+  })
+
+  it('resolves a known iPhone model without a manual market-name override', async function() {
+    const f = await fixture('')
+    f.state.info!.ProductType = 'iPhone14,2'
+    await f.join()
+    f.send(new wire.ProbeMessage())
+    const message = f.sent.find(item => item.envelope.type === wire.DeviceIdentityMessage.$code)!
+    const identity = wire.DeviceIdentityMessage.decode(message.envelope.message)
+    assert.equal(identity.marketName, 'iPhone 13 Pro')
+    assert.equal(identity.model, 'iPhone14,2')
+  })
+
+  it('honors API reservation timeouts expressed in milliseconds', async function() {
+    const f = await fixture()
+    await f.join(60000)
+    const now = Date.now
+    const future = now() + 61000
+    Date.now = () => future
+    try {
+      await f.bridge.poll()
+      assert.equal(f.bridge.owner, null)
+    }
+    finally {
+      Date.now = now
+    }
   })
 
   it('rejects takeover, foreign channel prefixes and input without ownership', async function() {

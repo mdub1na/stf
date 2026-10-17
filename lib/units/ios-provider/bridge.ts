@@ -5,6 +5,7 @@ import grouputil from '../../util/grouputil.js'
 import {randomUUID} from 'node:crypto'
 import type {IosDeviceState, PrototypeClient} from './client.js'
 import type {IosOwner} from './access.js'
+import {findCatalogDevice} from '../../util/device-catalog.js'
 
 export interface BridgeOptions {
   serial: string
@@ -288,7 +289,9 @@ export class IosBridge {
       this.owner = owner
       this.lease = randomUUID()
       this.epoch++
-      this.timeout = Math.min(3600, Math.max(10, timeout || this.options.groupTimeout))
+      // GroupMessage/API timeouts are milliseconds; the CLI fallback is seconds.
+      this.timeout = Math.min(3600, Math.max(10,
+        timeout ? timeout / 1000 : this.options.groupTimeout))
       this.broadcast(new wire.JoinGroupMessage(this.options.serial, owner))
     }
     this.keepalive()
@@ -377,11 +380,13 @@ export class IosBridge {
           throw new Error('Configure PNG screenshots in WDA to identify the display')
         }
         const info = state.info || {}
+        const model = info.ProductType || 'iPhone'
+        const catalog = findCatalogDevice({platform: 'ios', manufacturer: 'Apple', model})
         this.identity = new wire.DeviceIdentityMessage({
           serial: this.options.serial, platform: 'iOS', manufacturer: 'Apple'
-        , model: info.ProductType || 'iPhone', version: info.ProductVersion || 'unknown'
+        , model, version: info.ProductVersion || 'unknown'
         , abi: 'arm64', sdk: info.ProductVersion || 'unknown'
-        , marketName: this.options.marketName || info.ProductType || 'iPhone'
+        , marketName: this.options.marketName || catalog?.name || model
         , display: new wire.DeviceDisplayMessage({
             id: 0, width: image.readUInt32BE(16), height: image.readUInt32BE(20), rotation: 0
           , xdpi: 0, ydpi: 0, fps: 10, density: 1, secure: true, url: this.options.screenUrl

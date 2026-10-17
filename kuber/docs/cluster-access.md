@@ -210,7 +210,13 @@ Appium on pod-local port `4733`. Native and Chrome stereotypes share
 per pod. Port ranges are scoped to each ADB server; concurrent sessions sharing
 an ADB server need distinct `appium:systemPort` values.
 
-The live Grid `/status` check returned `ready=true`, 16 nodes `UP` (8 per pool),
+The 2026-10-18 iOS trial added one device-bound relay,
+`appium/ios-appium-ios-prototype`, for the selected Linux iPhone. Current Grid
+capacity is 16 Android nodes plus one iOS node. Its generated resources and
+rollback are described in [the node runbook](../appium-tests/ios-node/README.md);
+the two other iPhones remain outside Appium.
+
+The earlier Grid `/status` check returned `ready=true`, 16 nodes `UP` (8 per pool),
 and zero active sessions. The control-plane services in namespace `appium` are:
 
 | Service | Ports |
@@ -224,7 +230,8 @@ and zero active sessions. The control-plane services in namespace `appium` are:
 Kotlin/Gradle tests use standard STF capture/release endpoints; see
 [`../appium-tests/README.md`](../appium-tests/README.md). Android Settings passed
 18/18 sequential runs on six connected phones across both ADB pools on
-2026-10-18. The iOS sidecar trial remains pending; see the
+2026-10-18. One Linux iOS sidecar/relay also passed three final Grid runs with concurrent
+STF viewing; the other iPhones remain outside Appium. See the
 [validation record](./appium-validation-2026-10-18.md).
 
 ## Argo CD And Installed Components

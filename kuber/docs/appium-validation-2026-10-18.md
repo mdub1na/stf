@@ -45,23 +45,51 @@ scenarios are not covered by these Settings results. Final checks reported zero
 active Grid sessions and zero phones held by the validation account. Its temporary
 user and API token were removed; the revoked token returned HTTP 401.
 
-## iOS status
+## iOS hardware results
 
-Three Linux iOS runtime pods and their iPhone devices were ready. Existing WDA
-responded successfully; the Grid had Android stereotypes only, so iOS test
-execution through Grid was not yet available.
+The operator approved adding Appium to one free iPhone (`iPhone17,4`, iPhone 16
+Plus, iOS 27.0.1). The other two iOS runtime pods were not changed. The selected
+pod now includes the Appium sidecar, and a dedicated device-bound relay connects
+it to the public Grid. Final Grid capacity is 16 Android nodes plus one iOS node.
 
-XCUITest 12.18.1 supports attaching to externally managed WDA on Linux. WDA has
-one active session: a normal Appium session would invalidate the STF runtime's
-session, and normal Appium teardown would delete it. The prepared
-[`../appium-tests/ios-node/`](../appium-tests/ios-node/README.md) adapter borrows
-the existing session and restores settings without forwarding WDA session
-creation/deletion. Seven device-free lifecycle tests pass.
+The Kotlin iOS Settings smoke activates the app, verifies its bundle identifier
+and native hierarchy, performs an up/down swipe and gets a screenshot. Three
+consecutive final runs passed through `https://appium-grid.finservice.tech`
+after restarting the Appium container. Concurrent authenticated STF screen
+streams delivered 50, 46 and 47 JPEG frames respectively, with 29 distinct frames
+in each run. Streams closed on ownership release. All three runs retained the
+original WDA session and released the phone.
 
-Adding the prepared Appium sidecar recreates the selected iPhone pod. Automatic
-approval review required explicit operator approval before this live trial.
-The trial and Grid registration remain pending; Kotlin compilation and adapter
-unit tests do not establish a successful iOS hardware run.
+The Appium-only restart preserved the pod identity, WDA session and other
+container restart counts. The two other iPhone pods were unchanged. A separate
+run also verified automatic device selection without `STF_SERIAL`, choosing
+only a free phone with a registered UP relay. Final checks reported zero active
+Grid sessions; the temporary iOS validation user/token were removed and the
+revoked token returned HTTP 401. The diagnostic port-forward was closed.
+
+Hardware testing found and fixed two integration failures:
+
+- ConfigMap files are symlinks. Comparing Node's resolved module URL against
+  the unresolved entry path prevented the adapter from starting. Real-path
+  comparison, process supervision and joint readiness/liveness checks fix it.
+- Selenium's version matching rejects a versioned request when the relay omits
+  `appium:platformVersion`. The relay now advertises the phone's exact reported
+  version, and preflight rejects mismatches before creating a session.
+
+The loopback adapter borrows STF's existing WDA session and restores settings;
+normal Appium session creation/deletion is not forwarded to WDA. Eleven Node
+regression tests cover lifecycle, ConfigMap startup and Grid resource rendering.
+Seventeen Kotlin regression tests cover configuration, Grid preflight,
+allocation, eligible-device selection and cleanup. The new preflight test fails
+when the OS-version check is removed.
+
+The selected phone's working sidecar and relay remain installed. XCUITest is
+pinned but installed from npm during container startup; registry access is
+required. Registration of the other iPhones, an image with the driver baked in,
+parallel iOS capacity and application-specific tests are separate follow-ups.
+No Mac participates in the running test sessions; signed WDA preparation is
+still external to this node. The node setup and rollback are documented in
+[`../appium-tests/ios-node/`](../appium-tests/ios-node/README.md).
 
 ## Reproduction
 

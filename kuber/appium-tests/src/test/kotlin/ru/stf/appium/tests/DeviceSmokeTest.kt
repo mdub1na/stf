@@ -45,6 +45,8 @@ class DeviceSmokeTest {
       }
       WebDriverWait(driver, config.wait).until { it.pageSource.orEmpty().contains("XCUIElementType") }
       assertTrue(driver.findElements(AppiumBy.className("XCUIElementTypeApplication")).isNotEmpty(), "Settings should expose a native application element")
+      driver.executeScript("mobile: swipe", mapOf("direction" to "up"))
+      driver.executeScript("mobile: swipe", mapOf("direction" to "down"))
       assertTrue(driver.getScreenshotAs(org.openqa.selenium.OutputType.BYTES).isNotEmpty(), "Settings screenshot should be available")
     }
   }
@@ -84,8 +86,12 @@ class DeviceSmokeTest {
   }
 
   private fun onStf(platform: String, test: (CapturedDevice) -> Unit) {
+    val allowedSerials = if (platform == "iOS") factory.iosDeviceSerials() else null
+    if (platform == "iOS" && allowedSerials == null) {
+      require(config.value("STF_SERIAL").isNotEmpty()) { "STF_SERIAL is required for a direct iOS node" }
+    }
     val selector = DeviceSelector(platform, config.value("STF_SERIAL"),
-      config.value(if (platform == "iOS") "STF_IOS_MODEL" else "STF_MODEL"), config.value("STF_PROVIDER"))
+      config.value(if (platform == "iOS") "STF_IOS_MODEL" else "STF_MODEL"), config.value("STF_PROVIDER"), allowedSerials)
     StfClient(config.stfUrl, config.token).capture(selector, config.leaseMillis, config.captureWait).use { reservation ->
       println("Running $platform test on model=${reservation.device.model}, provider=${reservation.device.provider}")
       test(reservation.device)

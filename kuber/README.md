@@ -13,9 +13,10 @@ security checks passed, and the user confirmed browser login and logout. The app
 account was explicitly promoted to administrator; its role was verified in the
 database, while administrator UI access awaits confirmation. OpenLDAP and
 phpLDAPadmin are intentionally scaled to zero since 2026-10-15; their data and
-credentials are preserved for a deliberate rollback. The 16-node Appium Grid is unchanged.
-Android Settings smoke passed on all six connected phones; iOS Appium hardware
-validation is pending. See the rollout plan
+credentials are preserved for a deliberate rollback. The Grid has 16 Android nodes plus one validated Linux iOS relay.
+Android Settings smoke passed on all six connected phones. One Linux iPhone
+also passed Appium Grid smoke with concurrent STF viewing; the other iPhones
+are not yet registered with Grid. See the rollout plan
 for verified results and pending work.
 
 ## Documents
@@ -82,8 +83,8 @@ For migration, follow the rollout plan and deployment runbook instead.
   confirmed and its database role is `admin`; LDAP stays paused unless explicitly re-enabled
 - keep GitOps documentation aligned with the live manifests
 - verify screen/touch, capture/release and APK installation with connected Android devices
-- complete the iOS Appium hardware trial; Kotlin Android Settings smoke now uses
-  standard STF APIs and passed 18/18 sequential runs across six phones
+- extend the validated single-phone iOS Appium setup when needed; Kotlin smoke
+  tests use standard STF APIs, with Android 18/18 and iOS 3/3 final runs
 - update the three Kubernetes servers after SSH access is provided
 - implement the reserved `mitmproxy` and `observability` slices when we are ready for those layers
 - follow the upgrade and observability review for measured capacity and staged version candidates

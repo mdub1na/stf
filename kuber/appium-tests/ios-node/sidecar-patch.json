@@ -11,7 +11,7 @@
               "-ec"
             ],
             "args": [
-              "mkdir -p \"$APPIUM_HOME\"; appium driver install xcuitest@12.18.1; node /opt/stf-appium/wda-session-proxy.mjs & exec appium --address 0.0.0.0 --port 4723 --use-drivers xcuitest --default-capabilities '{\"appium:webDriverAgentUrl\":\"http://127.0.0.1:18101\",\"appium:skipLogCapture\":true,\"appium:autoLaunch\":false}'"
+              "mkdir -p \"$APPIUM_HOME\"; appium driver install xcuitest@12.18.1; exec node /opt/stf-appium/start-appium.mjs"
             ],
             "env": [
               {
@@ -36,11 +36,16 @@
               }
             },
             "readinessProbe": {
-              "httpGet": {
-                "path": "/status",
-                "port": "appium"
+              "exec": {
+                "command": [
+                  "node",
+                  "-e",
+                  "Promise.all([fetch('http://127.0.0.1:4723/status').then(r=>r.json()),fetch('http://127.0.0.1:18101/status').then(r=>r.json())]).then(([a,w])=>process.exit(a.value?.ready&&w.value?.ready&&w.sessionId?0:1)).catch(()=>process.exit(1))"
+                ]
               },
-              "periodSeconds": 10
+              "periodSeconds": 10,
+              "timeoutSeconds": 5,
+              "httpGet": null
             },
             "volumeMounts": [
               {
@@ -48,7 +53,20 @@
                 "mountPath": "/opt/stf-appium",
                 "readOnly": true
               }
-            ]
+            ],
+            "livenessProbe": {
+              "exec": {
+                "command": [
+                  "node",
+                  "-e",
+                  "Promise.all([fetch('http://127.0.0.1:4723/status'),fetch('http://127.0.0.1:18101/healthz')]).then(rs=>process.exit(rs.every(r=>r.ok)?0:1)).catch(()=>process.exit(1))"
+                ]
+              },
+              "initialDelaySeconds": 60,
+              "periodSeconds": 10,
+              "timeoutSeconds": 5,
+              "failureThreshold": 3
+            }
           }
         ],
         "volumes": [

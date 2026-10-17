@@ -41,4 +41,36 @@ class TestConfigTest {
     assertEquals(false, options.getCapability("appium:autoLaunch"))
     assertNull(options.getCapability("appium:bundleId"))
   }
+
+  /** Selenium refuses a versioned request when the relay omits platformVersion. */
+  @Test
+  fun `iOS preflight requires the relay to advertise the requested OS version`() {
+    var version: String? = null
+    val server = com.sun.net.httpserver.HttpServer.create(java.net.InetSocketAddress("127.0.0.1", 0), 0)
+    server.createContext("/status") { exchange ->
+      val stereotype = mutableMapOf<String, Any>("platformName" to "iOS", "appium:udid" to "ios-id")
+      version?.let { stereotype["appium:platformVersion"] = it }
+      val status = mapOf("value" to mapOf("ready" to true, "nodes" to listOf(mapOf(
+        "availability" to "UP", "slots" to listOf(mapOf("stereotype" to stereotype))
+      ))))
+      val bytes = com.fasterxml.jackson.databind.ObjectMapper().writeValueAsBytes(status)
+      exchange.responseHeaders.add("Content-Type", "application/json")
+      exchange.sendResponseHeaders(200, bytes.size.toLong())
+      exchange.responseBody.use { it.write(bytes) }
+    }
+    server.start()
+    try {
+      val factory = DriverFactory(TestConfig(mapOf("APPIUM_SERVER_URL" to "http://127.0.0.1:${server.address.port}")))
+      val options = factory.iosOptions(CapturedDevice("ios-id", "model", "iOS", "27.0.1", "Linux iOS"))
+      assertEquals(setOf("ios-id"), factory.iosDeviceSerials())
+      assertThrows(IllegalStateException::class.java) { factory.ensureSlot(options) }
+      version = "26.0"
+      assertThrows(IllegalStateException::class.java) { factory.ensureSlot(options) }
+      version = "27.0.1"
+      factory.ensureSlot(options)
+    } finally {
+      server.stop(0)
+    }
+  }
+
 }

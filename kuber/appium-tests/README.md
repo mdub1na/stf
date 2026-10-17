@@ -57,7 +57,7 @@ The `localAndroidTest` task now opens Settings rather than Chrome.
 | --- | --- |
 | `STF_BASE_URL` | Required for farm tasks; root URL or `/api/v1`, optional trailing slash |
 | `STF_TOKEN` | Required for farm tasks; never committed or printed |
-| `STF_SERIAL` | Exact device identifier; otherwise select a free matching phone |
+| `STF_SERIAL` | Optional exact device identifier; iOS otherwise selects from UP Grid relay UDIDs |
 | `STF_MODEL` | Exact Android model filter |
 | `STF_IOS_MODEL` | Exact iOS model filter; no historical named-iPhone default |
 | `STF_PROVIDER` | Exact provider filter |
@@ -105,8 +105,9 @@ needed to build/sign WDA; it does not need to run these sessions. See the
 The existing STF runtime owns one WDA session. Connecting an ordinary second
 WDA client directly would replace it, so the prepared [iOS node trial](ios-node/README.md)
 uses a loopback session adapter. It preserves the STF session and restores its
-settings on Appium teardown. This adapter's hardware integration is pending;
-no iOS Grid node has been registered by this change yet.
+settings on Appium teardown. One iPhone relay passed native Settings, scrolling
+and screenshot tests through the public Grid with concurrent STF viewing. The
+other two preview iPhones are not registered with Appium.
 
 `IOS_WDA_URL` is an advanced override resolved by the Appium server, not by the
 test machine. Omit it for the prepared sidecar, which has its own loopback default.
@@ -114,10 +115,13 @@ Do not point it directly to the STF runtime's WDA on a shared phone.
 
 ## Reports and evidence
 
+To watch the test in the STF UI, sign in as the account that owns `STF_TOKEN`.
+The phone screen streams during the test and closes when ownership is released.
+
 Gradle writes JUnit XML under `build/test-results/<task>` and HTML under
 `build/reports/tests/<task>/index.html`. On failure, page source and screenshot
 are collected independently before Appium quit. Cleanup errors are attached to
 the original failure; they do not hide it. No automatic UI-test retry is used.
 
 The [2026-10-18 validation record](../docs/appium-validation-2026-10-18.md)
-separates real-device results from the remaining iOS work.
+separates real-device results from the single-phone iOS results and remaining rollout work.

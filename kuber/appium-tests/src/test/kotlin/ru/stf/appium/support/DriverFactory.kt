@@ -68,7 +68,7 @@ class DriverFactory(private val config: TestConfig) {
     return IOSDriver(config.appiumUrl.toURL(), options)
   }
 
-  private fun ensureSlot(options: Capabilities) {
+  private fun status(): com.fasterxml.jackson.databind.JsonNode {
     val request = HttpRequest.newBuilder(URI.create(config.appiumUrl.toString() + "/status"))
       .timeout(Duration.ofSeconds(15)).GET().build()
     val response = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(10)).build()
@@ -76,16 +76,36 @@ class DriverFactory(private val config: TestConfig) {
     check(response.statusCode() == 200) { "Appium status returned HTTP ${response.statusCode()}" }
     val value = ObjectMapper().readTree(response.body()).path("value")
     check(value.path("ready").asBoolean()) { "Appium server is not ready" }
+    return value
+  }
+
+  /** A device-bound relay must exist before a farm phone is reserved. */
+  fun iosDeviceSerials(): Set<String>? {
+    val value = status()
+    if (!value.has("nodes")) return null
+    val serials = value.path("nodes").filter { it.path("availability").asText().equals("UP", true) }
+      .flatMap { it.path("slots").toList() }
+      .map { it.path("stereotype") }
+      .filter { it.path("platformName").asText().equals("iOS", true) }
+      .map { it.path("appium:udid").asText() }.filter { it.isNotEmpty() }.toSet()
+    check(serials.isNotEmpty()) { "Grid has no UP iOS relay with an explicit device UDID" }
+    return serials
+  }
+
+  internal fun ensureSlot(options: Capabilities) {
+    val value = status()
     if (!value.has("nodes")) return
+    val requestedVersion = options.getCapability("appium:platformVersion")?.toString()
     val match = value.path("nodes").any { node ->
       node.path("availability").asText().equals("UP", true) && node.path("slots").any { slot ->
         val stereotype = slot.path("stereotype")
         stereotype.path("platformName").asText().equals(options.getCapability("platformName").toString(), true) &&
+          (requestedVersion == null || stereotype.path("appium:platformVersion").asText() == requestedVersion) &&
           listOf("appium:remoteAdbHost", "appium:udid").all { key ->
             !stereotype.has(key) || stereotype.path(key).asText() == options.getCapability(key)?.toString()
           }
       }
     }
-    check(match) { "Grid has no UP node matching this device and platform; no test was skipped" }
+    check(match) { "Grid has no UP node matching this device, platform and OS version; no test was skipped" }
   }
 }

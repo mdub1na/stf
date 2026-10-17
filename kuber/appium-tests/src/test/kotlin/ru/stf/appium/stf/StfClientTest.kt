@@ -59,6 +59,15 @@ class StfClientTest {
   }
 
   @Test
+  fun `only captures phones with registered Grid relays`() = FakeStf().use { server ->
+    server.devices = listOf(server.device("a-unsupported", "iOS"), server.device("b-supported", "iOS"))
+    server.client.capture(DeviceSelector("iOS", allowedSerials = setOf("b-supported")), wait = Duration.ZERO).use {
+      assertEquals("b-supported", it.device.serial)
+    }
+    assertEquals(listOf("b-supported"), server.claims)
+  }
+
+  @Test
   fun `release is idempotent after success`() = FakeStf().use { server ->
     val lease = server.client.capture(DeviceSelector("Android"), wait = Duration.ZERO)
     lease.close()

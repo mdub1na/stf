@@ -25,7 +25,8 @@ data class DeviceSelector(
   val platform: String,
   val serial: String = "",
   val model: String = "",
-  val provider: String = ""
+  val provider: String = "",
+  val allowedSerials: Set<String>? = null
 )
 
 class StfRequestException(val status: Int, action: String) : IllegalStateException("STF $action failed: HTTP $status")
@@ -57,6 +58,7 @@ class StfClient(
           (device.path("owner").isMissingNode || device.path("owner").isNull) &&
           device.path("platform").asText().equals(selector.platform, ignoreCase = true) &&
           (selector.serial.isEmpty() || device.path("serial").asText() == selector.serial) &&
+          (selector.allowedSerials == null || device.path("serial").asText() in selector.allowedSerials) &&
           (selector.model.isEmpty() || device.path("model").asText() == selector.model) &&
           (selector.provider.isEmpty() || provider(device) == selector.provider)
       }

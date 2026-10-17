@@ -1,5 +1,6 @@
 import http from 'node:http'
-import {pathToFileURL} from 'node:url'
+import {realpathSync} from 'node:fs'
+import {fileURLToPath} from 'node:url'
 
 /** Appium borrows the STF runtime's WDA session; it must never replace or delete it. */
 export function createWdaSessionProxy({origin = 'http://127.0.0.1:18100', timeout = 45000} = {}) {
@@ -25,6 +26,7 @@ export function createWdaSessionProxy({origin = 'http://127.0.0.1:18100', timeou
   return http.createServer(async (request, response) => {
     try {
       const path = new URL(request.url, 'http://localhost').pathname.replace(/\/+$/, '') || '/'
+      if (request.method === 'GET' && path === '/healthz') return respond(response, 200, {ready: true})
       if (request.method === 'POST' && path === '/session') {
         request.resume()
         if (borrowed || attaching) return respond(response, 409, {value: {error: 'session not created', message: 'WDA is already borrowed'}})
@@ -78,8 +80,11 @@ export function createWdaSessionProxy({origin = 'http://127.0.0.1:18100', timeou
   })
 }
 
-if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+// ConfigMap files are symlinks; Node resolves import.meta.url to their real path.
+if (process.argv[1] && fileURLToPath(import.meta.url) === realpathSync(process.argv[1])) {
   const server = createWdaSessionProxy()
-  server.listen(18101, '127.0.0.1', () => console.log('WDA session adapter listening on loopback:18101'))
+  server.listen(Number(process.env.WDA_PROXY_PORT ?? 18101), '127.0.0.1', () => {
+    console.log('WDA session adapter listening on loopback:' + server.address().port)
+  })
   for (const signal of ['SIGTERM', 'SIGINT']) process.on(signal, () => server.close(() => process.exit(0)))
 }

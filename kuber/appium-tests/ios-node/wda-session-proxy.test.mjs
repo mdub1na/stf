@@ -1,6 +1,11 @@
 import {test} from 'node:test'
 import assert from 'node:assert/strict'
 import http from 'node:http'
+import {mkdtemp, symlink, rm} from 'node:fs/promises'
+import {tmpdir} from 'node:os'
+import path from 'node:path'
+import {fileURLToPath} from 'node:url'
+import {spawn} from 'node:child_process'
 import {createWdaSessionProxy} from './wda-session-proxy.mjs'
 
 async function fixture(t) {
@@ -83,4 +88,26 @@ test('blocks requests to shut down WDA', async t => {
   const f = await fixture(t)
   assert.equal((await f.call('POST', '/wda/shutdown', {})).status, 403)
   assert.equal(f.calls.length, 0)
+})
+
+test('starts when invoked through a ConfigMap style symlink', {timeout: 5000}, async t => {
+  const directory = await mkdtemp(path.join(tmpdir(), 'wda-configmap-'))
+  const entry = path.join(directory, 'proxy.mjs')
+  await symlink(fileURLToPath(new URL('./wda-session-proxy.mjs', import.meta.url)), entry)
+  const child = spawn(process.execPath, [entry], {env: {...process.env, WDA_PROXY_PORT: '0'}, stdio: ['ignore', 'pipe', 'pipe']})
+  t.after(async () => {
+    child.kill('SIGTERM')
+    await rm(directory, {recursive: true, force: true})
+  })
+  const port = await new Promise((resolve, reject) => {
+    child.once('error', reject)
+    child.once('exit', code => reject(new Error('Adapter exited before listening: ' + code)))
+    child.stdout.on('data', chunk => {
+      const match = chunk.toString().match(/loopback:(\d+)/)
+      if (match) resolve(Number(match[1]))
+    })
+  })
+  const response = await fetch('http://127.0.0.1:' + port + '/healthz')
+  assert.equal(response.status, 200)
+  assert.deepEqual(await response.json(), {ready: true})
 })

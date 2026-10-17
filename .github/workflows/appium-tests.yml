@@ -34,7 +34,7 @@ jobs:
         working-directory: kuber/appium-tests
         run: ./gradlew test --console=plain
       - name: Shared WDA session regressions
-        run: node --test kuber/appium-tests/ios-node/wda-session-proxy.test.mjs
+        run: node --test kuber/appium-tests/ios-node/*.test.mjs
       - name: Validate Grid manifests
         run: kubectl kustomize kuber/gitops/appium > /tmp/appium-rendered.yaml
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7

@@ -97,16 +97,75 @@ describe('Linux iOS integration', function() {
       bridge.handle(channel, transaction ?
         wireutil.transaction('reply', message) : wireutil.envelope(message))
     }
-    const join = async() => {
+    const join = async(usage?: string) => {
       await bridge.poll()
       send(new wire.DeviceRegisteredMessage(serial), false, bridge.solo)
       send(new wire.GroupMessage(owner, 900, [
         new wire.DeviceRequirement('serial', serial, wire.RequirementType.EXACT)
-      ]), true)
+      ], usage), true)
       await until(() => bridge.owner !== null)
     }
     return {bridge, client, state, requests, sent, send, join, disconnects: () => disconnects}
   }
+
+  it('keeps iOS automation usage until release', async function() {
+    const f = await fixture()
+    await f.join('automation')
+    const joined = f.sent.find(item => item.envelope.type === wire.JoinGroupMessage.$code)
+    assert.equal(wire.JoinGroupMessage.decode(joined!.envelope.message).usage, 'automation')
+    assert.equal(f.bridge.usage, 'automation')
+    f.bridge.leave('ungroup_request')
+    assert.equal(f.bridge.usage, null)
+  })
+
+  it('streams authorized automation without extending its lease', async function() {
+    const f = await fixture()
+    let usage: string | null = 'automation'
+    let visible = true
+    const api = http.createServer((req, res) => {
+      if (req.url === '/api/v1/user') {
+        res.end(JSON.stringify({success: true, user: {email: 'viewer@example.test'}}))
+      }
+      else {
+        assert.equal(req.url, '/api/v1/devices/' + serial)
+        res.writeHead(visible ? 200 : 403)
+        res.end(JSON.stringify({success: visible, device: {serial, owner, usage}}))
+      }
+    })
+    servers.push(api)
+    const apiUrl = await listen(api)
+    const headers = {origin, cookie: 'session=signed'}
+    assert.equal(await authorizeScreen(apiUrl, origin, serial, owner, headers), true)
+    usage = null
+    assert.equal(await authorizeScreen(apiUrl, origin, serial, owner, headers), false)
+    usage = 'automation'
+    visible = false
+    assert.equal(await authorizeScreen(apiUrl, origin, serial, owner, headers), false)
+    visible = true
+    let keepalives = 0
+    const screen = createScreenServer({client: f.client, apiUrl, publicOrigin: origin, serial
+      , owner: () => owner, automated: () => true, keepalive: () => {
+ keepalives++
+}})
+    const url = (await listen(screen.server)).replace('http:', 'ws:')
+    const ws = new WebSocket(url, {headers})
+    let frames = 0
+    ws.on('message', (_data, binary) => {
+ if (binary) {
+ frames++
+}
+})
+    try {
+      await once(ws, 'open')
+      ws.send('on')
+      await until(() => frames >= 2)
+      assert.equal(keepalives, 0)
+    }
+    finally {
+      ws.terminate()
+      screen.close()
+    }
+  })
 
   it('registers iOS identity and translates STF input and transactions', async function() {
     const f = await fixture()
@@ -339,7 +398,8 @@ describe('Linux iOS integration', function() {
           res.end(JSON.stringify({success: true, user: {email: viewer}}))
           return
         }
-        assert.equal(req.url, '/api/v1/user/devices/' + serial)
+        const path = viewer === owner.email ? '/api/v1/user/devices/' : '/api/v1/devices/'
+        assert.equal(req.url, path + serial)
         res.writeHead(allowed ? 200 : 403)
         res.end(JSON.stringify({success: allowed, device: {serial, owner}}))
       })

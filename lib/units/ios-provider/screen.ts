@@ -11,6 +11,7 @@ export function createScreenServer(options: {
   serial: string
   owner: () => IosOwner | null
   keepalive: () => void
+  automated?: () => boolean
   onError?: (error: unknown) => void
 }) {
   const server = http.createServer((_req, res) => {
@@ -62,7 +63,9 @@ export function createScreenServer(options: {
                     ws.send(frame)
                   }
                 }
-                options.keepalive()
+                if (!options.automated?.()) {
+                  options.keepalive()
+                }
               }
               if (!active.signal.aborted) {
                 ws.close(1011, 'Screen stream ended')

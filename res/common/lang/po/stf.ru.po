@@ -2567,3 +2567,15 @@ msgstr "iPhone принял команду выключения."
 
 msgid "The iPhone accepted the restart command."
 msgstr "iPhone принял команду перезагрузки."
+
+msgid "Automated"
+msgstr "Automated"
+
+msgid "Automation finished"
+msgstr "Автотест завершён"
+
+msgid "View only. Controls are disabled while the test is running."
+msgstr "Идёт автотест. Управление устройством временно отключено."
+
+msgid "The test has finished. Take control to interact with the device."
+msgstr "Тест завершён. Нажмите «Использовать», чтобы управлять устройством."

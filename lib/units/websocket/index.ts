@@ -24,6 +24,7 @@ import cookieSession from './middleware/cookie-session.js'
 import ip from './middleware/remote-ip.js'
 import auth from './middleware/auth.js'
 import {allowIosPacket} from './ios-access.js'
+import {DevicePacketAccess, isDeviceCommand} from './device-access.js'
 import {readIosProperties} from '../../util/ios-device-status.js'
 import jwtutil from '../../util/jwtutil.js'
 
@@ -241,19 +242,27 @@ export default function(options: WebsocketOptions) {
     var channels: string[] = []
     var messageListener: MessageListener
 
-    let iosPackets = Promise.resolve()
-    // Preserve touch ordering while checking ownership before forwarding iOS controls.
+    let devicePackets = Promise.resolve()
+    const deviceAccess = new DevicePacketAccess(dbapi.loadDevices, dbapi.loadDeviceBySerial)
+    // Preserve input ordering while checking the current automation lease and iOS ownership.
     socket.use((packet, next) => {
-      if (typeof packet[1] !== 'string' || !packet[1].startsWith('ios:')) {
-        return next()
+      if (!isDeviceCommand(packet[0])) {
+        next()
+        return
       }
-      iosPackets = iosPackets
-        .then(() => allowIosPacket(packet[0], packet[1], user, dbapi.loadDeviceBySerial))
+      devicePackets = devicePackets
+        .then(async() => await deviceAccess.allows(packet[1], user.groups.subscribed) &&
+          await allowIosPacket(packet[0], packet[1], user, dbapi.loadDeviceBySerial))
         .then(allowed => {
           if (allowed) {
             return next()
           }
           else {
+            if (typeof packet[2] === 'string') {
+              socket.emit('tx.cancel', packet[2], {
+                success: false, data: 'Device is read-only or unavailable'
+              })
+            }
             return next(new Error('Device access denied'))
           }
         })
@@ -392,6 +401,7 @@ export default function(options: WebsocketOptions) {
         }
       })
       .on(wire.DeviceReadyMessage, function(channel, message) {
+        deviceAccess.released(message.serial)
         socket.emit('device.change', {
           important: true
         , data: {
@@ -413,6 +423,7 @@ export default function(options: WebsocketOptions) {
         })
       })
       .on(wire.DeviceAbsentMessage, function(channel, message) {
+        deviceAccess.released(message.serial)
         socket.emit('device.remove', {
           important: true
         , data: {
@@ -423,6 +434,7 @@ export default function(options: WebsocketOptions) {
         })
       })
       .on(wire.JoinGroupMessage, function(channel, message) {
+        deviceAccess.joined(message.serial, message.usage)
         socket.emit('device.change', {
           important: true
         , data: datautil.applyOwner({
@@ -442,6 +454,7 @@ export default function(options: WebsocketOptions) {
         })
       })
       .on(wire.LeaveGroupMessage, function(channel, message) {
+        deviceAccess.released(message.serial)
         socket.emit('device.change', {
           important: true
         , data: datautil.applyOwner({

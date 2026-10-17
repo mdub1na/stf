@@ -21,6 +21,7 @@ export class IosBridge {
   readonly channel: string
   readonly solo = wireutil.makePrivateChannel()
   owner: IosOwner | null = null
+  usage: string | null = null
   private state: IosDeviceState | null = null
   private identity: InstanceType<typeof wire.DeviceIdentityMessage> | null = null
   private registered = false
@@ -64,7 +65,7 @@ export class IosBridge {
             throw new Error('Device not ready')
           }
           await grouputil.match({serial: options.serial}, message.requirements)
-          this.join(message.owner, message.timeout)
+          this.join(message.owner, message.timeout, message.usage)
         })
       })
       .on(wire.AutoGroupMessage, (_channel, message) => {
@@ -280,16 +281,17 @@ export class IosBridge {
     )
   }
 
-  private join(owner: IosOwner, timeout?: number | null) {
+  private join(owner: IosOwner, timeout?: number | null, usage?: string | null) {
     if (this.owner && this.owner.email !== owner.email) {
       throw new Error('Device already owned')
     }
     if (!this.owner) {
       this.owner = owner
+      this.usage = usage || null
       this.lease = randomUUID()
       this.epoch++
       this.timeout = Math.min(3600, Math.max(10, timeout || this.options.groupTimeout))
-      this.broadcast(new wire.JoinGroupMessage(this.options.serial, owner))
+      this.broadcast(new wire.JoinGroupMessage(this.options.serial, owner, usage))
     }
     this.keepalive()
   }
@@ -304,6 +306,7 @@ export class IosBridge {
       this.client.request('/installations/cancel', {id, lease}).catch(this.report)
     }
     this.owner = null
+    this.usage = null
     this.epoch++
     this.resetTouch()
     this.disconnect()

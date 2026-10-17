@@ -87,8 +87,9 @@ The selected phone's working sidecar and relay remain installed. XCUITest is
 pinned but installed from npm during container startup; registry access is
 required. Registration of the other iPhones, an image with the driver baked in,
 parallel iOS capacity and application-specific tests are separate follow-ups.
-No Mac participates in the running test sessions; signed WDA preparation is
-still external to this node. The node setup and rollback are documented in
+Appium, WDA and the device runtime execute on Linux. The Kotlin test client
+was run from the workstation; signed WDA preparation remains external to the
+Linux node. The node setup and rollback are documented in
 [`../appium-tests/ios-node/`](../appium-tests/ios-node/README.md).
 
 ## Reproduction

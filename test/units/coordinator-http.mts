@@ -34,6 +34,14 @@ async function jsonBody(req: http.IncomingMessage) {
   return chunks.length ? JSON.parse(Buffer.concat(chunks).toString()) : null
 }
 
+function deferred() {
+  let resolve!: () => void
+  const promise = new Promise<void>(done => {
+    resolve = done
+  })
+  return {promise, resolve}
+}
+
 class MemoryStore implements StateStore {
   state: CoordinatorState = {version: 1, requests: [], leases: []}
   fail = false
@@ -73,6 +81,12 @@ describe('coordinator HTTP and real upstream adapters', function() {
     const gridCalls: typeof stfCalls = []
     let nextSession = 0
     let inventoryFails = false
+    let inventoryPause: {entered: ReturnType<typeof deferred>
+      , release: ReturnType<typeof deferred>} | null = null
+    let capturePause: {entered: ReturnType<typeof deferred>
+      , release: ReturnType<typeof deferred>} | null = null
+    let renewalPause: {serial: string, entered: ReturnType<typeof deferred>
+      , release: ReturnType<typeof deferred>} | null = null
     const reply = (res: http.ServerResponse, value: unknown, status = 200) => {
       res.writeHead(status, {'Content-Type': 'application/json'})
       res.end(JSON.stringify(value))
@@ -88,11 +102,19 @@ describe('coordinator HTTP and real upstream adapters', function() {
         return reply(res, {success: true, user: {email: owner}})
       }
       if (route === '/api/v1/devices') {
+        if (inventoryPause) {
+          inventoryPause.entered.resolve()
+          await inventoryPause.release.promise
+        }
         return reply(res, inventoryFails ? {error: 'private upstream failure ' + stfToken} :
           {success: true, devices: devices.map(device => ({...device
             , provider: {name: device.provider}}))}, inventoryFails ? 502 : 200)
       }
       if (route === '/api/v1/user/devices' && req.method === 'POST') {
+        if (capturePause) {
+          capturePause.entered.resolve()
+          await capturePause.release.promise
+        }
         const device = devices.find(item => item.serial === body.serial)!
         device.owner = {email: owner}
         device.usage = 'automation'
@@ -102,6 +124,11 @@ describe('coordinator HTTP and real upstream adapters', function() {
       const operation =
         /^\/api\/v1\/user\/devices\/([^/]+)\/automation\/(renew|release)$/.exec(route)
       if (operation) {
+        if (operation[2] === 'renew' && renewalPause &&
+            decodeURIComponent(operation[1]!) === renewalPause.serial) {
+          renewalPause.entered.resolve()
+          await renewalPause.release.promise
+        }
         const device = devices.find(item => item.serial === decodeURIComponent(operation[1]!))!
         if (!device.owner || device.automationLeaseId !== body.leaseId) {
           return reply(res, {success: false}, 409)
@@ -184,7 +211,19 @@ describe('coordinator HTTP and real upstream adapters', function() {
 }
       , failInventory() {
  inventoryFails = true
-}}
+}
+      , pauseInventory() {
+        inventoryPause = {entered: deferred(), release: deferred()}
+        return inventoryPause
+      }
+      , pauseCapture() {
+        capturePause = {entered: deferred(), release: deferred()}
+        return capturePause
+      }
+      , pauseRenewal(serial: string) {
+        renewalPause = {serial, entered: deferred(), release: deferred()}
+        return renewalPause
+      }}
   }
 
   it('exposes readiness before recovery and refuses allocation before startup', async function() {
@@ -267,6 +306,65 @@ describe('coordinator HTTP and real upstream adapters', function() {
       assert.doesNotMatch(JSON.stringify(call), new RegExp(apiToken + '|' + stfToken))
     }
     assert.ok(f.stfCalls.every(call => call.headers.authorization === 'Bearer ' + stfToken))
+  })
+
+  for (const phase of ['inventory', 'capture'] as const) {
+    it(`keeps HTTP heartbeat and commands available during slow ${phase}`, async function() {
+      const f = await fixture()
+      const active = await f.allocate('active-worker')
+      const gateway = '/api/v1/leases/' + active.id + '/webdriver'
+      const created = await f.call(gateway + '/session', 'POST', {capabilities: {
+        firstMatch: [{platformName: 'ANDROID'}]
+      }})
+      assert.equal(created.status, 200)
+      await f.call('/api/v1/requests', 'POST', {runId: 'slow', platform: 'Android'},
+        bearer, {'Idempotency-Key': 'slow'})
+      const pause = phase === 'inventory' ? f.pauseInventory() : f.pauseCapture()
+      const scheduling = f.engine.tick()
+      await pause.entered.promise
+      try {
+        f.advance(60000)
+        const heartbeat = await Promise.race([
+          f.call('/api/v1/leases/' + active.id + '/renew', 'POST', {})
+        , new Promise<never>((_resolve, reject) => {
+          setTimeout(() => reject(new Error('HTTP heartbeat blocked by scheduling IO')), 500)
+        })])
+        assert.equal(heartbeat.status, 200)
+        assert.ok(Date.parse(heartbeat.body.lease.expiresAt) > Date.parse(active.expiresAt))
+        const source = await f.call(gateway + '/session/' +
+          created.body.value.sessionId + '/source')
+        assert.equal(source.status, 200)
+        assert.equal(source.body.value, '<App/>')
+      }
+      finally {
+        pause.release.resolve()
+        await scheduling
+      }
+    })
+  }
+
+  it('does not block another HTTP worker behind a slow gateway ownership check', async function() {
+    const f = await fixture()
+    const first = await f.allocate('first-worker')
+    const second = await f.allocate('second-worker')
+    const pause = f.pauseRenewal(first.device.serial)
+    const gateway = f.call('/api/v1/leases/' + first.id + '/webdriver/session', 'POST', {
+      capabilities: {firstMatch: [{platformName: 'ANDROID'}]}
+    })
+    await pause.entered.promise
+    try {
+      f.advance(60000)
+      const heartbeat = await Promise.race([
+        f.call('/api/v1/leases/' + second.id + '/renew', 'POST', {})
+      , new Promise<never>((_resolve, reject) => {
+        setTimeout(() => reject(new Error('HTTP heartbeat blocked by gateway fence IO')), 500)
+      })])
+      assert.equal(heartbeat.status, 200)
+    }
+    finally {
+      pause.release.resolve()
+      assert.equal((await gateway).status, 200)
+    }
   })
 
   it('rejects nested and firstMatch connection overrides before contacting Grid', async function() {

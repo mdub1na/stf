@@ -65,10 +65,25 @@ the requested duration must also fit the configured coordinator maximum.
 Startup configuration limits lease TTL to 3600 seconds, absolute duration to
 86400 seconds and individual upstream timeout to 300 seconds.
 
+For physical-device runs, set `--upstream-timeout-seconds` to 120–180 seconds
+when a cold Appium session may install/start UiAutomator2 or establish its iOS
+connection. The CLI default remains 30 seconds; it is suitable only when all
+required upstream operations complete within that budget. A short coordinator
+timeout during session creation produces an uncertain result and quarantine,
+even if Appium eventually succeeds. Configure the worker's WebDriver HTTP
+timeout to exceed the coordinator's budget; keep heartbeat on a separate
+execution thread while session creation or a slow command runs.
+
 STF ownership lasts longer than the worker lease to leave time for cleanup.
-The coordinator adds a cleanup grace of at least the Appium idle timeout
-(120 seconds), twice the upstream timeout and 60 seconds: 240 seconds of extra
-STF ownership with the defaults. Expiry blocks gateway commands immediately;
+The coordinator adds cleanup grace equal to the Appium idle timeout
+(120 seconds), twice the upstream timeout and 60 seconds:
+`STF ownership TTL = worker lease TTL + 180 + 2 × upstream timeout`, all in
+seconds. With the defaults this is 180 + 240 = 420 seconds. An upstream timeout
+of 120 seconds gives 420 seconds of grace and 600 seconds of STF ownership;
+180 seconds gives 540 seconds of grace and 720 seconds of ownership. This
+headroom allows the coordinator to stop a session and verify its release while
+the worker lease is already inactive. It does not extend the worker's right to
+send commands or its absolute run deadline. Expiry blocks gateway commands immediately;
 it does not immediately make a still-running phone available. Cleanup and
 quarantine maintain STF ownership while it is still possible to renew it.
 Viewer activity is never a worker heartbeat.
@@ -78,12 +93,21 @@ slow operations and heartbeat execution consistent. A long test can use many
 commands over hours; a long period with no commands may still terminate its
 Appium session. The prototype gateway controls the Appium idle capability.
 
-State-changing operations are serialized in this prototype. Slow STF inventory,
-capture or cleanup calls can delay a worker's queued heartbeat. The default
-intervals leave headroom for ordinary responses, but sustained upstream latency
-and large simultaneous allocation batches require load validation before a
-multi-hour production run. Observe API latency and tune capacity/timeouts from
-measurements rather than assuming a short demonstration proves this behavior.
+The current farm has one STF processor. Ownership persistence acknowledgements are ordered per device in that processor; scaling processors requires a separate ordering review.
+
+Durable state transitions are serialized, while STF/Grid network calls run
+outside that state queue. Allocations and cleanup on separate devices can run
+concurrently; heartbeat handling remains independent of a slow capture,
+inventory request or Appium command. Commands for one lease remain ordered,
+and only one cleanup operation for that lease runs at a time. After network
+responses return, the coordinator checks current state again, so a late capture
+or renewal cannot undo cancellation, expiry or shutdown.
+
+The prototype still runs one scheduling cycle at a time. A slow upstream call
+can delay the next queue/expiry maintenance pass; the WebDriver gateway rejects
+expired leases using the clock without waiting for that pass. Heartbeat, API
+latency and recovery under sustained load still need measurement before a
+multi-hour production run. A short demonstration does not establish that result.
 
 ### Queue and lease states
 
@@ -254,7 +278,8 @@ stf coordinator \
   --stf-token-file "$COORDINATOR_PRIVATE_DIR/stf-token" \
   --api-token-file "$COORDINATOR_PRIVATE_DIR/api-token" \
   --adb-pools-file "$COORDINATOR_PRIVATE_DIR/adb-pools.json" \
-  --state-file "$COORDINATOR_PRIVATE_DIR/state/coordinator.json"
+  --state-file "$COORDINATOR_PRIVATE_DIR/state/coordinator.json" \
+  --upstream-timeout-seconds 180
 ```
 
 The parent state directory must exist and be private/writable; create it before
@@ -304,6 +329,10 @@ context for every cluster operation; the shell's default cluster may be unrelate
 3. Apply the reviewed overlay; verify the PVC is bound, exactly one coordinator
    pod runs, and `/readyz` succeeds. The Deployment uses `Recreate`, UID/GID1000,
    an `fsGroup` writable state volume and read-only credential/config mounts.
+   For cold physical-device Appium sessions, override the manifest's upstream
+   timeout from 30 to 120–180 seconds and review the worker HTTP timeout and
+   shutdown grace together. A forced shutdown preserves uncertain state for
+   recovery rather than declaring the device free.
 4. For a local demo, set public URL to `http://127.0.0.1:18080` before allocation
    and port-forward `18080:8080`. For cluster workers use the Service DNS URL.
    There is no public Ingress or DNS requirement in the prototype.

@@ -75,6 +75,10 @@ class FakeFarm implements FarmBackend {
   webdriverCalls: {method: string, route: string, body?: unknown}[] = []
   captures: {serial: string, leaseId: string, timeout: number}[] = []
   inventoryError = false
+  inventoryBarrier: ReturnType<typeof deferred> | null = null
+  inventoryEntered: ReturnType<typeof deferred> | null = null
+  renewBarrier: ReturnType<typeof deferred> | null = null
+  renewEntered: ReturnType<typeof deferred> | null = null
   captureError: Error | null = null
   captureBarrier: ReturnType<typeof deferred> | null = null
   captureEntered: ReturnType<typeof deferred> | null = null
@@ -93,6 +97,10 @@ class FakeFarm implements FarmBackend {
   }
 
   async devices() {
+    this.inventoryEntered?.resolve()
+    if (this.inventoryBarrier) {
+      await this.inventoryBarrier.promise
+    }
     if (this.inventoryError) {
       throw new Error('Inventory unavailable')
     }
@@ -124,6 +132,10 @@ class FakeFarm implements FarmBackend {
 
   async renew(serial: string, leaseId: string) {
     this.events.push('renew:' + serial)
+    this.renewEntered?.resolve()
+    if (this.renewBarrier) {
+      await this.renewBarrier.promise
+    }
     const device = this.inventory.find(item => item.serial === serial)!
     if (device.owner?.email !== owner || device.automationLeaseId !== leaseId) {
       throw new BackendError(409, 'renew')
@@ -317,6 +329,70 @@ describe('coordinator allocation and lifetime', () => {
     assert.equal(farm.inventory[0]!.owner, null)
   })
 
+  it('renews an active worker beyond its original TTL during another capture', async() => {
+    const {engine, allocate, create, farm, advance} = await fixture()
+    const active = await allocate({}, 'active-worker')
+    farm.captureBarrier = deferred()
+    farm.captureEntered = deferred()
+    await engine.submit(input(), 'slow-capture')
+    const scheduling = engine.tick()
+    await farm.captureEntered.promise
+    try {
+      advance(9000)
+      const renewed = await Promise.race([engine.renew(active.id)
+        , new Promise<never>((_resolve, reject) => {
+          setTimeout(() => reject(new Error('Heartbeat blocked behind another capture')), 1000)
+        })])
+      assert.equal(Date.parse(renewed.expiresAt), initialTime + 19000)
+      advance(2000)
+      await create(active.id)
+      assert.equal(engine.leaseView(active.id).state, 'active')
+    }
+    finally {
+      farm.captureBarrier.resolve()
+      await scheduling
+    }
+  })
+
+  it('does not forward a command when cancellation wins during its STF fence check', async() => {
+    const {engine, allocate, create, farm} = await fixture()
+    const lease = await allocate()
+    const session = await create(lease.id)
+    farm.renewBarrier = deferred()
+    farm.renewEntered = deferred()
+    const command = engine.webdriver(lease.id, 'GET', '/session/' + session + '/source')
+    const outcome = command.catch(error => error)
+    await farm.renewEntered.promise
+    try {
+      await engine.release(lease.id)
+      await engine.tick()
+      assert.equal(engine.leaseView(lease.id).state, 'released')
+    }
+    finally {
+      farm.renewBarrier.resolve()
+    }
+    assert.ok(await outcome instanceof CoordinatorError)
+    assert.equal(farm.webdriverCalls.some(call => call.route.endsWith('/source')), false)
+    assert.equal(farm.inventory[0]!.owner, null)
+  })
+
+  it('does not revive a stopped allocation after a late capture response', async() => {
+    const farm = new FakeFarm()
+    farm.captureBarrier = deferred()
+    farm.captureEntered = deferred()
+    const {engine} = await fixture({}, farm)
+    const request = await engine.submit(input(), 'stop-during-capture')
+    const scheduling = engine.tick()
+    await farm.captureEntered.promise
+    const stopping = engine.stop()
+    farm.captureBarrier.resolve()
+    await Promise.all([scheduling, stopping])
+    const lease = engine.leaseView(engine.requestView(request.id).leaseId!)
+    assert.equal(lease.state, 'expired')
+    assert.equal(engine.ready, false)
+    assert.equal(farm.inventory[0]!.owner, null)
+  })
+
   it('preserves queued requests and cleans old sessions after restart', async() => {
     const original = await fixture()
     const lease = await original.allocate()
@@ -454,6 +530,22 @@ describe('coordinator session isolation and uncertain cleanup', () => {
     assert.equal(body.capabilities.alwaysMatch['appium:appPackage'], 'example.app')
   })
 
+  it('accepts Java-client platformName casing and retains canonical capabilities', async() => {
+    for (const platform of ['Android', 'iOS'] as const) {
+      const farm = new FakeFarm()
+      farm.inventory = [phone('PHONE-A', {platform, version: '27.0'})]
+      farm.slots.nodes = [{id: 'node', availability: 'UP', slots: [{session: null
+        , stereotype: {platformName: platform, 'appium:remoteAdbHost': 'adb-one'
+          , 'appium:udid': 'PHONE-A', 'appium:platformVersion': '27.0'}}]}]
+      const {allocate, create} = await fixture({}, farm)
+      const lease = await allocate({platform})
+      await create(lease.id, {platformName: platform.toUpperCase()})
+      const body = farm.webdriverCalls[0]!.body as {capabilities: {
+        alwaysMatch: Record<string, unknown>}}
+      assert.equal(body.capabilities.alwaysMatch.platformName, platform)
+    }
+  })
+
   it('rejects commands addressed to another lease session', async() => {
     const {engine, allocate, create, farm} = await fixture()
     const first = await allocate({}, 'first')
@@ -563,6 +655,38 @@ describe('coordinator session isolation and uncertain cleanup', () => {
       await engine.tick()
     }
     assert.equal(engine.leaseView(lease.id).state, 'expired')
+  })
+
+  it('keeps renewing STF ownership while cleanup waits for an accepted command', async() => {
+    const {engine, allocate, create, farm, advance} = await fixture()
+    const lease = await allocate()
+    const session = await create(lease.id)
+    farm.commandBarrier = deferred()
+    farm.commandEntered = deferred()
+    const command = engine.webdriver(lease.id, 'POST', '/session/' + session + '/click', {})
+    const settled = command.catch(() => {})
+    await farm.commandEntered.promise
+    await engine.release(lease.id)
+    const renewals = () => farm.events.filter(event => event === 'renew:ANDROID-A').length
+    const before = renewals()
+    try {
+      for (let tick = 1; tick <= 2; tick++) {
+        advance(2000)
+        await engine.tick()
+        assert.equal(engine.leaseView(lease.id).state, 'cleaning')
+        assert.equal(farm.inventory[0]!.automationLeaseId, lease.id)
+        assert.equal(renewals(), before + tick,
+          'Cleanup must not disable renewal of the STF fence')
+      }
+      assert.equal(farm.events.some(event => event.startsWith('release:')), false)
+    }
+    finally {
+      farm.commandBarrier.resolve()
+      await settled
+    }
+    await engine.tick()
+    assert.equal(engine.leaseView(lease.id).state, 'released')
+    assert.equal(farm.inventory[0]!.owner, null)
   })
 
   it('recovers the exact tagged session when its creation response was lost', async() => {

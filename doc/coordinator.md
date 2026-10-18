@@ -329,6 +329,9 @@ context for every cluster operation; the shell's default cluster may be unrelate
 3. Apply the reviewed overlay; verify the PVC is bound, exactly one coordinator
    pod runs, and `/readyz` succeeds. The Deployment uses `Recreate`, UID/GID1000,
    an `fsGroup` writable state volume and read-only credential/config mounts.
+   Kubernetes service-link environment injection is disabled: variables such as
+   `STF_COORDINATOR_SERVICE_HOST` would otherwise collide with the strict
+   `STF_COORDINATOR_` CLI configuration prefix.
    For cold physical-device Appium sessions, override the manifest's upstream
    timeout from 30 to 120–180 seconds and review the worker HTTP timeout and
    shutdown grace together. A forced shutdown preserves uncertain state for
@@ -359,9 +362,53 @@ coordinator. Adapt these exact selectors if upstream URLs or cluster DNS differ.
 
 ## Validation record
 
-Implementation-level tests exercise the state machine, fenced renew/release,
-gateway isolation and failure recovery without physical devices. CLI tests
-exercise defaults, required durable configuration, environment overrides and
-rejection of token-value flags. Hardware observations and limitations must be
-recorded here after the prototype has actually been run; do not treat the
-acceptance plan in `research/brief-technical.md` as a completed experiment.
+The prototype was exercised on the farm on 2026-10-18 with coordinator source
+`faec4cace8e92032db2afaa2aee806973db6f71b` and immutable image
+`ghcr.io/mdub1na/stf@sha256:1a86ee64a11ab83141e2c81eed2d68075c2bbd44051e92a8e35e893eba5b1feb`.
+The fenced API/processor/providers used source `5ab96333`; their fenced protocol
+code is unchanged in the coordinator image. The deployment additionally disables
+service-link environment injection as described above.
+
+- All 55 coordinator CLI, state, engine and HTTP regression tests passed. The
+  complete unit suite, lint/type checks and production build also passed;
+  Kotlin's 25 device-free regression tests passed in the harness workflow.
+- The real CLI and two real Kotlin workers passed against local STF/Grid
+  fixtures, including authentication rejection, a forced process crash,
+  retained queued work and cleanup of the exact tagged session.
+- Direct fenced capture/renew/release passed on a physical Android and iPhone.
+  Stale lease requests returned 409 and preserved current ownership.
+- Three independent Kotlin workers passed physical Settings scenarios: two
+  Android workers concurrently and an iOS worker waiting in the queue. The
+  coordinator held at most two leases. The Android workers shared one remote
+  ADB host and used distinct system ports. All three leases reached `released`.
+- The hardware run used worker TTL15 seconds and heartbeat every three seconds.
+  Renewals kept each run alive for substantially longer than its initial TTL.
+  The entire demonstration took about 183 seconds. The largest observed time
+  for a pair of sequential local status/lease reads was 0.298 seconds; this is
+  a small-run observation, not a load benchmark.
+- Stopping heartbeat with a live physical Android Appium session produced
+  gateway 409, terminal `expired`, no matching Grid session and a free STF
+  device. A subsequent lease was unaffected by the old lease's STF
+  renew/release and coordinator renew requests, all of which returned 409.
+  This proves end-to-end HTTP fencing; the rejecting internal layer is not
+  inferred from those HTTP responses.
+- A temporary shell supervisor allowed SIGKILL of the exact coordinator child
+  while a physical Appium session was active. Kubernetes restarted the same
+  container once; persisted state recovery expired the old lease, removed its
+  session and freed STF ownership in about three seconds. No manual cleanup or
+  quarantine reset was needed. The ordinary `stf coordinator` command was
+  restored after the exercise.
+
+The running preview retains one replica, a persistent state volume, a maximum
+of two concurrent leases, worker TTL180/heartbeat30 seconds, a six-hour absolute
+lease ceiling and upstream timeout120 seconds. Its returned worker URL is
+`http://127.0.0.1:18080` for the local port-forward demonstration. Cluster CI
+workers need an appropriate reachable `--public-url` before new allocations.
+
+These short runs do not establish multi-hour reliability, large-queue throughput
+or fairness under sustained contention. There was no multi-hour soak test.
+Final health checks found one ready coordinator replica, no held or queued
+leases, all ten Grid nodes UP with zero sessions, and seven present/ready STF
+devices with no owners. The two absent Android devices predated this rollout.
+Real response snapshots, device identifiers, credentials and detailed logs stay
+in private operator storage rather than this repository.

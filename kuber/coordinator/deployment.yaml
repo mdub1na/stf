@@ -16,6 +16,7 @@ spec:
       labels:
         app.kubernetes.io/name: stf-coordinator
     spec:
+      enableServiceLinks: false
       automountServiceAccountToken: false
       terminationGracePeriodSeconds: 120
       securityContext:

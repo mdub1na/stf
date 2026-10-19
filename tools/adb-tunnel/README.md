@@ -5,7 +5,8 @@ server used by Android Studio. A foreground CLI forwards one ADB transport over
 verified HTTPS/WebSocket. STF's screen connection remains independent.
 
 This is an opt-in prototype. No public route or workload is enabled by adding
-these files. Physical-device/Android Studio validation is still pending.
+these files. A physical Galaxy A55 has passed the controlled validation below;
+public-ingress deployment and Android Studio GUI validation remain pending.
 
 ## Requirements
 
@@ -139,8 +140,9 @@ the farm's generic smart socket. Malformed/oversized packets close the session.
 host rather than the developer's workstation. Rejection currently closes the
 whole tunnel. This prototype also does not add ADB TLS/STLS, `abb` services,
 modern feature advertisement or incremental installation to that bridge.
-Shell-based install/debug fallbacks remain available, but current Android
-Studio behavior and WAN transfer speed require physical validation.
+Shell-based install/debug fallbacks passed the physical checks below. Current
+Android Studio GUI behavior and representative WAN transfer speed still require
+validation.
 
 For full `adb reverse` and native feature negotiation, a later backend can
 tunnel the phone's actual `adbd` transport. This prototype does not enable TCP
@@ -167,8 +169,46 @@ The standalone strict type check from a development checkout is:
 node_modules/.bin/tsc -p tools/adb-tunnel/tsconfig.json --noEmit
 ```
 
-Before deployment acceptance, use a separately authorized test token and an
-available physical Android: Run an APK from Android Studio, stop at a breakpoint,
-read Logcat, use `adb forward`, view the STF screen simultaneously, transfer a
-representative large APK, release the phone and revoke the token while connected.
-These hardware checks have **not** been performed by the isolated test suite.
+### Physical-device validation — 19 October 2026
+
+The actual CLI and Android SDK ADB 37.0.0 connected a temporarily reserved Samsung
+Galaxy A55 (SM-A556E, Android 16) through the prototype gateway. The existing local
+ADB server was used without restarting it. The gateway called the real STF HTTPS
+API with the authorized test account's token and rechecked ownership throughout.
+
+The controlled route was SDK ADB → CLI loopback listener → verified WSS to a local
+TLS frontend → gateway → one Kubernetes port-forward to the provider's assigned
+device bridge → phone. A temporary CA was explicitly trusted; certificate and
+hostname verification stayed enabled. The provider allowlist admitted only that
+device bridge port. This run did **not** deploy a public gateway or exercise an
+external ingress for the ADB stream. STF API and screen WSS used the real public
+HTTPS/WSS endpoints.
+
+| Check | Observed result |
+| --- | --- |
+| Native SDK connection and shell | Device online; model/version and shell marker returned |
+| APK installation and launch | Own debuggable APK installed successfully and its Activity launched |
+| Simultaneous STF screen | Existing screen WSS stayed open during ADB work; JPEG frames visibly showed the installed app |
+| File transfer | 1 MiB pushed and pulled; SHA-256 matched; device test file removed |
+| Logcat | Own tagged marker retrieved without clearing the device log |
+| JDWP and local forward | Real JDWP handshake through an allocated local TCP forward |
+| Breakpoint | JDI attached to the app, hit `MainActivity.onCreate` line 16 on the main thread, then resumed execution and detached |
+| Release while connected | STF returned owner `null` and Remote ADB disabled; active CLI exited on stream closure and its SDK endpoint disappeared |
+| Cleanup | APK absence verified, phone free/present/ready, temporary public-key registration removed, own forwards/listeners stopped |
+
+The second screen observation ran from 14:17:09 to 14:22:42 UTC and received 700
+JPEG frames, including app frames during the development checks. It was stopped
+explicitly after release. This confirms simultaneous use of STF's actual screen
+transport; the STF browser UI and Android Studio GUI were not opened. The JDI
+breakpoint proves the debugger transport, rather than an IDE-specific workflow.
+
+The SDK private key stayed on the workstation. Only its public key was registered
+for this test and that temporary registration was removed afterward. The existing
+STF token was used without revoking or replacing it. Test APK, device file, local
+forwards, TLS frontend and Kubernetes port-forward were cleaned up; the preexisting
+ADB server remained running with no connected devices, as before the test.
+
+Before deployment acceptance, validate the published HTTPS ingress, run/install
+and a breakpoint from Android Studio, representative large APK/WAN performance,
+and revocation of a dedicated disposable STF token while connected. Isolated
+tests cover token rejection, but live token revocation was not exercised here.

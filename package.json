@@ -26,6 +26,9 @@
     "stf": "./bin/stf"
   },
   "scripts": {
+    "adb:tunnel": "node tools/adb-tunnel/cli.mts",
+    "adb:tunnel:gateway": "node tools/adb-tunnel/server.mts",
+    "test:adb-tunnel": "node --test tools/adb-tunnel/test/*.test.mts",
     "test": "node build.mts test && npm run test:unit",
     "prepare": "not-in-install && node build.mts build || in-install",
     "prelocal": "node build.mts compile translate-compile",

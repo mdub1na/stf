@@ -1,0 +1,22 @@
+{
+  "name": "@devicefarmer/stf-adb-tunnel-prototype",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Lease-bound STF Remote ADB over verified HTTPS/WebSocket",
+  "bin": {
+    "stf-adb": "cli.mts",
+    "stf-adb-gateway": "server.mts"
+  },
+  "engines": {
+    "node": ">=22.18.0"
+  },
+  "scripts": {
+    "connect": "node cli.mts connect",
+    "gateway": "node server.mts",
+    "test": "node --test test/*.test.mts"
+  },
+  "dependencies": {
+    "ws": "8.22.0"
+  }
+}

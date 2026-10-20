@@ -4,12 +4,16 @@ on:
   pull_request:
     paths:
       - tools/adb-tunnel/**
+      - bin/stf
+      - lib/cli/utils/**
       - .github/workflows/adb-tunnel-prototype.yml
       - .nvmrc
   push:
     branches: [develop]
     paths:
       - tools/adb-tunnel/**
+      - bin/stf
+      - lib/cli/utils/**
       - .github/workflows/adb-tunnel-prototype.yml
       - .nvmrc
   workflow_dispatch:
@@ -32,6 +36,6 @@ jobs:
         with:
           node-version-file: .nvmrc
       - name: Install the standalone transport dependency
-        run: npm --prefix tools/adb-tunnel install --ignore-scripts --no-audit --no-fund
+        run: npm --prefix tools/adb-tunnel ci --omit=optional --ignore-scripts --no-audit --no-fund
       - name: Test without a phone or local ADB server
         run: node --test tools/adb-tunnel/test/*.test.mts

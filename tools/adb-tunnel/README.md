@@ -1,8 +1,10 @@
-# Secure Remote ADB prototype
+# STF Utils and secure Remote ADB gateway
 
-Connect a device already occupied by your STF account to the ordinary local ADB
-server used by Android Studio. A foreground CLI forwards one ADB transport over
-verified HTTPS/WebSocket. STF's screen connection remains independent.
+`stf utils` is the farm user's command-line toolbox. Its first command,
+`stf utils adb connect`, connects an Android device already occupied by your STF
+account to the ordinary local ADB server used by Android Studio. A foreground
+client forwards one ADB transport over verified HTTPS/WebSocket. STF's screen
+connection remains independent.
 
 This is an opt-in prototype. No public route or workload is enabled by adding
 these files. A physical Galaxy A55 has passed the controlled validation below;
@@ -21,13 +23,29 @@ public-ingress deployment and Android Studio GUI validation remain pending.
 Install only the standalone prototype's dependency:
 
 ```sh
-npm --prefix tools/adb-tunnel install --ignore-scripts --no-audit --no-fund
+npm --prefix tools/adb-tunnel ci --omit=optional --ignore-scripts --no-audit --no-fund
 ```
 
-Optionally install the local package to obtain the `stf-adb` and `stf-adb-gateway`
-commands; the examples below work directly from the checkout without installation.
+The client package is named `stf-utils` for Homebrew and supplies the `stf`
+executable. Use `stf utils --help` for the user-command namespace; additional farm
+commands can be added there. Homebrew release archives, checksums, generated
+formulae and local-tap verification are described in the
+[packaging guide](packaging/README.md). These release files are prepared here;
+there is no published Homebrew tap or release to install yet.
+
+From a development checkout, `node tools/adb-tunnel/stf.mts utils --help` and
+`npm run utils -- --help` work without installing the full STF server. The
+repository's existing `bin/stf` also dispatches the `utils` namespace while
+retaining server commands such as `provider`, `api` and `app`. Homebrew linking
+must not overwrite another installed `stf` executable.
 
 ## Gateway
+
+A standalone container and an **inactive** Kubernetes pilot overlay are prepared
+in this PR. See the [gateway rollout guide](../../kuber/docs/adb-gateway-pilot.md)
+for image builds, offline render checks, digest pinning and activation. The
+active farm overlay is unchanged; a published, verified image must be pinned
+before enabling the new HTTPS route.
 
 Copy `config.example.json` to an operator-controlled file. It contains no
 credentials. Its provider names must match STF's `device.provider.name`; hosts
@@ -70,15 +88,17 @@ environments, but private token files are preferable for interactive use.
 Occupy the phone in STF, then run:
 
 ```sh
-node tools/adb-tunnel/cli.mts connect DEVICE_SERIAL \
+stf utils adb connect DEVICE_SERIAL \
   --server https://stf.finservice.tech \
   --token-file /private/path/stf-access-token \
   --adb /path/to/Android/sdk/platform-tools/adb
 ```
 
-With the package command installed, the same invocation starts with
-`stf-adb connect DEVICE_SERIAL`. The gateway must have been installed separately;
-the public STF endpoint does not gain this route automatically.
+The command above assumes that the gateway HTTPS route has been enabled by the
+operator. From source, replace `stf` with `node tools/adb-tunnel/stf.mts` and keep
+`utils adb connect ...`. The public STF endpoint does not gain this route
+automatically. The local port-forward/TLS helper used in the physical test is a
+separate development harness, not the Homebrew client.
 
 The CLI requests a session, establishes WSS with certificate/hostname validation,
 opens a random `127.0.0.1` port and calls the SDK's ordinary

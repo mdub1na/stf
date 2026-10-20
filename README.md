@@ -48,7 +48,7 @@ Thank you to all the people who have already contributed to STF!
     * Run any `adb` command locally, including shell access
     * [Android Studio](http://developer.android.com/tools/studio/index.html) and other IDE support, debug your app while watching the device screen on your browser
     * Supports [Chrome remote debug tools](https://developer.chrome.com/devtools/docs/remote-debugging)
-    * [Secure Remote ADB prototype](tools/adb-tunnel/README.md): foreground CLI and a session gateway over verified HTTPS/WebSocket
+    * [STF Utils and secure Remote ADB](tools/adb-tunnel/README.md): farm user commands and a session gateway over verified HTTPS/WebSocket
   - File Explorer to access device file system
   - Experimental VNC support (work in progress)
 * Monitor your device inventory

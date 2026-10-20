@@ -1,18 +1,26 @@
 {
-  "name": "@devicefarmer/stf-adb-tunnel-prototype",
+  "name": "@finservice/stf-utils",
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "Lease-bound STF Remote ADB over verified HTTPS/WebSocket",
+  "description": "STF farm utilities with a secure remote ADB client",
+  "license": "Apache-2.0",
   "bin": {
-    "stf-adb": "cli.mts",
-    "stf-adb-gateway": "server.mts"
+    "stf": "stf.mts"
   },
+  "files": [
+    "stf.mts",
+    "cli.mts",
+    "client.mts",
+    "types.mts",
+    "README.md",
+    "LICENSE"
+  ],
   "engines": {
     "node": ">=22.18.0"
   },
   "scripts": {
-    "connect": "node cli.mts connect",
+    "connect": "node stf.mts utils adb connect",
     "gateway": "node server.mts",
     "test": "node --test test/*.test.mts"
   },

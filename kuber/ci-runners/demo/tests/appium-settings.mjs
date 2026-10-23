@@ -9,8 +9,9 @@ const baseUrl = connection.appium.url.replace(/\/$/, '')
 const capabilities = { ...connection.appium.capabilities }
 const platform = String(capabilities.platformName || connection.device.platform || '').toLowerCase()
 const ios = platform === 'ios'
+// bundleId makes XCUITest query local usbmuxd before attaching to existing WDA.
 Object.assign(capabilities, ios
-  ? { 'appium:bundleId': 'com.apple.Preferences', 'appium:noReset': true }
+  ? { 'appium:noReset': true }
   : { 'appium:appPackage': 'com.android.settings', 'appium:appActivity': '.Settings', 'appium:noReset': true })
 
 let sessionId

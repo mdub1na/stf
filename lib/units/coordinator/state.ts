@@ -2,6 +2,7 @@ import {chmod, mkdir, open, readFile, rename, unlink} from 'node:fs/promises'
 import path from 'node:path'
 import {randomUUID} from 'node:crypto'
 import type {CoordinatorState} from './types.js'
+import {validMaintenanceId, validMaintenanceSerial} from './maintenance.js'
 
 export interface StateStore {
   load(): Promise<CoordinatorState>
@@ -13,7 +14,8 @@ export class FileStateStore implements StateStore {
 
   async load(): Promise<CoordinatorState> {
     try {
-      const state = JSON.parse(await readFile(this.filename, 'utf8')) as CoordinatorState
+      const state = JSON.parse(await readFile(this.filename, 'utf8')) as
+        Omit<CoordinatorState, 'version'> & {version: number}
       const validTime = (value: unknown) => typeof value === 'number' &&
         Number.isSafeInteger(value) && value >= 0
       const requestStates = new Set(['queued', 'allocated', 'cancelled', 'expired', 'failed'])
@@ -21,7 +23,14 @@ export class FileStateStore implements StateStore {
         , 'quarantined'])
       const validProject = (value: unknown) => value === undefined ||
         typeof value === 'string' && /^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$/.test(value)
-      const valid = state && state.version === 1 && Array.isArray(state.requests) &&
+      const valid = state && [1, 2].includes(state.version) &&
+        (state.version === 1 ? state.maintenance === undefined :
+          Array.isArray(state.maintenance) && state.maintenance.every(item => item &&
+            validMaintenanceId(item.id) && validMaintenanceSerial(item.serial) &&
+            validTime(item.createdAt)) &&
+          new Set(state.maintenance.map(item => item.id)).size === state.maintenance.length &&
+          new Set(state.maintenance.map(item => item.serial)).size === state.maintenance.length) &&
+        Array.isArray(state.requests) &&
         Array.isArray(state.leases) && state.requests.every(request => request &&
           typeof request.id === 'string' && request.id && typeof request.key === 'string' &&
           request.key && typeof request.fingerprint === 'string' && request.fingerprint &&
@@ -64,11 +73,13 @@ export class FileStateStore implements StateStore {
         throw new Error('Invalid coordinator state; refusing to discard recovery information')
       }
       await chmod(this.filename, 0o600)
-      return state
+      // Version 2 persists drains. Old runtimes reject it instead of silently allocating
+      // a device under maintenance; rollback requires an empty drain list and migration.
+      return {...state, version: 2, maintenance: state.version === 1 ? [] : state.maintenance}
     }
     catch (error) {
       if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
-        return {version: 1, requests: [], leases: []}
+        return {version: 2, requests: [], leases: [], maintenance: []}
       }
       throw error
     }

@@ -58,6 +58,18 @@ export interface AllocationRequest {
   error?: string
 }
 
+export interface WdaProfile {
+  profile: 'valid' | 'expiring' | 'expired' | 'missing' | 'unknown' | 'ambiguous'
+  expiresAt: string | null
+  checkedAt: string | null
+}
+
+export interface DeviceMaintenance {
+  id: string
+  serial: string
+  createdAt: number
+}
+
 export interface FarmDevice {
   serial: string
   model: string
@@ -71,6 +83,7 @@ export interface FarmDevice {
   owner?: {email: string} | null
   usage?: string | null
   automationLeaseId?: string | null
+  ios?: {wda: WdaProfile}
 }
 
 export interface Lease {
@@ -97,9 +110,10 @@ export interface Lease {
 }
 
 export interface CoordinatorState {
-  version: 1
+  version: 2
   requests: AllocationRequest[]
   leases: Lease[]
+  maintenance: DeviceMaintenance[]
 }
 
 export interface GridSlot {

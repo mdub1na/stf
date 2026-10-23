@@ -1,5 +1,6 @@
 import {CoordinatorError, endpoint} from './config.js'
 import {MaestroDeviceAdapter} from './maestro.js'
+import {readWdaProfile} from './wda-profile.js'
 import type {AdbPool, FarmBackend, FarmDevice, GridStatus, MaestroBaseline, Runner
   , UpstreamResponse} from './types.js'
 
@@ -49,14 +50,18 @@ export class HttpFarmBackend implements FarmBackend {
 
   async devices(): Promise<FarmDevice[]> {
     const result = await this.stf('GET', '/devices')
-    return result.devices.map((device: StfDevice) => ({
-      serial: device.serial, model: device.model || '', version: device.version || ''
-    , platform: device.platform, provider: typeof device.provider === 'string' ?
-        device.provider : device.provider?.name || ''
-    , present: device.present, ready: device.ready, using: device.using, claimed: device.claimed
-    , owner: device.owner || null, usage: device.usage || null
-    , automationLeaseId: device.automationLeaseId || null
-    }))
+    return result.devices.map((device: StfDevice) => {
+      const wda = device.platform === 'iOS' ? readWdaProfile(device.ios?.wda) : null
+      return {
+        serial: device.serial, model: device.model || '', version: device.version || ''
+      , platform: device.platform, provider: typeof device.provider === 'string' ?
+          device.provider : device.provider?.name || ''
+      , present: device.present, ready: device.ready, using: device.using, claimed: device.claimed
+      , owner: device.owner || null, usage: device.usage || null
+      , automationLeaseId: device.automationLeaseId || null
+      , ...(wda ? {ios: {wda}} : {})
+      }
+    })
   }
 
   async grid(): Promise<GridStatus> {

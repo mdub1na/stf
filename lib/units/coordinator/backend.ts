@@ -1,5 +1,7 @@
 import {CoordinatorError, endpoint} from './config.js'
-import type {FarmBackend, FarmDevice, GridStatus, UpstreamResponse} from './types.js'
+import {MaestroDeviceAdapter} from './maestro.js'
+import type {AdbPool, FarmBackend, FarmDevice, GridStatus, MaestroBaseline, Runner
+  , UpstreamResponse} from './types.js'
 
 type StfDevice = Omit<FarmDevice, 'provider'> & {provider: string | {name: string}}
 
@@ -12,11 +14,13 @@ export class BackendError extends Error {
 export class HttpFarmBackend implements FarmBackend {
   private readonly stfUrl: string
   private readonly gridUrl: string
+  private readonly maestro: MaestroDeviceAdapter
 
   constructor(stfUrl: string, gridUrl: string, private readonly token: string,
-    private readonly timeoutMs: number) {
+    private readonly timeoutMs: number, pools: AdbPool[] = []) {
     this.stfUrl = endpoint(stfUrl).replace(/(?:\/api\/v1)?$/, '/api/v1')
     this.gridUrl = endpoint(gridUrl)
+    this.maestro = new MaestroDeviceAdapter(pools)
   }
 
   private async stf(method: string, route: string, body?: unknown): Promise<any> {
@@ -69,8 +73,12 @@ export class HttpFarmBackend implements FarmBackend {
     return result.value
   }
 
-  async capture(serial: string, leaseId: string, timeout: number) {
-    await this.stf('POST', '/user/devices', {serial, leaseId, timeout})
+  async capture(serial: string, leaseId: string, timeout: number, runner?: Runner) {
+    const result = await this.stf('POST', '/user/devices', {serial, leaseId, timeout
+      , ...(runner === 'maestro' ? {automationRunner: 'maestro'} : {})})
+    if (runner === 'maestro' && result.automationRunner !== 'maestro') {
+      throw new Error('The STF provider did not confirm Maestro cleanup protection')
+    }
   }
 
   async renew(serial: string, leaseId: string, timeout: number) {
@@ -82,6 +90,18 @@ export class HttpFarmBackend implements FarmBackend {
   async release(serial: string, leaseId: string) {
     await this.stf('POST', `/user/devices/${encodeURIComponent(serial)}/automation/release`,
       {leaseId})
+  }
+
+  maestroBaseline(device: FarmDevice): Promise<MaestroBaseline> {
+    return this.maestro.baseline(device)
+  }
+
+  maestroPrepare(device: FarmDevice): Promise<void> {
+    return this.maestro.prepare(device)
+  }
+
+  maestroCleanup(device: FarmDevice, baseline: MaestroBaseline): Promise<void> {
+    return this.maestro.cleanup(device, baseline)
   }
 
   async webdriver(method: string, route: string, body?: unknown): Promise<UpstreamResponse> {

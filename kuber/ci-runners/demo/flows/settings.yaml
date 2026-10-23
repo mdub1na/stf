@@ -1,0 +1,14 @@
+appId: com.android.settings
+name: Android Settings via farm coordinator
+---
+- launchApp:
+    clearState: false
+- assertVisible:
+    text: "Настройки|Settings"
+- takeScreenshot: artifacts/maestro-before
+- scroll
+- takeScreenshot: artifacts/maestro-after-scroll
+- swipe:
+    direction: DOWN
+- assertVisible:
+    text: "Настройки|Settings"

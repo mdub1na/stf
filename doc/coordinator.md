@@ -2,12 +2,13 @@
 
 `stf coordinator` runs a separate STF process for trusted internal test workers.
 One instance owns a request queue, renewable device leases and a lease-scoped
-Appium gateway. Workers keep test scenarios, assertions and reports. STF keeps
+Appium/ADB gateways. Workers keep test scenarios, assertions and reports. STF keeps
 its device inventory, access groups and live viewer. Appium Grid keeps its
 WebDriver routing and node slots.
 
-This is a single-instance prototype. There is no coordinator web UI, user-role
-migration, test execution engine, multi-project authorization or Maestro runner.
+This is a single-instance prototype with project-scoped credentials and quotas.
+Appium supports the farm's Android and iOS nodes; Maestro supports physical Android.
+There is no coordinator web UI, user-role migration or test execution engine.
 The deployment is opt-in and is not added to the farm GitOps root. Short hardware
 validation does not establish multi-hour reliability; record that separately.
 
@@ -17,10 +18,56 @@ validation does not establish multi-hour reliability; record that separately.
 Kotlin/CI worker -> coordinator API -> queue -> STF reservation
                          |                       (usage=automation, leaseId)
                          +-> lease WebDriver gateway -> Appium Grid -> phone
+                         +-> lease ADB gateway -> provider ADB pool -> Android
                          +-> heartbeat, deadline and cleanup
 
 STF viewer -------------------------------------------------------> live screen
 ```
+
+The portable worker client and GitLab Kubernetes runner deployment are described
+in [CI workers beside the farm](ci-runners.md). Code in another repository uses
+`stf utils test run`, not the server's STF credential or the shared pool ADB port.
+
+## Project credentials and typed connections
+
+`--api-token-file` remains the operator credential for legacy workers and recovery.
+`--project-tokens-file` adds a private version-1 JSON document with a `projects`
+array. Each record has a unique `id`, lowercase SHA-256 `tokenSha256` and positive
+integer `maxParallel`. The `legacy` ID and duplicate token hashes are forbidden.
+The token itself belongs in the project's masked CI variable. API credentials,
+idempotency keys, request/lease access and concurrency are scoped to that project.
+Recovery is operator-only. Removing a project policy also disables its queued
+requests after restart; it cannot keep allocating devices with a revoked token.
+
+Allocation accepts `runner: appium | maestro` (default `appium`). Every lease
+contains `runner` and `connection` with `type`, an exact lease-relative `path` and
+either WebDriver capabilities or the allocated Android serial. Relative paths
+allow the wrapper to use the same internal or public coordinator base URL without
+following redirects or forwarding a credential to a URL supplied by a lease.
+The old `webdriverUrl` and capabilities remain available for Appium clients.
+
+Maestro admission does not consume Grid slots or Appium system ports. Its local
+worker endpoint exposes one serial through authenticated per-connection WebSockets.
+The coordinator rejects global ADB commands and another serial, validates the
+provider fence before each connection, and closes streams before release/expiry.
+Only the trusted coordinator can reach shared ADB servers; CI jobs cannot.
+
+## Maestro cleanup and recovery
+
+The provider acknowledges a Maestro capture only after taking a settings/package
+baseline. It stops the known driver packages, verifies process/instrumentation
+exit, removes only newly installed driver APKs and restores tracked settings before
+publishing `LeaveGroupMessage` or acknowledging release. This also runs when the
+provider fence expires during a coordinator outage. Failure retains device ownership
+and the exact lease identity; an expired lease cannot renew but its exact release
+can retry cleanup. Old releases cannot affect a new epoch.
+
+The coordinator persists its preparation baseline and confirmed provider release.
+An unowned device without a Maestro cleanup acknowledgment is quarantined rather
+than assumed clean. Loss of provider memory after a hard worker failure can require
+operator recovery; the prototype does not force a questionable device back into
+the available pool. This is deliberately conservative and does not claim a
+multi-hour or destructive-failure soak test.
 
 1. A worker submits a device request with a unique `Idempotency-Key`.
 2. The request waits without holding a device. The scheduler serves the oldest

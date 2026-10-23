@@ -39,8 +39,12 @@ try {
   await command('POST', `/session/${sessionId}/appium/device/activate_app`, {
     appId: ios ? 'com.apple.Preferences' : 'com.android.settings'
   })
+  const foreground = ios
+    ? await command('POST', `/session/${sessionId}/execute/sync`, { script: 'mobile: activeAppInfo', args: [] })
+    : await command('GET', `/session/${sessionId}/appium/device/current_package`)
+  assert.equal(ios ? foreground.bundleId : foreground, ios ? 'com.apple.Preferences' : 'com.android.settings', 'Settings application is in foreground')
   const source = await command('GET', `/session/${sessionId}/source`)
-  assert.match(source, /Настройки|Settings/, 'Settings application is visible')
+  assert.ok(source.includes(ios ? 'XCUIElementTypeApplication' : 'package="com.android.settings"'), 'Settings accessibility tree is present')
   await screenshot('appium-before')
   for (let index = 0; index < 3; index++) {
     await command('POST', `/session/${sessionId}/execute/sync`, {

@@ -172,7 +172,9 @@ interface DbApi {
   unsetDeviceConnectUrl(serial: string): Promise<r.WriteResult>
   saveDeviceStatus(serial: string, status: number, statusTimeStamp: number): Promise<r.WriteResult>
   setDeviceIosStatus(serial: string, status: IosDeviceStatus): Promise<r.WriteResult>
-  setDeviceOwner(serial: string, owner: DeviceOwner): Promise<r.WriteResult>
+  setDeviceOwner(
+    serial: string, owner: DeviceOwner, automationLeaseId?: string | null
+  ): Promise<r.WriteResult>
   unsetDeviceOwner(serial: string): Promise<r.WriteResult>
   reserveDeviceOwner(serial: string): Promise<r.WriteResult>
   clearDeviceRestoreOwner(serial: string): Promise<r.WriteResult>
@@ -1626,9 +1628,10 @@ dbapi.saveDeviceStatus = function(serial, status, statusTimeStamp) {
   }))
 }
 
-dbapi.setDeviceOwner = function(serial, owner) {
+dbapi.setDeviceOwner = function(serial, owner, automationLeaseId) {
   return db.run(r.table('devices').get<DeviceDocument>(serial).update({
     owner: owner
+  , automationLeaseId: automationLeaseId || null
     // Taking a device supersedes any claim on it, so a reboot that never happened cannot hand it
     // back to an earlier user later
   , restoreOwner: null
@@ -1638,6 +1641,7 @@ dbapi.setDeviceOwner = function(serial, owner) {
 dbapi.unsetDeviceOwner = function(serial) {
   return db.run(r.table('devices').get<DeviceDocument>(serial).update({
     owner: null
+  , automationLeaseId: null
   }))
 }
 
@@ -1776,6 +1780,7 @@ dbapi.setDeviceReady = function(serial, channel) {
     channel: channel
   , ready: true
   , owner: null
+  , automationLeaseId: null
   , reverseForwards: []
   }, {returnChanges: 'always'}))
 }

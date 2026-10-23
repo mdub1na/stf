@@ -8,6 +8,7 @@ import wire from '../../../wire/index.js'
 import wireutil from '../../../wire/util.js'
 import grouputil from '../../../util/grouputil.js'
 import lifecycle from '../../../util/lifecycle.js'
+import {AutomationLease} from '../../../util/automation-lease.js'
 import type {AutoGroupMessage, OwnerMessage} from '../../../types/wire.js'
 import type {
   Channels
@@ -48,6 +49,9 @@ export default syrup.serial()
     var log = logger.createLogger('device:plugins:group')
     var currentGroup: OwnerMessage | null = null
     var plugin = new events.EventEmitter() as GroupPlugin
+    const automationLease = new AutomationLease(() => {
+      plugin.leave('automatic_timeout').catch(log.error.bind(log))
+    })
 
     plugin.get = Promise.method(function() {
       if (!currentGroup) {
@@ -57,10 +61,10 @@ export default syrup.serial()
       return currentGroup
     })
 
-    plugin.join = function(newGroup: OwnerMessage, timeout, usage, identifier) {
+    plugin.join = function(newGroup: OwnerMessage, timeout, usage, identifier, leaseId) {
       return plugin.get()
         .then(function() {
-          if (currentGroup!.group !== newGroup.group) {
+          if (currentGroup!.group !== newGroup.group || leaseId) {
             throw new grouputil.AlreadyGroupedError()
           }
 
@@ -72,8 +76,12 @@ export default syrup.serial()
           log.important('Now owned by "%s"', currentGroup.email)
           log.info('Subscribing to group channel "%s"', currentGroup.group)
 
+          if (usage === 'automation' && leaseId) {
+            automationLease.start(currentGroup.email, leaseId, timeout || options.groupTimeout)
+          }
+
           channels.register(currentGroup.group, {
-            timeout: timeout || options.groupTimeout
+            timeout: leaseId ? Infinity : timeout || options.groupTimeout
           , alias: solo.channel
           })
 
@@ -85,6 +93,7 @@ export default syrup.serial()
               options.serial
             , currentGroup
             , usage
+            , leaseId
             ))
           ])
 
@@ -118,6 +127,7 @@ export default syrup.serial()
             ))
           ])
 
+          automationLease.clear()
           currentGroup = null
           plugin.emit('leave', group)
 
@@ -146,7 +156,9 @@ export default syrup.serial()
         , message.requirements
         )
           .then(function() {
-            return plugin.join(message.owner, message.timeout, message.usage)
+            return plugin.join(
+              message.owner, message.timeout, message.usage, undefined, message.leaseId
+            )
           })
           .then(function() {
             push.send([
@@ -166,6 +178,29 @@ export default syrup.serial()
             , reply.fail(err.message)
             ])
           })
+      })
+      .on(wire.AutomationLeaseMessage, function(channel, message) {
+        const reply = wireutil.reply(options.serial)
+        Promise.try(function() {
+          if (message.serial !== options.serial) {
+            throw new Error('Stale automation lease')
+          }
+          automationLease.assertCurrent(message.owner.email, message.leaseId)
+          if (message.action === 'renew') {
+            return {expiresAt: automationLease.renew(
+              message.owner.email, message.leaseId, message.timeout || 0
+            )}
+          }
+          if (message.action === 'release') {
+            automationLease.clear()
+            return plugin.leave('automation_release').then(() => null)
+          }
+          throw new Error('Invalid automation lease action')
+        }).then(function(body) {
+          push.send([channel, reply.okay(null, body)])
+        }).catch(function(error) {
+          push.send([channel, reply.fail(error.message)])
+        })
       })
       .on(wire.AutoGroupMessage, function(channel, message) {
         return plugin.join(

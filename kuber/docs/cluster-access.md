@@ -7,7 +7,8 @@ checks were repeated during the login cutover; other infrastructure details reta
 This document records access details after the Android STF GitOps rollout.
 The cluster now deploys from `mdub1na/stf`, `develop`. Passwords, tokens, private
 keys and kubeconfig certificate data are not copied here. Application resources use namespace `stf` and the `stf-` prefix. STF uses `stf.finservice.tech`;
-Argo CD, LDAP administration and Grid domains are unchanged.
+Appium Grid moved to `appium-grid.finservice.tech` on 2026-10-18; other
+service domains retain their recorded baseline.
 
 ## Repositories
 
@@ -93,7 +94,7 @@ administration was not changed.
 | GitLab identity provider | `https://gitlab.finservice.tech` | External OAuth/OIDC provider | HTTPS discovery and client authentication verified |
 | Argo CD | `https://argocd.putmyhexon.ru` | `argocd`, `argocd-server:80` | `200` |
 | phpLDAPadmin | `https://ldap.putmyhexon.ru` | `openldap`, `phpldapadmin:80` | Disabled; no backend pods |
-| Appium / Selenium Grid | `https://appium-grid.putmyhexon.ru` | `appium`, `appium-grid-router:4444` | `/status`: `200` |
+| Appium / Selenium Grid | `https://appium-grid.finservice.tech` | `appium`, `appium-grid-router:4444` | `/status`: `200` |
 
 Normal LDAP login was confirmed by the user after the initial deployment;
 GitLab OAuth replaced it on 2026-10-05. GitLab login created the approved account;
@@ -190,16 +191,16 @@ adb -H 127.0.0.1 -P 15037 devices -l
 adb -H 127.0.0.1 -P 15038 devices -l
 ```
 
-Both new STF providers reached their corresponding ADB servers successfully;
-both returned an empty device list. No actual Appium session was run after
-cutover because no Android device is connected.
+The initial cutover had no connected Android phones. On 2026-10-18 both ADB
+pools reported six phones in total, and real Appium Settings sessions passed
+on each; see the [validation record](./appium-validation-2026-10-18.md).
 
 ## Appium Grid Layout
 
 | Pool | Replicas | ADB server | Exposed UiAutomator2 system ports |
 | --- | --- | --- | --- |
-| `android-appium-node-1` | `8` | `adbd.stf.svc.cluster.local:5037` | `8200-8209` on `adbd` |
-| `android-appium-node-2` | `8` | `adbd-2.stf.svc.cluster.local:5037` | `8200-8209` on `adbd-2` |
+| `android-appium-node-1` | `4` | `adbd.stf.svc.cluster.local:5037` | `8200-8209` on `adbd` |
+| `android-appium-node-2` | `3` | `adbd-2.stf.svc.cluster.local:5037` | `8200-8209` on `adbd-2` |
 
 The upgraded pods contain Appium `appium/appium:v3.8.0-p1` (Node 24 LTS,
 UiAutomator2 8.7.0), an ADB proxy, and Selenium relay
@@ -209,7 +210,13 @@ Appium on pod-local port `4733`. Native and Chrome stereotypes share
 per pod. Port ranges are scoped to each ADB server; concurrent sessions sharing
 an ADB server need distinct `appium:systemPort` values.
 
-The live Grid `/status` check returned `ready=true`, 16 nodes `UP` (8 per pool),
+On 2026-10-18 the operator requested seven Android nodes and three iOS nodes.
+All three Linux iPhone runtimes now have an Appium sidecar and a dedicated
+single-session Grid relay. Current capacity is **7 Android + 3 iOS**; all ten
+nodes report UP. Generated resources and rollback are described in
+[the node runbook](../appium-tests/ios-node/README.md).
+
+The earlier Grid `/status` check returned `ready=true`, 16 nodes `UP` (8 per pool),
 and zero active sessions. The control-plane services in namespace `appium` are:
 
 | Service | Ports |
@@ -220,10 +227,19 @@ and zero active sessions. The control-plane services in namespace `appium` are:
 | `appium-grid-session-queue` | `5559` |
 | `appium-grid-event-bus` | `4442`, `4443` |
 
-Historical Java/Gradle tests and their old STF setup are in
-[`../appium-tests/README.md`](../appium-tests/README.md). Their
-`/api/v1/autotests` allocation API is absent from STF and must be adapted before
-these tests can validate the new deployment.
+Kotlin/Gradle tests use standard STF capture/release endpoints; see
+[`../appium-tests/README.md`](../appium-tests/README.md). Android Settings passed
+18/18 sequential runs on six connected phones across both ADB pools on
+2026-10-18. The initial Linux iOS sidecar/relay passed three final Grid runs with
+concurrent STF viewing, followed by registration of the two other iPhones. See the
+[validation record](./appium-validation-2026-10-18.md).
+
+Appium reconciliation is temporarily paused with the Application annotation
+`argocd.argoproj.io/skip-reconcile: "true"` while the capacity and ingress changes
+are pending in the Appium PR. This prevents `develop` from restoring 16 Android
+nodes. After merging the PR, remove this annotation from `argocd/appium` and
+verify synchronization, seven Android replicas and three private iOS relays.
+The iOS preview resources are applied separately, outside the Appium GitOps tree.
 
 ## Argo CD And Installed Components
 

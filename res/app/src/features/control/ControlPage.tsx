@@ -268,7 +268,7 @@ function ControlSession() {
     return () => {
       active = false
     }
-  }, [loadedSerial, joined, deviceState])
+  }, [loadedSerial, joined])
 
   useEffect(() => {
     if (device && isAutomated(device)) {

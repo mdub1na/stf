@@ -3,7 +3,8 @@
 This directory contains the Android STF GitOps deployment on
 the existing Proxmox/k3s infrastructure. iOS is excluded from this rollout.
 Application workloads, services and node role labels use the `stf` name. The farm's public address is <https://stf.finservice.tech>;
-Argo CD, LDAP administration and Appium Grid retain their existing domains.
+Appium Grid uses <https://appium-grid.finservice.tech>; Argo CD and the retained
+LDAP administration ingress keep their existing domains.
 
 STF was deployed on 2026-10-04; its public domain was changed on 2026-10-05. All ten
 Argo CD Applications now use this repository's `develop` branch and are
@@ -12,8 +13,10 @@ security checks passed, and the user confirmed browser login and logout. The app
 account was explicitly promoted to administrator; its role was verified in the
 database, while administrator UI access awaits confirmation. OpenLDAP and
 phpLDAPadmin are intentionally scaled to zero since 2026-10-15; their data and
-credentials are preserved for a deliberate rollback. The 16-node Appium Grid is unchanged.
-Device-specific checks await connected Android devices. See the rollout plan
+credentials are preserved for a deliberate rollback. The Grid has 16 Android nodes plus one validated Linux iOS relay.
+Android Settings smoke passed on all six connected phones. One Linux iPhone
+also passed Appium Grid smoke with concurrent STF viewing; the other iPhones
+are not yet registered with Grid. See the rollout plan
 for verified results and pending work.
 
 ## Documents
@@ -21,6 +24,7 @@ for verified results and pending work.
 - [Current requirements](./docs/requirements.md)
 - [Current architecture](./docs/architecture.md)
 - [Cluster access and service inventory](./docs/cluster-access.md)
+- [Appium validation and remaining iOS work](./docs/appium-validation-2026-10-18.md)
 - [Cluster upgrade and observability review](./docs/cluster-upgrades-and-observability.md)
 - [Component upgrade rollout](./docs/cluster-upgrade-rollout.md)
 - [STF rollout and server maintenance plan](./docs/stf-rollout-plan.md)
@@ -79,7 +83,8 @@ For migration, follow the rollout plan and deployment runbook instead.
   confirmed and its database role is `admin`; LDAP stays paused unless explicitly re-enabled
 - keep GitOps documentation aligned with the live manifests
 - verify screen/touch, capture/release and APK installation with connected Android devices
-- adapt the copied Java tests from legacy allocation APIs to standard STF APIs
+- extend the validated single-phone iOS Appium setup when needed; Kotlin smoke
+  tests use standard STF APIs, with Android 18/18 and iOS 3/3 final runs
 - update the three Kubernetes servers after SSH access is provided
 - implement the reserved `mitmproxy` and `observability` slices when we are ready for those layers
 - follow the upgrade and observability review for measured capacity and staged version candidates

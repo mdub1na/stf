@@ -107,6 +107,7 @@ spec:
             - --adb-host
             - adbd
             - --no-cleanup
+            - --no-screen-reset
             - --connect-sub
             - tcp://stf-triproxy-dev:7250
             - --connect-push
@@ -236,6 +237,7 @@ spec:
             - --adb-host
             - adbd-2
             - --no-cleanup
+            - --no-screen-reset
             - --connect-sub
             - tcp://stf-triproxy-dev:7250
             - --connect-push

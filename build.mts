@@ -75,6 +75,7 @@ async function eslint() {
     , 'res/common/**/*.{ts,mts}'
     , '*.{ts,mts}'
     , 'test/**/*.mts'
+    , 'tools/ios-prototype/**/*.mts'
     , 'test/playwright/**/*.ts'
     , '.github/scripts/**/*.mts'
   ])
@@ -284,6 +285,10 @@ async function runWebpack(label: string, config: Configuration) {
       console.log('[' + label + ']', (stats as Stats).toString({
         colors: true
       }))
+      if ((stats as Stats).hasErrors()) {
+        reject(new Error(label + ' compiled with errors'))
+        return
+      }
       resolve(stats as Stats)
     })
   })

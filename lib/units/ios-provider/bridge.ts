@@ -6,6 +6,7 @@ import {AutomationLease} from '../../util/automation-lease.js'
 import {randomUUID} from 'node:crypto'
 import type {IosDeviceState, PrototypeClient} from './client.js'
 import type {IosOwner} from './access.js'
+import {findCatalogDevice} from '../../util/device-catalog.js'
 
 export interface BridgeOptions {
   serial: string
@@ -38,7 +39,7 @@ export class IosBridge {
   private installId: string | null = null
   private lastObservation: IosDeviceState | null = null
   private lastHealth = ''
-  private actionAbort: AbortController | null = null
+  private ownerAbort = new AbortController()
   private readonly route: ReturnType<ReturnType<typeof wirerouter>['handler']>
 
   constructor(
@@ -49,7 +50,7 @@ export class IosBridge {
   , private readonly report: (error: unknown) => void
   ) {
     this.channel = 'ios:' + options.serial
-    this.timeout = options.groupTimeout * 1000
+    this.timeout = options.groupTimeout
     const router = wirerouter()
       .on(wire.DeviceRegisteredMessage, (_channel, message) => {
         if (message.serial === options.serial && this.identity && !this.registered) {
@@ -149,6 +150,8 @@ export class IosBridge {
           if (!artifact || !message.requestId || !this.state?.instance) {
             throw new Error('IOS_INSTALL_INVALID_REQUEST')
           }
+          // Keep the acknowledgement alive so a job accepted during release can
+          // still be cancelled by its ID below.
           const job = await (await this.client.request('/installations/start', {
             id: message.requestId, lease, artifact: {id: artifact[1], name: artifact[2]}
           , launch: message.launch, instance: this.state.instance, generation: this.state.generation
@@ -163,42 +166,24 @@ export class IosBridge {
       })
       .on(wire.IosShakeMessage, channel => {
         const epoch = this.epoch
-        this.transaction(String(channel), () => this.enqueue(epoch, async() => {
-          const abort = new AbortController()
-          this.actionAbort = abort
-          try {
-            await this.client.request('/shake', {},
-              AbortSignal.any([abort.signal, AbortSignal.timeout(60000)]))
-          }
-          finally {
-            this.actionAbort = null
-          }
+        this.transaction(String(channel), () => this.enqueue(epoch, async signal => {
+          await this.ownedRequest('/shake', {}, signal, 60000)
         }))
       })
       .on(wire.IosUnlockMessage, channel => {
-        this.transaction(String(channel), () => this.enqueue(this.epoch, async() =>
-          (await this.client.request('/unlock', {})).json(), true))
+        this.transaction(String(channel), () => this.enqueue(this.epoch, async signal =>
+          (await this.ownedRequest('/unlock', {}, signal)).json(), true))
       })
       .on(wire.IosLockMessage, channel => {
-        this.transaction(String(channel), () => this.enqueue(this.epoch, async() => {
-          const abort = new AbortController()
-          this.actionAbort = abort
-          try {
-            return await (await this.client.request('/lock', {},
-              AbortSignal.any([abort.signal, AbortSignal.timeout(60000)]))).json()
-          }
-          finally {
-            this.actionAbort = null
-          }
-        }, true))
+        this.transaction(String(channel), () => this.enqueue(this.epoch, async signal =>
+          (await this.ownedRequest('/lock', {}, signal, 60000)).json(), true))
       })
       .on(wire.IosPowerMessage, (channel, message) => {
-        this.transaction(String(channel), () => this.enqueue(this.epoch, async() => {
+        this.transaction(String(channel), () => this.enqueue(this.epoch, async signal => {
           if (!['reboot', 'shutdown'].includes(message.action)) {
             throw new Error('IOS_POWER_INVALID_ACTION')
           }
-          return (await this.client.request('/power', {action: message.action},
-            AbortSignal.timeout(20000))).json()
+          return (await this.ownedRequest('/power', {action: message.action}, signal, 20000)).json()
         }, true))
       })
       .on(wire.IosInstallStatusMessage, (channel, message) => {
@@ -209,15 +194,16 @@ export class IosBridge {
       })
       .on(wire.ScreenCaptureMessage, channel => {
         const epoch = this.epoch
-        this.transaction(String(channel), () => this.enqueue(epoch, async() => {
-          const image = await this.client.request('/screenshot')
+        this.transaction(String(channel), () => this.enqueue(epoch, async signal => {
+          const image = await this.ownedRequest('/screenshot', undefined, signal)
           const bytes = await image.arrayBuffer()
           const form = new FormData()
           form.append('file', new Blob([bytes], {
             type: image.headers.get('content-type') || 'image/png'
           }), 'ios-screenshot.png')
           const response = await fetch(new URL('/s/upload/image', options.storageUrl), {
-            method: 'POST', body: form, signal: AbortSignal.timeout(15000), redirect: 'error'
+            method: 'POST', body: form
+          , signal: AbortSignal.any([signal, AbortSignal.timeout(15000)]), redirect: 'error'
           })
           if (response.status !== 201) {
             await response.body?.cancel()
@@ -237,15 +223,15 @@ export class IosBridge {
   private installationCommand(channel: string, path: string, id?: string) {
     const epoch = this.epoch
     const lease = this.lease
-    this.transaction(channel, () => this.enqueue(epoch, async() => {
-      const job = await (await this.client.request(path, {lease, ...(id ? {id} : {})})).json() as
-        {id: string, settled: boolean} | null
+    this.transaction(channel, () => this.enqueue(epoch, async signal => {
+      const response = await this.ownedRequest(path, {lease, ...(id ? {id} : {})}, signal)
+      const job = await response.json() as {id: string, settled: boolean} | null
       if (epoch !== this.epoch || lease !== this.lease) {
         throw new Error('IOS_INSTALL_INTERRUPTED')
       }
       this.installId = job && !job.settled ? job.id : null
       return job
-    }))
+    }, true))
   }
 
   private resetTouch() {
@@ -263,8 +249,8 @@ export class IosBridge {
   }
 
   private command(path: string, body: unknown, replyChannel?: string) {
-    const operation = () => this.enqueue(this.epoch, async() => {
-      await this.client.request(path, body)
+    const operation = () => this.enqueue(this.epoch, async signal => {
+      await this.ownedRequest(path, body, signal)
     }, ['/tap', '/swipe', '/home', '/text'].includes(path))
     if (replyChannel) {
       this.transaction(replyChannel, operation)
@@ -274,8 +260,16 @@ export class IosBridge {
     }
   }
 
-  private enqueue<T>(epoch: number, operation: () => Promise<T>, allowLocked = false): Promise<T> {
+  private ownedRequest(path: string, body: unknown, signal: AbortSignal, timeout = 15000) {
+    return this.client.request(path, body, AbortSignal.any([signal, AbortSignal.timeout(timeout)]))
+  }
+
+  private enqueue<T>(
+    epoch: number, operation: (signal: AbortSignal) => Promise<T>, allowLocked = false
+  ): Promise<T> {
+    const signal = this.ownerAbort.signal
     const result = this.queue.then(async() => {
+      signal.throwIfAborted()
       if (!this.owner || epoch !== this.epoch) {
         throw new Error('Device session ended')
       }
@@ -288,7 +282,10 @@ export class IosBridge {
       if (current.instance !== this.state?.instance) {
         throw new Error('Device session changed')
       }
-      return operation()
+      signal.throwIfAborted()
+      const value = await operation(signal)
+      signal.throwIfAborted()
+      return value
     })
     this.queue = result.then(() => {}, () => {})
     return result
@@ -309,14 +306,18 @@ export class IosBridge {
       throw new Error('Device already owned')
     }
     if (!this.owner) {
+      this.ownerAbort = new AbortController()
       this.owner = owner
       this.usage = usage || null
       this.lease = randomUUID()
       this.epoch++
-      this.timeout = timeout || this.options.groupTimeout * 1000
+      // GroupMessage/API timeouts are milliseconds; the CLI fallback is seconds.
+      this.timeout = Math.min(3600, Math.max(10,
+        timeout ? timeout / 1000 : this.options.groupTimeout))
       this.automationLeaseId = usage === 'automation' ? leaseId || null : null
       if (this.automationLeaseId) {
-        this.automationLease.start(owner.email, this.automationLeaseId, this.timeout)
+        this.automationLease.start(owner.email, this.automationLeaseId,
+          timeout || this.options.groupTimeout * 1000)
       }
       this.broadcast(new wire.JoinGroupMessage(this.options.serial, owner, usage, leaseId))
     }
@@ -324,7 +325,7 @@ export class IosBridge {
   }
 
   leave(reason: string) {
-    this.actionAbort?.abort()
+    this.ownerAbort.abort()
     const owner = this.owner
     const id = this.installId
     const lease = this.lease
@@ -409,11 +410,13 @@ export class IosBridge {
           throw new Error('Configure PNG screenshots in WDA to identify the display')
         }
         const info = state.info || {}
+        const model = info.ProductType || 'iPhone'
+        const catalog = findCatalogDevice({platform: 'ios', manufacturer: 'Apple', model})
         this.identity = new wire.DeviceIdentityMessage({
           serial: this.options.serial, platform: 'iOS', manufacturer: 'Apple'
-        , model: info.ProductType || 'iPhone', version: info.ProductVersion || 'unknown'
+        , model, version: info.ProductVersion || 'unknown'
         , abi: 'arm64', sdk: info.ProductVersion || 'unknown'
-        , marketName: this.options.marketName || info.ProductType || 'iPhone'
+        , marketName: this.options.marketName || catalog?.name || model
         , display: new wire.DeviceDisplayMessage({
             id: 0, width: image.readUInt32BE(16), height: image.readUInt32BE(20), rotation: 0
           , xdpi: 0, ydpi: 0, fps: 10, density: 1, secure: true, url: this.options.screenUrl
@@ -432,16 +435,22 @@ export class IosBridge {
         this.broadcast(new wire.DeviceHeartbeatMessage(this.options.serial))
       }
       this.publishHealth(state)
-      if (this.owner && !this.automationLeaseId && Date.now() - this.activity > this.timeout) {
+      if (this.owner && !this.automationLeaseId &&
+          Date.now() - this.activity > this.timeout * 1000) {
         this.leave('automatic_timeout')
       }
       if (this.owner && this.installId) {
         const epoch = this.epoch
-        const job = await (await this.client.request('/installations/keepalive', {
-          lease: this.lease, id: this.installId
-        })).json() as {settled: boolean}
-        if (epoch === this.epoch && job.settled) {
-          this.installId = null
+        try {
+          const job = await (await this.client.request('/installations/keepalive', {
+            lease: this.lease, id: this.installId
+          })).json() as {settled: boolean}
+          if (epoch === this.epoch && job.settled) {
+            this.installId = null
+          }
+        }
+        catch (error) {
+          this.report(error)
         }
       }
     }
@@ -460,11 +469,13 @@ export class IosBridge {
       return
     }
     const value = JSON.stringify(state.ios)
-    if (value !== this.lastHealth) {
+    const {updatedAt: _updatedAt, ...health} = state.ios
+    const comparable = JSON.stringify(health)
+    if (comparable !== this.lastHealth) {
       this.broadcast(new wire.DevicePropertiesMessage(this.options.serial, [
         new wire.DeviceProperty('stf.ios.status', value)
       ]))
-      this.lastHealth = value
+      this.lastHealth = comparable
     }
   }
 

@@ -24,8 +24,8 @@ data:
         privileged = false
         allow_privilege_escalation = false
         cap_drop = ["ALL"]
-        image = "ghcr.io/mdub1na/stf:ci-worker-prototype"
-        allowed_images = ["ghcr.io/mdub1na/stf:ci-worker-*", "ghcr.io/mdub1na/stf@sha256:*"]
+        image = "registry.finservice.tech/gfs/platform/quality/farm-connection-smoke/ci-worker:prototype"
+        allowed_images = ["registry.finservice.tech/gfs/platform/quality/farm-connection-smoke/ci-worker@sha256:*"]
         allowed_services = ["invalid.local/services-disabled:*"]
         pull_policy = "always"
         allowed_pull_policies = ["always"]

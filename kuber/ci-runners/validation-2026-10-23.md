@@ -40,6 +40,13 @@ The trusted connectivity check used the existing `stf-api` pod without credentia
 - Bash syntax check for Maestro command: passed.
 - Kubernetes client dry run: passed.
 
+## Registry authentication
+
+- Registry URL verified through project145 metadata: `registry.finservice.tech/gfs/platform/quality/farm-connection-smoke`.
+- Registry host resolves to34.0.249.190 and uses TLS443; no job egress rule was added.
+- Worker admission accepts only `…/ci-worker@sha256:*` from this project. Integrated GitLab job credentials are used for ephemeral worker image pulls.
+- Project deploy token32 has only `read_registry`; an auth challenge requesting pull,push yielded pull only. Its credentials are stored in `stf/stf-farm-registry-pull`, never in job variables. Expiration:2027-01-21.
+
 ## End-to-end runs
 
 Pending publication of the immutable worker image and project-scoped coordinator credentials. No multi-hour stability claim is made by these smoke tests.

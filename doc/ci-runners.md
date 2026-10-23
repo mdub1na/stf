@@ -23,7 +23,7 @@ Create a project-locked runner through `POST /api/v4/user/runners`, with `runner
 
 The init container copies global settings before registration. The runner template is merged into `[[runners]]`; global `concurrent` must not depend on that merge. Verify the resulting config without printing `token` or the full configuration. The approved setup uses manager v19.5.0 pinned by digest and the matching helper version selected by GitLab Runner.
 
-The manager has no access to farm namespaces through RBAC. Jobs cannot overwrite namespace, service account, bearer token or pod labels through CI variables. Privileged containers, service containers and host mounts are disabled. Build/helper pods run as UID/GID1000; the image must support this user. The approved build image is published in the existing public package as `ghcr.io/mdub1na/stf:ci-worker-<commit>` and used by immutable digest. No private registry credential is passed to jobs.
+The manager has no access to farm namespaces through RBAC. Jobs cannot overwrite namespace, service account, bearer token or pod labels through CI variables. Privileged containers, service containers and host mounts are disabled. Build/helper pods run as UID/GID1000; the image must support this user. The approved build image is `registry.finservice.tech/gfs/platform/quality/farm-connection-smoke/ci-worker@sha256:<digest>`. Runner admission allows this repository by digest only. GitLab supplies temporary registry credentials from the job token for images in its own project; no permanent registry PAT is passed to jobs. The registry uses the same34.0.249.190:443 endpoint as GitLab, so no additional network allowance is needed.
 
 ## Network isolation
 
@@ -37,13 +37,13 @@ After deployment, run positive probes for DNS, GitLab443 and coordinator8080, an
 
 Build `kuber/ci-runners/Dockerfile` after placing the packed standalone `tools/test-runner` package at `kuber/ci-runners/runner-package.tgz` (ignored by Git). The image contains pinned JDK21, Node22.18.0 and Maestro2.11.0 with its published SHA256. It runs as UID1000 with UTF-8 enabled. Maestro analytics and update checks are disabled.
 
-Set the demo project's `FARM_RUNNER_IMAGE` CI variable to the immutable built image digest. GitLab Runner creates no idle worker pods; each build pod exists for a single job and is deleted afterward. ResourceQuota and LimitRange cap worker resource use. The initial resource allocation is for native smoke tests, not application compilation.
+Set the demo project's `FARM_RUNNER_IMAGE` CI variable to the immutable built image digest. Kubernetes pulls images through the node; the GitLab Runner passes the short-lived integrated-registry credentials in its per-job pull Secret. A separate read_registry-only project deploy token is used by the coordinator deployment through `stf/stf-farm-registry-pull`, with no write_registry or repository access. Its current credential expires on2027-01-21; rotate that deploy token and Secret before expiration. GitLab Runner creates no idle worker pods; each build pod exists for a single job and is deleted afterward. ResourceQuota and LimitRange cap worker resource use. The initial resource allocation is for native smoke tests, not application compilation.
 
 ## External repository contract
 
 The independent private validation repository is `https://gitlab.finservice.tech/gfs/platform/quality/farm-connection-smoke` (project145). The reusable source template is `kuber/ci-runners/demo/`.
 
-Configure `FARM_TOKEN_FILE` as a masked file CI variable containing that project's coordinator token. `FARM_URL` is `http://stf-coordinator.stf.svc.cluster.local:8080` inside this cluster. Other repositories receive separate project identities/tokens.
+Configure `FARM_TOKEN_FILE` as a masked file CI variable containing that project's coordinator token. `FARM_URL` is `http://stf-coordinator.stf.svc.cluster.local:8080` inside this cluster. Other repositories receive separate project identities/tokens. Publish their worker image in their own project registry, or explicitly allow only that project's job tokens to pull a centrally hosted image. Never disable the image project's job-token allowlist for broad cross-project access.
 
 ```sh
 stf utils test run --runner appium --platform Android --run-id "$CI_PIPELINE_ID-$CI_JOB_ID" -- node tests/appium-settings.mjs

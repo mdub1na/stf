@@ -160,3 +160,6 @@ foreign ownership, busy Grid, exact-profile retirement and service scheduling.
 A real signing build, installation, fresh telemetry and Appium CI smoke must be
 recorded separately; fixture tests cannot prove Apple authentication or USB
 availability.
+
+See the [2026-10-23 hardware validation](validation-2026-10-23.md) for the first
+real renewal, recovery evidence and the installed Mac service.

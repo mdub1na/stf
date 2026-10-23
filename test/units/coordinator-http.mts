@@ -591,6 +591,30 @@ describe('coordinator HTTP and real upstream adapters', function() {
     assert.notEqual((await revoked)[0], 1000)
   })
 
+  it('reclaims normal ADB EOF streams across repeated Dadb metadata connections', async function() {
+    const f = await fixture(true, true)
+    const result = await f.call('/api/v1/requests', 'POST',
+      {runId: 'maestro-many-connections', runner: 'maestro', platform: 'Android'},
+      'Bearer ' + projectA, {'Idempotency-Key': 'maestro-many-connections'})
+    assert.equal(result.status, 202)
+    await f.engine.tick()
+    const request = (await f.call('/api/v1/requests/' + result.body.request.id, 'GET',
+      undefined, 'Bearer ' + projectA)).body.request
+    const lease = f.engine.leaseView(request.leaseId)
+    const url = f.url.replace(/^http/, 'ws') + lease.connection.path
+    for (let count = 0; count < 100; count++) {
+      const ws = new WebSocket(url, {headers: {Authorization: 'Bearer ' + projectA}})
+      ws.on('error', () => {})
+      await once(ws, 'open')
+      const chunks: Buffer[] = []
+      ws.on('message', data => chunks.push(Buffer.from(data as Buffer)))
+      const closed = once(ws, 'close')
+      ws.send(adbRequest('host:devices'), {binary: true})
+      assert.equal((await closed)[0], 1000, 'Normal metadata request ' + count)
+      assert.ok(Buffer.concat(chunks).includes(Buffer.from(lease.device.serial)))
+    }
+  })
+
   it('redacts storage and upstream errors from HTTP responses and status', async function() {
     const f = await fixture()
     f.failInventory()

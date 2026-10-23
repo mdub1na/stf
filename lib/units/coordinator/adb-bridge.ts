@@ -144,6 +144,8 @@ export class LeaseAdbBridge {
   private closed = false
 
   accept(stream: Duplex, target: AdbTarget, assertActive: () => void | Promise<void>) {
+    // Rejected admission also destroys a stream with an error; install its handler first.
+    stream.on('error', () => {})
     const current = this.streams.get(target.leaseId) || new Set<Duplex>()
     const total = [...this.streams.values()].reduce((sum, set) => sum + set.size, 0)
     if (this.closed || current.size >= 32 || total >= 128) {
@@ -152,7 +154,6 @@ export class LeaseAdbBridge {
     }
     current.add(stream)
     this.streams.set(target.leaseId, current)
-    stream.on('error', () => {})
     const check = setInterval(() => {
       Promise.resolve().then(assertActive).catch(() => stream.destroy())
     }, 1000)

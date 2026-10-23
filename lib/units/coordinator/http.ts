@@ -194,6 +194,9 @@ export function attachCoordinatorAdb(server: http.Server, engine: Coordinator,
 }
 })
         const stream = createWebSocketStream(ws)
+        // ws streams disable autoDestroy. A closed WebSocket must release its duplex
+        // even when metadata reads leave the readable side paused at EOF.
+        ws.once('close', () => stream.destroy())
         // A normal smart-socket EOF has an explicit close code. Destroy/revocation
         // continues to terminate the WebSocket, so the worker stops its test.
         stream._final = done => {

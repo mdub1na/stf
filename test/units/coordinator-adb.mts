@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict'
 import net from 'node:net'
+import {PassThrough} from 'node:stream'
 import {once} from 'node:events'
 import {LeaseAdbBridge, adbRequest, readAdbBytes} from '../../lib/units/coordinator/adb-bridge.js'
 
@@ -159,6 +160,27 @@ describe('lease-isolated ADB smart socket', () => {
     finally {
  await f.close()
 }
+  })
+
+  it('rejects excess streams without an unhandled error and retains its admission bound',
+    async() => {
+    const bridge = new LeaseAdbBridge()
+    const target = {leaseId: 'lease-limit', serial: 'PHONE-A', host: '127.0.0.1', port: 1}
+    try {
+      for (let count = 0; count < 32; count++) {
+        bridge.accept(new PassThrough(), target, () => {})
+      }
+      const rejected = new PassThrough()
+      const closed = new Promise<void>(resolve => rejected.once('close', resolve))
+      bridge.accept(rejected, target, () => {})
+      assert.equal(rejected.destroyed, true)
+      assert.ok(rejected.listenerCount('error') > 0,
+        'Admission rejection must handle its own error')
+      await closed
+    }
+    finally {
+      bridge.close()
+    }
   })
 
   it('rejects a stale lease before opening any upstream socket', async() => {

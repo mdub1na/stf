@@ -70,6 +70,22 @@ describe('automation viewing session', () => {
     await render()
     expect(host.querySelector<HTMLButtonElement>('[data-testid="home"]')!.disabled).toBe(false)
   })
+  it('keeps one pending invite when ownership arrives before its acknowledgement', async() => {
+    state.device = phone({owner: null, usage: null, using: false})
+    let acknowledge!: () => void
+    state.invite.mockReturnValue(new Promise<void>(resolve => {
+      acknowledge = resolve
+    }))
+    await render()
+    expect(state.invite).toHaveBeenCalledTimes(1)
+    expect(host.textContent).toContain('Preparing')
+    state.device = phone({owner: {email: 'viewer@example.test'}, usage: null, using: true})
+    await render()
+    expect(state.invite).toHaveBeenCalledTimes(1)
+    await act(async() => acknowledge())
+    expect(host.querySelector<HTMLButtonElement>('[data-testid="home"]')!.disabled).toBe(false)
+    expect(state.navigate).not.toHaveBeenCalled()
+  })
   it('does not steal the device when another automation starts immediately after release', async() => {
     await render()
     state.device = phone({owner: {email: 'next-runner@example.test'}})

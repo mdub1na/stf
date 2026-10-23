@@ -77,7 +77,8 @@ export class DevicePacketAccess {
       return false
     }
     const device = await load(serial)
-    return Boolean(device && device.channel === channel && device.present && device.ready &&
+    return Boolean(!this.automated.has(serial) && device && device.channel === channel &&
+      device.present && device.ready &&
       device.group?.id && groups.includes(device.group.id) &&
       !(device.owner && device.usage === 'automation'))
   }

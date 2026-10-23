@@ -20,6 +20,33 @@ describe('manual device packets during automation', function() {
     })
   }
 
+  for (const platform of ['Android', 'iOS']) {
+    it(`rejects ${platform} input when automation starts during the lookup`, async function() {
+      const device = {serial: 'PHONE', platform
+        , channel: platform === 'iOS' ? 'ios:PHONE' : 'private-channel'
+        , present: true, ready: true, group: {id: 'shared'}}
+      let release!: () => void, entered!: () => void
+      const pending = new Promise<void>(resolve => {
+        release = resolve
+      })
+      const started = new Promise<void>(resolve => {
+        entered = resolve
+      })
+      const access = new DevicePacketAccess(async() => [device], async() => {
+        entered()
+        await pending
+        return device
+      })
+      const allowed = access.allows(device.channel, ['shared'])
+      await started
+      access.joined(device.serial, 'automation')
+      release()
+      assert.equal(await allowed, false)
+      access.released(device.serial)
+      assert.equal(await access.allows(device.channel, ['shared']), true)
+    })
+  }
+
   it('blocks the join persistence gap and clears the released state', async function() {
     const device = {serial: 'PHONE', channel: 'private', present: true, ready: true
     , group: {id: 'shared'}}

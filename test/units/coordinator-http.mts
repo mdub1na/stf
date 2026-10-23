@@ -336,8 +336,7 @@ describe('coordinator HTTP and real upstream adapters', function() {
     assert.equal(created.status, 200)
     const route = '/session/' + created.body.value.sessionId + '/source'
     for (const method of ['GET', 'HEAD']) {
-      // Express 4 may initialize an empty GET body as {}; explicit JSON reproduces
-      // the same controller input under Express 5 without mocking the upstream adapter.
+      // Explicit JSON reproduces a parsed GET body without mocking the upstream adapter.
       const result = await new Promise<{status: number, body: string}>((resolve, reject) => {
         const request = http.request(f.url + gateway + route, {
           method, headers: {Authorization: bearer, 'Content-Type': 'application/json'

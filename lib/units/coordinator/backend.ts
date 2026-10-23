@@ -105,7 +105,7 @@ export class HttpFarmBackend implements FarmBackend {
   }
 
   async webdriver(method: string, route: string, body?: unknown): Promise<UpstreamResponse> {
-    // Express 4 may supply {} for a bodyless command; fetch rejects GET/HEAD payloads.
+    // A body parser may supply {} for a bodyless command; fetch rejects GET/HEAD payloads.
     const hasBody = body !== undefined && !['GET', 'HEAD'].includes(method.toUpperCase())
     const response = await fetch(this.gridUrl + route, {
       method, redirect: 'error', signal: AbortSignal.timeout(this.timeoutMs)

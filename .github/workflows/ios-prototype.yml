@@ -4,15 +4,18 @@ on:
   pull_request:
     paths:
       - tools/ios-prototype/**
-      - kuber/ios-prototype/**
+      - bin/stf-ios-compose
+      - docker/ios/**
+      - docker/compose/**
+      - docker-compose.yaml
       - .github/workflows/ios-prototype.yml
-      - doc/ios-prototype.md
+      - doc/ios-provider.md
       - package.json
       - lib/**
       - res/app/src/**
-      - test/units/ios-provider.mts
+      - test/units/ios-*.mts
   push:
-    branches: [develop]
+    branches: [master]
 
 permissions:
   contents: read
@@ -35,59 +38,59 @@ jobs:
       - name: Test HTTP, WDA and process lifecycle without a device
         run: npm run test:ios-prototype
 
+  compose:
+    name: Local iOS Compose configuration
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+      - name: Render and validate the local stack without a phone
+        run: >-
+          node tools/ios-prototype/compose.mts prepare
+          --config docker/ios/devices.example.json
+          --state-dir "$RUNNER_TEMP/stf-ios-compose"
+      - name: Validate the same-origin screen proxy
+        run: >-
+          docker run --rm
+          --volume "$RUNNER_TEMP/stf-ios-compose/nginx.conf:/etc/nginx/nginx.conf:ro"
+          nginx:stable-alpine nginx -t
+      - name: Initialize an existing non-root-owned device volume
+        run: |
+          docker volume create stf-ios-state-check
+          docker run --rm --volume stf-ios-state-check:/state node:24-bookworm-slim \
+            node -e 'require("fs").chownSync("/state",1000,1000)'
+          docker run --rm --user 0:0 --cap-drop ALL --cap-add CHOWN --cap-add FOWNER \
+            --volume stf-ios-state-check:/state \
+            --volume "$PWD/tools/ios-prototype/container.mts:/container.mts:ro" \
+            node:24-bookworm-slim node /container.mts init
+          docker run --rm --user 1000:1000 --volume stf-ios-state-check:/state \
+            node:24-bookworm-slim node -e 'require("fs").writeFileSync("/state/home/test","ok")'
+          docker volume rm stf-ios-state-check
+
   image:
-    name: Linux USB prototype image
-    if: github.event_name == 'push' || github.event.pull_request.head.repo.full_name == github.repository
+    name: Linux USB runtime image / ${{ matrix.arch }}
     needs: prototype
     runs-on: ubuntu-24.04
     timeout-minutes: 20
-    permissions:
-      contents: read
-      packages: write
+    strategy:
+      fail-fast: false
+      matrix:
+        arch: [amd64, arm64]
     steps:
       - uses: actions/checkout@v7
+      - uses: docker/setup-qemu-action@v4
+        if: matrix.arch == 'arm64'
         with:
-          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          platforms: arm64
       - uses: docker/setup-buildx-action@v4
-      - uses: docker/login-action@v4
-        with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
       - uses: docker/build-push-action@v7
         with:
           context: .
-          file: kuber/ios-prototype/Dockerfile
-          platforms: linux/amd64
-          push: true
-          tags: ghcr.io/${{ github.repository }}:ios-prototype-${{ github.event.pull_request.head.sha || github.sha }}
-          cache-from: type=gha,scope=ios-prototype-amd64
-          cache-to: type=gha,mode=max,scope=ios-prototype-amd64
-
-  stf-image:
-    name: STF iOS integration image
-    if: github.event_name == 'push' || github.event.pull_request.head.repo.full_name == github.repository
-    runs-on: ubuntu-24.04
-    timeout-minutes: 40
-    permissions:
-      contents: read
-      packages: write
-    steps:
-      - uses: actions/checkout@v7
-        with:
-          ref: ${{ github.event.pull_request.head.sha || github.sha }}
-      - uses: docker/setup-buildx-action@v4
-      - uses: docker/login-action@v4
-        with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-      - uses: docker/build-push-action@v7
-        with:
-          context: .
-          file: Dockerfile
-          platforms: linux/amd64
-          push: true
-          tags: ghcr.io/${{ github.repository }}:ios-stf-${{ github.event.pull_request.head.sha || github.sha }}
-          cache-from: type=gha,scope=ios-stf-amd64
-          cache-to: type=gha,mode=max,scope=ios-stf-amd64
+          file: docker/ios/Dockerfile
+          platforms: linux/${{ matrix.arch }}
+          push: false
+          cache-from: type=gha,scope=ios-runtime-${{ matrix.arch }}
+          cache-to: type=gha,mode=max,scope=ios-runtime-${{ matrix.arch }}

@@ -23,7 +23,7 @@ import zmqutil from '../../util/zmqutil.js'
 import cookieSession from './middleware/cookie-session.js'
 import ip from './middleware/remote-ip.js'
 import auth from './middleware/auth.js'
-import {allowIosPacket} from './ios-access.js'
+import {createDevicePacketGuard} from './ios-access.js'
 import {DevicePacketAccess, isDeviceCommand} from './device-access.js'
 import {readIosProperties} from '../../util/ios-device-status.js'
 import jwtutil from '../../util/jwtutil.js'
@@ -242,32 +242,14 @@ export default function(options: WebsocketOptions) {
     var channels: string[] = []
     var messageListener: MessageListener
 
-    let devicePackets = Promise.resolve()
     const deviceAccess = new DevicePacketAccess(dbapi.loadDevices, dbapi.loadDeviceBySerial)
-    // Preserve input ordering while checking the current automation lease and iOS ownership.
-    socket.use((packet, next) => {
-      if (!isDeviceCommand(packet[0])) {
-        next()
-        return
-      }
-      devicePackets = devicePackets
-        .then(async() => await deviceAccess.allows(packet[1], user.groups.subscribed) &&
-          await allowIosPacket(packet[0], packet[1], user, dbapi.loadDeviceBySerial))
-        .then(allowed => {
-          if (allowed) {
-            return next()
-          }
-          else {
-            if (typeof packet[2] === 'string') {
-              socket.emit('tx.cancel', packet[2], {
-                success: false, data: 'Device is read-only or unavailable'
-              })
-            }
-            return next(new Error('Device access denied'))
-          }
-        })
-        .catch(() => next(new Error('Device access unavailable')))
-    })
+    socket.use(createDevicePacketGuard(user, dbapi.loadDeviceBySerial, (channel, failure) => {
+      socket.emit('tx.cancel', channel, failure)
+    }, {
+      matches: isDeviceCommand
+    , allows: (channel, groups, load) => deviceAccess.allows(channel, groups, load)
+    , source: channel => deviceAccess.source(channel)
+    }))
     socket.on('error', error => log.warn('Socket request rejected: %s', error.message))
 
     user.ip = socket.handshake.query.uip as string | undefined || req.ip

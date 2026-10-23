@@ -326,6 +326,47 @@ describe('coordinator HTTP and real upstream adapters', function() {
     assert.ok(f.stfCalls.every(call => call.headers.authorization === 'Bearer ' + stfToken))
   })
 
+  it('omits parsed JSON bodies from upstream GET and HEAD WebDriver commands', async function() {
+    const f = await fixture()
+    const lease = await f.allocate()
+    const gateway = '/api/v1/leases/' + lease.id + '/webdriver'
+    const created = await f.call(gateway + '/session', 'POST', {
+      capabilities: {alwaysMatch: {}, firstMatch: [{}]}
+    })
+    assert.equal(created.status, 200)
+    const route = '/session/' + created.body.value.sessionId + '/source'
+    for (const method of ['GET', 'HEAD']) {
+      // Express 4 may initialize an empty GET body as {}; explicit JSON reproduces
+      // the same controller input under Express 5 without mocking the upstream adapter.
+      const result = await new Promise<{status: number, body: string}>((resolve, reject) => {
+        const request = http.request(f.url + gateway + route, {
+          method, headers: {Authorization: bearer, 'Content-Type': 'application/json'
+            , 'Content-Length': 2}
+        }, response => {
+          const chunks: Buffer[] = []
+          response.on('data', chunk => chunks.push(Buffer.from(chunk)))
+          response.once('end', () => resolve({status: response.statusCode!
+            , body: Buffer.concat(chunks).toString()}))
+          response.once('error', reject)
+        })
+        request.once('error', reject)
+        request.end('{}')
+      })
+      assert.equal(result.status, 200, result.body)
+      if (method === 'GET') {
+        assert.equal(JSON.parse(result.body).value, '<App/>')
+      }
+      else {
+        assert.equal(result.body, '')
+      }
+      const forwarded = f.gridCalls.find(call => call.method === method && call.route === route)
+      assert.ok(forwarded, 'The command must reach the real upstream HTTP adapter')
+      assert.equal(forwarded.body, null, method + ' must not carry a JSON payload upstream')
+      assert.ok(!forwarded.headers['content-length'] || forwarded.headers['content-length'] === '0')
+      assert.equal(f.engine.leaseView(lease.id).state, 'active')
+    }
+  })
+
   for (const phase of ['inventory', 'capture'] as const) {
     it(`keeps HTTP heartbeat and commands available during slow ${phase}`, async function() {
       const f = await fixture()

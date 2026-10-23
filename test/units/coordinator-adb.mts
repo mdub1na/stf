@@ -110,12 +110,14 @@ describe('lease-isolated ADB smart socket', () => {
     try {
       for (const command of ['host:kill', 'host:connect:example:5555'
         , 'host:transport:PHONE-B', 'host:tport:serial:PHONE-B', 'host-serial:PHONE-B:features'
-        , 'host:transport-any', 'shell:echo bypass']) {
+        , 'host:transport-any', 'shell:echo bypass', 'host:devices\n'
+        , 'host:transport:PHONE-A\t']) {
         const socket = await f.connect()
         assert.equal(await request(socket, command), 'FAIL', command)
       }
       for (const command of ['host:devices', 'host:transport:PHONE-B', 'reverse:forward:tcp:1;tcp:2'
-        , 'root:', 'tcp:65536', 'host:kill']) {
+        , 'root:', 'tcp:65536', 'host:kill', 'shell,v2,raw:echo invalid\0suffix'
+        , 'shell,v2,raw:echo invalid\x01suffix', 'shell,v2,\nraw:echo invalid']) {
         const socket = await f.connect()
         assert.equal(await request(socket, 'host:transport:PHONE-A'), 'OKAY')
         assert.equal(await request(socket, command), 'FAIL', command)
@@ -125,6 +127,21 @@ describe('lease-isolated ADB smart socket', () => {
     finally {
  await f.close()
 }
+  })
+
+  it('accepts Maestro background shell commands with CR/LF/tab in their body', async() => {
+    const f = await fixture()
+    try {
+      const client = await f.connect()
+      assert.equal(await request(client, 'host:transport:PHONE-A'), 'OKAY')
+      const command = 'shell,v2,raw:am instrument -w -m -e port 33865 ' +
+        'dev.mobile.maestro.test/androidx.test.runner.AndroidJUnitRunner &\n\t\r'
+      assert.equal(await request(client, command), 'OKAY')
+      assert.deepEqual(f.upstreamRequests, ['host:transport:PHONE-A', command])
+    }
+    finally {
+      await f.close()
+    }
   })
 
   it('closes the client and upstream immediately when the parent lease ends', async() => {

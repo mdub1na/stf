@@ -77,8 +77,16 @@ async function readRequest(stream: Duplex) {
   const body = await readAdbBytes(stream, length)
   // A malformed UTF-8 service must not become a different request after decoding.
   const value = new TextDecoder('utf-8', {fatal: true}).decode(body)
-  if ([...value].some(character => character.charCodeAt(0) < 32 ||
-      character.charCodeAt(0) === 127)) {
+  const shell = /^shell(?:,[A-Za-z0-9_=./-]+(?:,[A-Za-z0-9_=./-]+)*)?:/.exec(value)
+  // Maestro starts instrumentation with a background command followed by a newline.
+  // Whitespace belongs only to the shell body; host selectors and service prefixes stay strict.
+  if ([...value].some((character, index) => {
+    const code = character.charCodeAt(0)
+    if (code >= 32 && code !== 127) {
+      return false
+    }
+    return !shell || index < shell[0].length || ![9, 10, 13].includes(code)
+  })) {
     throw new Error('Invalid ADB request')
   }
   return value

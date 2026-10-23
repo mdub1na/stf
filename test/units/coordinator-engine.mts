@@ -84,6 +84,7 @@ class FakeFarm implements FarmBackend {
   captureEntered: ReturnType<typeof deferred> | null = null
   commandBarrier: ReturnType<typeof deferred> | null = null
   commandEntered: ReturnType<typeof deferred> | null = null
+  commandError = false
   createError = false
   createErrorAfterSession = false
   malformedCreate = false
@@ -222,6 +223,9 @@ class FakeFarm implements FarmBackend {
     this.commandEntered?.resolve()
     if (this.commandBarrier) {
       await this.commandBarrier.promise
+    }
+    if (this.commandError) {
+      throw new Error('WebDriver command outcome is unknown')
     }
     return response(200, null)
   }
@@ -683,6 +687,72 @@ describe('coordinator session isolation and uncertain cleanup', () => {
       await engine.recover(lease.id)
       assert.equal(engine.leaseView(lease.id).state, 'released')
     }
+  })
+
+  it('recovers a failed command after confirming termination of its known session', async() => {
+    const {engine, allocate, create, farm, store} = await fixture()
+    const lease = await allocate()
+    const session = await create(lease.id)
+    farm.commandError = true
+    await rejectCode(engine.webdriver(lease.id, 'GET', '/session/' + session + '/source'),
+      'upstream_unknown', 502)
+    assert.equal(engine.leaseView(lease.id).state, 'quarantined')
+    assert.equal(store.state.leases[0]!.commandInFlight, true)
+    await engine.recover(lease.id)
+    assert.equal(engine.leaseView(lease.id).state, 'expired')
+    assert.equal(store.state.leases[0]!.commandInFlight, undefined)
+    assert.equal(store.state.leases[0]!.sessionId, undefined)
+    assert.equal(farm.inventory[0]!.owner, null)
+    const deleted = farm.events.indexOf('webdriver:DELETE:/session/' + session)
+    assert.ok(deleted >= 0 && farm.events.indexOf('release:ANDROID-A') > deleted)
+  })
+
+  it('retains the known session until a cancelled in-flight command has settled', async() => {
+    const {engine, allocate, create, farm, store} = await fixture()
+    const lease = await allocate()
+    const session = await create(lease.id)
+    farm.commandBarrier = deferred()
+    farm.commandEntered = deferred()
+    const command = engine.webdriver(lease.id, 'GET', '/session/' + session + '/source')
+    const settled = command.catch(error => error)
+    await farm.commandEntered.promise
+    try {
+      await engine.release(lease.id)
+      await engine.tick()
+      assert.equal(engine.leaseView(lease.id).state, 'cleaning')
+      assert.equal(store.state.leases[0]!.sessionId, session,
+        'Keep the SID so a late command failure cannot erase termination evidence')
+      assert.equal(store.state.leases[0]!.commandInFlight, true)
+      assert.ok(!farm.events.includes('release:ANDROID-A'))
+      farm.commandError = true
+    }
+    finally {
+      farm.commandBarrier.resolve()
+    }
+    assert.ok(await settled instanceof CoordinatorError)
+    await engine.recover(lease.id)
+    assert.equal(engine.leaseView(lease.id).state, 'released')
+    assert.equal(store.state.leases[0]!.commandInFlight, undefined)
+    assert.equal(farm.inventory[0]!.owner, null)
+    assert.equal(farm.events.filter(event =>
+      event === 'webdriver:DELETE:/session/' + session).length, 2)
+  })
+
+  it('keeps an uncertain command quarantined when no session identity was preserved', async() => {
+    const {engine, allocate, create, farm, store, config, now} = await fixture()
+    const lease = await allocate()
+    const session = await create(lease.id)
+    farm.commandError = true
+    await rejectCode(engine.webdriver(lease.id, 'GET', '/session/' + session + '/source'),
+      'upstream_unknown', 502)
+    // Recovery of an older durable record must not invent proof from an empty marker.
+    delete store.state.leases[0]!.sessionId
+    const restarted = new Coordinator(config, pools, farm, store, now)
+    await restarted.start()
+    assert.equal(restarted.leaseView(lease.id).state, 'quarantined')
+    assert.equal(store.state.leases[0]!.commandInFlight, true)
+    assert.equal(farm.inventory[0]!.automationLeaseId, lease.id)
+    assert.ok(!farm.events.includes('release:ANDROID-A'))
   })
 
   it('holds the phone while a previously accepted command is still running', async() => {

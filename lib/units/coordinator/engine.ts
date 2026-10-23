@@ -659,10 +659,20 @@ export class Coordinator {
           slot.session?.sessionId === session))) {
           throw new Error('Grid still reports the Appium session')
         }
-        await this.exclusive(async() => {
+        const settled = await this.exclusive(async() => {
+          // Preserve the SID until an accepted command settles; a late failure must
+          // retain the identity needed to reconfirm termination on the next cleanup.
+          if (lease.commandInFlight && this.commands.has(lease.id)) {
+            return false
+          }
           delete lease.sessionId
+          delete lease.commandInFlight
           await this.save()
+          return true
         })
+        if (!settled) {
+          return
+        }
       }
       if (lease.commandInFlight) {
         if (this.commands.has(lease.id)) {

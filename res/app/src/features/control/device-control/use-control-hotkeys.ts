@@ -9,15 +9,22 @@ const allowInInputs = ['SELECT']
 export function useControlHotkeys(control: Control, actions: DeviceActions, ios = false, readOnly = false) {
   const navigate = useNavigate()
   const [platform, setPlatform] = usePlatform()
+  const androidOnly: Parameters<typeof useHotkeys>[0] = ios || readOnly ? [] : [
+    ['shift+space', () => control.keyPress('switch_charset')]
+    , ['meta+ArrowLeft', () => actions.rotateBy(-90)]
+    , ['meta+ArrowRight', () => actions.rotateBy(90)]
+    , ['meta+shift+M', () => control.menu()]
+    , ['meta+shift+B', () => control.back()]
+  ]
+
+  const common: Parameters<typeof useHotkeys>[0] = readOnly ? [] : [
+    ['meta+shift+H', () => control.home()]
+  ]
 
   useHotkeys([
     ['meta+shift+D', () => navigate('/devices')]
-    , ['shift+space', () => !readOnly && !ios && control.keyPress('switch_charset')]
-    , ['meta+ArrowLeft', () => !readOnly && !ios && actions.rotateBy(-90)]
-    , ['meta+ArrowRight', () => !readOnly && !ios && actions.rotateBy(90)]
-    , ['meta+shift+M', () => !readOnly && !ios && control.menu()]
-    , ['meta+shift+H', () => !readOnly && control.home()]
-    , ['meta+shift+B', () => !readOnly && !ios && control.back()]
+    , ...common
     , ['shift+W', () => setPlatform(platform === 'web' ? 'native' : 'web'), {preventDefault: false}]
+    , ...androidOnly
   ], allowInInputs)
 }

@@ -10,8 +10,6 @@ export function createScreenServer(options: {
   publicOrigin: string
   serial: string
   owner: () => IosOwner | null
-  keepalive: () => void
-  automated?: () => boolean
   onError?: (error: unknown) => void
 }) {
   const server = http.createServer((_req, res) => {
@@ -62,9 +60,6 @@ export function createScreenServer(options: {
                   if (ws.bufferedAmount < 1024 * 1024) {
                     ws.send(frame)
                   }
-                }
-                if (!options.automated?.()) {
-                  options.keepalive()
                 }
               }
               if (!active.signal.aborted) {

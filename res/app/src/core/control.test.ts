@@ -29,4 +29,19 @@ describe('read-only device control', () => {
     control.home()
     expect(emit).toHaveBeenCalledTimes(1)
   })
+  it('preserves progress chaining for denied installations and shell commands', async() => {
+    const control = createControl({serial: 'phone'} as Device, 'channel', () => true)
+    const progress = vi.fn()
+    for (const operation of [
+      () => control.install({href: 'artifact', manifest: {}, launch: false})
+      , () => control.shell('echo hello')
+    ]) {
+      const pending = operation()
+      expect(pending.progressed(progress)).toBe(pending)
+      await expect(pending).rejects.toThrow('Device is read-only during automation')
+    }
+    expect(progress).not.toHaveBeenCalled()
+    expect(transaction).not.toHaveBeenCalled()
+    expect(emit).not.toHaveBeenCalled()
+  })
 })

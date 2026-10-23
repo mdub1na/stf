@@ -1,3 +1,5 @@
+import type {LoadDevice} from './ios-access.js'
+
 interface DeviceAccess {
   serial: string
   platform?: string
@@ -14,7 +16,10 @@ const deviceCommands = new Set([
 , 'group', 'shell', 'forward', 'logcat', 'connect', 'browser', 'store', 'screen', 'fs'
 ])
 
-export function isDeviceCommand(event: string): boolean {
+export function isDeviceCommand(event: unknown): boolean {
+  if (typeof event !== 'string') {
+    return false
+  }
   const family = event.slice(0, event.indexOf('.'))
   return event !== 'device.note' && deviceCommands.has(family)
 }
@@ -42,7 +47,11 @@ export class DevicePacketAccess {
     this.automated.delete(serial)
   }
 
-  async allows(channel: unknown, groups: string[]): Promise<boolean> {
+  source(channel: string): string {
+    return channel.startsWith('ios:') ? channel.slice(4) : this.channels.get(channel) || channel
+  }
+
+  async allows(channel: unknown, groups: string[], load: LoadDevice = this.load): Promise<boolean> {
     if (typeof channel !== 'string') {
       return false
     }
@@ -67,7 +76,7 @@ export class DevicePacketAccess {
     if (!serial || this.automated.has(serial)) {
       return false
     }
-    const device = await this.load(serial)
+    const device = await load(serial)
     return Boolean(device && device.channel === channel && device.present && device.ready &&
       device.group?.id && groups.includes(device.group.id) &&
       !(device.owner && device.usage === 'automation'))

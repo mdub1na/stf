@@ -37,7 +37,9 @@ export function createControl(target: Device, channel: string, isReadOnly = () =
 
   function sendTwoWay(action: string, data?: unknown, timeoutMs?: number): TxPromise {
     if (isReadOnly()) {
-      return Promise.reject(new Error('Device is read-only during automation')) as TxPromise
+      const denied = Promise.reject(new Error('Device is read-only during automation')) as TxPromise
+      denied.progressed = () => denied
+      return denied
     }
     const tx = createTransaction(target, timeoutMs)
     emit(action, channel, tx.channel, data)

@@ -100,6 +100,8 @@ The coordinator timeline recorded at most2held devices. Maestro released Huawei 
 
 Authoritative final checks: all34global leases terminal (26released,8expired from earlier diagnostic runs),0held/quarantined,Grid0sessions,and no coordinator error. Both Android phones and the iPhone were present/ready in STF with no owner,usage or automation lease ID. Targeted Android process checks found no UiAutomator2/Maestro driver process. The latest Maestro lease retained its provider cleanup acknowledgment; a fresh snapshot confirmed0Maestro packages and exact restoration of every tracked setting to its saved baseline.
 
+At08:36:47UTC the job namespace was empty after every pipeline6505pod finished its configured cleanup grace naturally. No worker was force-deleted. The runner manager remains online for future runs. The external MR's final docs-only commit`e781ab4b` synchronizes existing-WDA guidance; its executable test code is unchanged from the validated commit`51734890`.
+
 The preceding pipeline6502 passed3Android tests but its iOS capability `bundleId` triggered host USB discovery before existing-WDA attachment. Server logs identified the failed internal SID; exact local GET/DELETE/GET confirmed404invalid-session and Grid reported0sessions. Its backed-up recovery metadata was repaired while the coordinator was stopped, then normal startup cleanup released the lease. The final iOS smoke omits `bundleId`/`app` at session creation and activates the installed app after connecting. Business-application installation/upgrade is not covered by this Settings smoke.
 
 No multi-hour stability claim is made by these smoke tests.

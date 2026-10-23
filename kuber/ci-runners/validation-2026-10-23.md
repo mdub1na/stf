@@ -53,6 +53,10 @@ The trusted connectivity check used the existing `stf-api` pod without credentia
 
 ## Validated images
 
+The subsequent coordinator upgrade for signing deadlines and persistent iOS
+maintenance is recorded in [WDA renewal validation](../../tools/wda-renewal/validation-2026-10-23.md).
+The image below records the earlier CI runner validation.
+
 - Coordinator: `registry.finservice.tech/gfs/platform/quality/farm-connection-smoke/runtime@sha256:33fa05d93b2b709ef69dbdcffc6f64baffc92b7d3f5ddc156cc38a8b01b8985c` (source behavior through commit`ed47d53a`). Runtime versions:Node22.23.2,Express5.3.0,ws8.22.0.
 - API/processor/Android providers: `registry.finservice.tech/gfs/platform/quality/farm-connection-smoke/runtime@sha256:f40b56e23652eb08a8af98f0822360df8a9182bdc645f01152737928f2397f6b` (provider cleanup/wire behavior through commit`97940773`).
 - Worker: `registry.finservice.tech/gfs/platform/quality/farm-connection-smoke/ci-worker@sha256:5ed0d8ccdc2068efcc29ba561e47cb6226182baf6639ed976ac76b357d4c7685`. Node22.18,Maestro2.11,JDK21; standalone transport behavior through commit`923e49b0`.

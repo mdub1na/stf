@@ -12,6 +12,10 @@ There is no coordinator web UI, user-role migration or test execution engine.
 The deployment is opt-in and is not added to the farm GitOps root. Short hardware
 validation does not establish multi-hour reliability; record that separately.
 
+The iOS signing guard and operator-only persistent device drains are documented
+in [Personal Team WDA renewal](../tools/wda-renewal/README.md). They require the
+version-2 state format; preserve current lease history when planning a rollback.
+
 ## Connection and lifecycle
 
 ```text

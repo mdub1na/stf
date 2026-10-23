@@ -5,7 +5,7 @@ import path from 'node:path'
 import {FileStateStore} from '../../lib/units/coordinator/state.js'
 import type {CoordinatorState} from '../../lib/units/coordinator/types.js'
 
-const empty = (): CoordinatorState => ({version: 1, requests: [], leases: []})
+const empty = (): CoordinatorState => ({version: 2, maintenance: [], requests: [], leases: []})
 
 describe('coordinator persistent state', () => {
   let directory: string, filename: string
@@ -32,6 +32,47 @@ describe('coordinator persistent state', () => {
     assert.deepEqual(await readdir(path.dirname(filename)), ['coordinator.json'])
   })
 
+  it('migrates version 1 without changing requests or leases and persists version 2', async() => {
+    const store = new FileStateStore(filename)
+    await store.save(empty())
+    const legacy = {version: 1, requests: [{
+      id: 'legacy-request', key: 'legacy-key', fingerprint: 'fingerprint', state: 'allocated'
+      , input: {platform: 'Android', runId: 'legacy-run', queueTimeoutSeconds: 60
+        , maxDurationSeconds: 60}, createdAt: 0, queueDeadlineAt: 60000, leaseId: 'legacy-lease'
+    }], leases: [{id: 'legacy-lease', requestId: 'legacy-request', runId: 'legacy-run'
+      , state: 'released', createdAt: 0, expiresAt: 10000, deadlineAt: 60000
+      , device: {serial: 'ANDROID-A', platform: 'Android', model: 'Phone', version: '16'
+        , provider: 'provider', present: true, ready: true}
+      , capabilities: {'appium:udid': 'ANDROID-A'}}]}
+    await writeFile(filename, JSON.stringify(legacy), {mode: 0o600})
+    const migrated = await store.load()
+    assert.deepEqual(migrated, {...legacy, version: 2, maintenance: []})
+    await store.save(migrated)
+    assert.equal(JSON.parse(await readFile(filename, 'utf8')).version, 2)
+  })
+
+  it('persists drains and refuses malformed or duplicate maintenance instead of losing isolation',
+    async() => {
+    const store = new FileStateStore(filename)
+    const maintenance = {id: '34725f38-4b42-4c84-94d8-31eb3baa2478'
+      , serial: 'IPHONE-A', createdAt: 42}
+    await store.save({...empty(), maintenance: [maintenance]})
+    assert.deepEqual((await store.load()).maintenance, [maintenance])
+    const invalid = [
+      {...empty(), maintenance: undefined}, {...empty(), maintenance: null}
+    , {...empty(), maintenance: [{...maintenance, id: 'not-a-uuid'}]}
+    , {...empty(), maintenance: [{...maintenance, createdAt: '42'}]}
+    , {...empty(), maintenance: [maintenance, maintenance]}
+    , {...empty(), maintenance: [maintenance, {...maintenance
+        , id: '71b30b15-1f08-4dfb-9126-761897aa9cc0'}]}
+    , {...empty(), version: 1, maintenance: [maintenance]}
+    ]
+    for (const value of invalid) {
+      await writeFile(filename, JSON.stringify(value), {mode: 0o600})
+      await assert.rejects(store.load(), /Invalid coordinator state/)
+    }
+  })
+
   it('retains the previous durable file if replacement serialization fails', async() => {
     const store = new FileStateStore(filename)
     await store.save(empty())
@@ -51,7 +92,7 @@ describe('coordinator persistent state', () => {
 
   it('rejects unsupported versions and incomplete request or lease records', async() => {
     const invalid = [
-      {...empty(), version: 2}
+      {...empty(), version: 3}
     , {...empty(), requests: [{id: 'request-one', input: {}, state: 'queued'}]}
     , {...empty(), leases: [{id: 'lease-one', device: {serial: 'ANDROID-A'}, state: 'active'}]}
     , {...empty(), requests: [{id: 'request-one', input: {runId: 'run'}, state: 'unknown'}]}
@@ -72,7 +113,7 @@ describe('coordinator Maestro recovery state', () => {
     const directory = await mkdtemp(path.join(os.tmpdir(), 'coordinator-maestro-state-'))
     const filename = path.join(directory, 'state.json')
     try {
-      const state: CoordinatorState = {version: 1, requests: [{
+      const state: CoordinatorState = {version: 2, maintenance: [], requests: [{
         id: 'request', key: 'key', fingerprint: 'fingerprint', state: 'allocated'
       , input: {runner: 'maestro', platform: 'Android', runId: 'run'
           , queueTimeoutSeconds: 60, maxDurationSeconds: 60}

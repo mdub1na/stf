@@ -10,6 +10,10 @@ import type {
 
 const owner = 'coordinator@example.test'
 const initialTime = Date.parse('2026-10-18T10:00:00Z')
+const freshWda = (expires = initialTime + 86400000, checked = initialTime) => ({
+  profile: 'valid' as const, expiresAt: new Date(expires).toISOString()
+, checkedAt: new Date(checked).toISOString()
+})
 const pools: AdbPool[] = [{
   provider: 'provider-one', host: 'adb-one', port: 5037, systemPorts: [8200, 8201]
 }]
@@ -47,7 +51,7 @@ async function rejectCode(operation: Promise<unknown>, code: string, status: num
 }
 
 class MemoryStore implements StateStore {
-  state: CoordinatorState = {version: 1, requests: [], leases: []}
+  state: CoordinatorState = {version: 2, maintenance: [], requests: [], leases: []}
   failWrites = false
   saves = 0
 
@@ -551,7 +555,8 @@ describe('coordinator allocation and lifetime', () => {
 
   it('requires an exact UP iOS relay with the current OS version', async() => {
     const farm = new FakeFarm()
-    farm.inventory = [phone('IPHONE-A', {platform: 'iOS', version: '27.0.1'})]
+    farm.inventory = [phone('IPHONE-A', {platform: 'iOS', version: '27.0.1'
+      , ios: {wda: freshWda()}})]
     farm.slots.nodes = [{id: 'ios-node', availability: 'UP', slots: [{
       stereotype: {platformName: 'iOS', 'appium:udid': 'IPHONE-A'
         , 'appium:platformVersion': '26.7.1'}, session: null
@@ -597,7 +602,8 @@ describe('coordinator session isolation and uncertain cleanup', () => {
   it('accepts Java-client platformName casing and retains canonical capabilities', async() => {
     for (const platform of ['Android', 'iOS'] as const) {
       const farm = new FakeFarm()
-      farm.inventory = [phone('PHONE-A', {platform, version: '27.0'})]
+      farm.inventory = [phone('PHONE-A', {platform, version: '27.0'
+        , ...(platform === 'iOS' ? {ios: {wda: freshWda()}} : {})})]
       farm.slots.nodes = [{id: 'node', availability: 'UP', slots: [{session: null
         , stereotype: {platformName: platform, 'appium:remoteAdbHost': 'adb-one'
           , 'appium:udid': 'PHONE-A', 'appium:platformVersion': '27.0'}}]}]
@@ -1006,5 +1012,194 @@ describe('coordinator Maestro allocation and cleanup', () => {
     const {engine} = await fixture()
     await rejectCode(engine.submit(input({runner: 'maestro', platform: 'iOS'}), 'invalid'),
       'unsupported_runner', 400)
+  })
+})
+
+
+const maintenanceId = '34725f38-4b42-4c84-94d8-31eb3baa2478'
+const otherMaintenanceId = '71b30b15-1f08-4dfb-9126-761897aa9cc0'
+function iosFarm() {
+  const farm = new FakeFarm()
+  farm.inventory = [phone('IPHONE-A', {platform: 'iOS', version: '27.0.1'
+    , ios: {wda: freshWda()}})]
+  farm.slots.nodes = [{id: 'ios-node', availability: 'UP', slots: [{session: null
+    , stereotype: {platformName: 'iOS', 'appium:udid': 'IPHONE-A'
+      , 'appium:platformVersion': '27.0.1'}}]}]
+  return farm
+}
+
+describe('coordinator WDA signing eligibility', () => {
+  it('rejects noncanonical inventory platforms instead of bypassing iOS signing checks',
+    async() => {
+    const farm = iosFarm()
+    farm.inventory[0]!.platform = 'ios' as FarmDevice['platform']
+    delete farm.inventory[0]!.ios
+    const {engine} = await fixture({}, farm)
+    const request = await engine.submit(input({platform: 'iOS'}), 'noncanonical-platform')
+    await engine.tick()
+    assert.equal(engine.requestView(request.id).state, 'queued')
+    assert.equal(farm.captures.length, 0)
+  })
+
+  it('requires fresh unambiguous signing that covers the requested duration and safety margin',
+    async() => {
+    const cases: {name: string, wda: unknown, allowed: boolean}[] = [
+      {name: 'valid', wda: freshWda(), allowed: true}
+    , {name: 'expiring but sufficient', wda: {...freshWda(), profile: 'expiring'}, allowed: true}
+    , {name: 'exact expiry boundary', wda: freshWda(initialTime + 360000), allowed: false}
+    , {name: 'one millisecond above boundary', wda: freshWda(initialTime + 360001), allowed: true}
+    , {name: 'short of boundary', wda: freshWda(initialTime + 359999), allowed: false}
+    , {name: 'exact freshness boundary'
+        , wda: freshWda(undefined, initialTime - 3600000)
+        , allowed: true}
+    , {name: 'stale by one millisecond'
+        , wda: freshWda(undefined, initialTime - 3600001)
+        , allowed: false}
+    , {name: 'future clock tolerance', wda: freshWda(undefined, initialTime + 60000), allowed: true}
+    , {name: 'future beyond tolerance'
+        , wda: freshWda(undefined, initialTime + 60001)
+        , allowed: false}
+    , {name: 'ambiguous', wda: {...freshWda(), profile: 'ambiguous'}, allowed: false}
+    , {name: 'unknown', wda: {...freshWda(), profile: 'unknown'}, allowed: false}
+    , {name: 'expired despite future date'
+        , wda: {...freshWda(), profile: 'expired'}
+        , allowed: false}
+    , {name: 'missing', wda: null, allowed: false}
+    , {name: 'noncanonical date', wda: {...freshWda(), expiresAt: '2026-10-19'}, allowed: false}
+    , {name: 'invalid normalized date'
+        , wda: {...freshWda(), expiresAt: '2027-02-31T00:00:00.000Z'}
+        , allowed: false}
+    , {name: 'missing checkedAt', wda: {...freshWda(), checkedAt: null}, allowed: false}
+    ]
+    for (const sample of cases) {
+      const farm = iosFarm()
+      farm.inventory[0]!.ios = {wda: sample.wda as ReturnType<typeof freshWda>}
+      const {engine} = await fixture({}, farm)
+      const request = await engine.submit(input({platform: 'iOS'}), sample.name)
+      await engine.tick()
+      assert.equal(engine.requestView(request.id).state,
+        sample.allowed ? 'allocated' : 'queued', sample.name)
+      assert.equal(farm.captures.length, sample.allowed ? 1 : 0, sample.name)
+    }
+  })
+
+  it('uses each request duration rather than only the configured maximum', async() => {
+    const farm = iosFarm()
+    farm.inventory[0]!.ios = {wda: freshWda(initialTime + 400000)}
+    const {engine} = await fixture({maxDurationSeconds: 120}, farm)
+    const long = await engine.submit(input({platform: 'iOS', maxDurationSeconds: 120}), 'long')
+    const short = await engine.submit(input({platform: 'iOS', maxDurationSeconds: 60}), 'short')
+    await engine.tick()
+    assert.equal(engine.requestView(long.id).state, 'queued')
+    assert.equal(engine.requestView(short.id).state, 'allocated')
+  })
+
+  it('preserves Android allocation without iOS telemetry', async() => {
+    const {allocate} = await fixture()
+    assert.equal((await allocate()).device.platform, 'Android')
+  })
+})
+
+describe('coordinator persistent iOS maintenance drain', () => {
+  it('preserves a drain and its held lease across restart until verified completion',
+    async() => {
+    const f = await fixture({}, iosFarm())
+    const lease = await f.allocate({platform: 'iOS'})
+    const events = [...f.farm.events]
+    assert.equal((await f.engine.startMaintenance('IPHONE-A', maintenanceId)).state, 'draining')
+    assert.deepEqual(f.farm.events, events, 'Starting maintenance cannot mutate STF or WDA')
+    assert.equal(f.engine.leaseView(lease.id).state, 'active')
+    await rejectCode(f.engine.finishMaintenance(maintenanceId), 'device_busy', 409)
+    const queued = await f.engine.submit(input({platform: 'iOS'}), 'after-renewal')
+    await f.engine.release(lease.id)
+    await f.engine.tick()
+    assert.equal(f.engine.leaseView(lease.id).state, 'released')
+    assert.equal(f.engine.requestView(queued.id).state, 'queued')
+    assert.equal(f.engine.maintenanceView(maintenanceId).state, 'ready')
+    const restarted = new Coordinator(f.config, pools, f.farm, f.store, f.now)
+    await restarted.start()
+    assert.equal(restarted.maintenanceView(maintenanceId).serial, 'IPHONE-A')
+    assert.equal((await restarted.finishMaintenance(maintenanceId)).state, 'completed')
+    assert.deepEqual(f.store.state.maintenance, [])
+    await restarted.tick()
+    assert.equal(restarted.requestView(queued.id).state, 'allocated')
+  })
+
+  it('rejects competing drains and unknown devices while allowing identical retries', async() => {
+    const {engine, farm, store} = await fixture({}, iosFarm())
+    const first = await engine.startMaintenance('IPHONE-A', maintenanceId)
+    assert.deepEqual(await engine.startMaintenance('IPHONE-A', maintenanceId), first)
+    assert.equal(store.state.maintenance.length, 1)
+    await rejectCode(engine.startMaintenance('IPHONE-A', otherMaintenanceId),
+      'maintenance_conflict', 409)
+    farm.inventory.push(phone('IPHONE-B', {platform: 'iOS'}))
+    await rejectCode(engine.startMaintenance('IPHONE-B', maintenanceId),
+      'maintenance_conflict', 409)
+    await rejectCode(engine.startMaintenance('MISSING-A', otherMaintenanceId),
+      'device_not_found', 404)
+    farm.inventory.push(phone('ANDROID-A'))
+    await rejectCode(engine.startMaintenance('ANDROID-A', otherMaintenanceId),
+      'unsupported_maintenance', 400)
+    await rejectCode(engine.startMaintenance('IPHONE-A', 'arbitrary-text'),
+      'invalid_maintenance', 400)
+  })
+
+  it('excludes a device when scheduling fetched an earlier inventory snapshot', async() => {
+    const {engine, farm} = await fixture({}, iosFarm())
+    const request = await engine.submit(input({platform: 'iOS'}), 'concurrent-allocation')
+    const barrier = deferred()
+    farm.inventoryBarrier = barrier
+    farm.inventoryEntered = deferred()
+    const tick = engine.tick()
+    await farm.inventoryEntered.promise
+    farm.inventoryBarrier = null
+    await engine.startMaintenance('IPHONE-A', maintenanceId)
+    barrier.resolve()
+    await tick
+    assert.equal(engine.requestView(request.id).state, 'queued')
+    assert.equal(farm.captures.length, 0)
+  })
+
+  it('keeps maintenance on busy devices, insufficient signing and uncertain Grid cleanup',
+    async() => {
+    const {engine, farm, store} = await fixture({}, iosFarm())
+    await engine.startMaintenance('IPHONE-A', maintenanceId)
+    const pristine = structuredClone(farm.inventory[0]!)
+    const samples: Partial<FarmDevice>[] = [
+      {present: false}, {ready: false}, {owner: {email: 'manual@example.test'}}
+    , {using: true}, {claimed: true}, {usage: 'automation'}, {automationLeaseId: 'stale'}
+    , {ios: {wda: freshWda(initialTime + 360000)}}
+    , {ios: {wda: {...freshWda(), profile: 'ambiguous'}}}
+    , {ios: {wda: freshWda(undefined, initialTime - 3600001)}}
+    ]
+    for (const sample of samples) {
+      farm.inventory[0] = {...structuredClone(pristine), ...sample}
+      await rejectCode(engine.finishMaintenance(maintenanceId), 'device_not_ready', 409)
+      assert.equal(store.state.maintenance.length, 1)
+    }
+    farm.inventory[0] = pristine
+    const slot = farm.slots.nodes[0]!.slots[0]!
+    slot.session = {sessionId: 'external-session', capabilities: {'appium:udid': 'IPHONE-A'}}
+    await rejectCode(engine.finishMaintenance(maintenanceId), 'device_busy', 409)
+    slot.session = {sessionId: 'unknown-session', capabilities: {}}
+    await rejectCode(engine.finishMaintenance(maintenanceId), 'device_busy', 409)
+    slot.session = null
+    farm.gridError = true
+    await assert.rejects(engine.finishMaintenance(maintenanceId))
+    assert.equal(store.state.maintenance.length, 1)
+    farm.gridError = false
+    farm.slots.nodes[0]!.availability = 'DOWN'
+    await rejectCode(engine.finishMaintenance(maintenanceId), 'device_busy', 409)
+    farm.slots.nodes[0]!.availability = 'UP'
+    assert.equal((await engine.finishMaintenance(maintenanceId)).state, 'completed')
+  })
+
+  it('requires the maximum supported duration before reopening a device', async() => {
+    const {engine, farm} = await fixture({maxDurationSeconds: 120}, iosFarm())
+    await engine.startMaintenance('IPHONE-A', maintenanceId)
+    farm.inventory[0]!.ios = {wda: freshWda(initialTime + 400000)}
+    await rejectCode(engine.finishMaintenance(maintenanceId), 'device_not_ready', 409)
+    farm.inventory[0]!.ios = {wda: freshWda(initialTime + 420001)}
+    await engine.finishMaintenance(maintenanceId)
   })
 })

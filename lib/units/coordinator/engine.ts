@@ -1,6 +1,8 @@
 import {createHash, randomUUID} from 'node:crypto'
 import {BackendError} from './backend.js'
 import {CoordinatorError, endpoint} from './config.js'
+import {validMaintenanceId, validMaintenanceSerial} from './maintenance.js'
+import {wdaProfileCovers} from './wda-profile.js'
 import type {AdbTarget} from './adb-bridge.js'
 import type {StateStore} from './state.js'
 import type {
@@ -12,7 +14,7 @@ const terminal = new Set(['released', 'expired'])
 const requestTerminal = new Set(['cancelled', 'expired', 'failed'])
 
 export class Coordinator {
-  private state: CoordinatorState = {version: 1, requests: [], leases: []}
+  private state: CoordinatorState = {version: 2, requests: [], leases: [], maintenance: []}
   private queue: Promise<unknown> = Promise.resolve()
   private owner = ''
   private initialized = false
@@ -301,10 +303,104 @@ export class Coordinator {
     return !terminal.has(lease.state)
   }
 
+  maintenanceView(id: string) {
+    this.assertReady()
+    const maintenance = this.state.maintenance.find(item => item.id === id)
+    if (!maintenance) {
+      throw new CoordinatorError(404, 'maintenance_not_found', 'Maintenance operation not found')
+    }
+    return {...maintenance, createdAt: new Date(maintenance.createdAt).toISOString()
+      , state: this.state.leases.some(lease => this.held(lease) &&
+        lease.device.serial === maintenance.serial) ? 'draining' as const : 'ready' as const}
+  }
+
+  startMaintenance(serial: string, operationId: string) {
+    return this.exclusive(async() => {
+      this.assertReady()
+      if (!validMaintenanceSerial(serial) || !validMaintenanceId(operationId)) {
+        throw new CoordinatorError(400, 'invalid_maintenance',
+          'Expected a serial and operation UUID')
+      }
+      const existing = this.state.maintenance.find(item => item.id === operationId ||
+        item.serial === serial)
+      if (existing) {
+        if (existing.id !== operationId || existing.serial !== serial) {
+          throw new CoordinatorError(409, 'maintenance_conflict',
+            'Device or operation already drained')
+        }
+        return this.maintenanceView(existing.id)
+      }
+      const devices = await this.backend.devices()
+      const matching = devices.filter(device => device.serial === serial)
+      if (matching.length !== 1) {
+        throw new CoordinatorError(404, 'device_not_found', 'Device not found')
+      }
+      if (matching[0]!.platform !== 'iOS') {
+        throw new CoordinatorError(400, 'unsupported_maintenance',
+          'Maintenance requires an iOS device')
+      }
+      this.state.maintenance.push({id: operationId, serial, createdAt: this.now()})
+      await this.save()
+      return this.maintenanceView(operationId)
+    })
+  }
+
+  finishMaintenance(id: string) {
+    return this.exclusive(async() => {
+      this.assertReady()
+      const maintenance = this.maintenanceView(id)
+      if (maintenance.state !== 'ready') {
+        throw new CoordinatorError(409, 'device_busy', 'Device still has coordinator leases')
+      }
+      // The drain stays in place throughout fresh external checks and durable removal.
+      // No WDA restart or STF ownership mutation is performed by this API.
+      const [devices, grid] = await Promise.all([this.backend.devices(), this.backend.grid()])
+      const matches = devices.filter(device => device.serial === maintenance.serial)
+      const device = matches.length === 1 ? matches[0]! : null
+      const free = device && device.platform === 'iOS' && device.present && device.ready &&
+        !device.owner && !device.using && !device.claimed && !device.usage &&
+        !device.automationLeaseId
+      if (!free || !wdaProfileCovers(device!.ios?.wda, this.now(),
+        this.options.maxDurationSeconds)) {
+        throw new CoordinatorError(409, 'device_not_ready',
+          'Device must be free and have a fresh signing profile covering the duration limit')
+      }
+      const idle = grid?.ready === true && Array.isArray(grid.nodes) &&
+        grid.nodes.some(node => node && node.availability === 'UP' &&
+          Array.isArray(node.slots) && node.slots.some(slot =>
+            slot.stereotype?.['appium:udid'] === maintenance.serial &&
+            slot.stereotype?.['appium:platformVersion'] === device!.version)) &&
+        grid.nodes.every(node => node && typeof node === 'object' &&
+          Array.isArray(node.slots) && node.slots.every(slot => {
+            if (!slot || !slot.stereotype || typeof slot.stereotype !== 'object') {
+              return false
+            }
+            if (slot.session === null) {
+              return true
+            }
+            const capabilities = slot.session?.capabilities
+            return capabilities && typeof capabilities === 'object' &&
+              !Array.isArray(capabilities) &&
+              typeof capabilities['appium:udid'] === 'string' &&
+              capabilities['appium:udid'] !== maintenance.serial &&
+              slot.stereotype['appium:udid'] !== maintenance.serial
+          }))
+      if (!idle) {
+        throw new CoordinatorError(409, 'device_busy', 'Grid session cleanup is not confirmed')
+      }
+      this.state.maintenance = this.state.maintenance.filter(item => item.id !== id)
+      await this.save()
+      return {id, serial: maintenance.serial, state: 'completed' as const}
+    })
+  }
+
   private matches(device: FarmDevice, request: AllocationRequest) {
     const input = request.input
-    return device.present && device.ready && !device.owner && !device.using && !device.claimed &&
-      device.platform.toLowerCase() === input.platform.toLowerCase() &&
+    return !this.state.maintenance.some(item => item.serial === device.serial) &&
+      (input.platform !== 'iOS' || wdaProfileCovers(device.ios?.wda, this.now(),
+        input.maxDurationSeconds)) &&
+      device.present && device.ready && !device.owner && !device.using && !device.claimed &&
+      device.platform === input.platform &&
       (!input.serial || input.serial === device.serial) &&
       (!input.model || input.model === device.model) &&
       (!input.provider || input.provider === device.provider) &&

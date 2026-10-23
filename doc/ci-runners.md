@@ -25,6 +25,8 @@ The init container copies global settings before registration. The runner templa
 
 The manager has no access to farm namespaces through RBAC. Jobs cannot overwrite namespace, service account, bearer token or pod labels through CI variables. Privileged containers, service containers and host mounts are disabled. Build/helper pods run as UID/GID1000; the image must support this user. Runner environment sets `HOME=/tmp` so the helper can write Git configuration without a UID1000 passwd entry or root permissions. The approved build image is `registry.finservice.tech/gfs/platform/quality/farm-connection-smoke/ci-worker@sha256:<digest>`. Runner admission allows this repository by digest only. GitLab supplies temporary registry credentials from the job token for images in its own project; no permanent registry PAT is passed to jobs. The registry uses the same34.0.249.190:443 endpoint as GitLab, so no additional network allowance is needed.
 
+Job pods have 180 seconds of termination/cleanup grace, allowing the wrapper's default 120-second cleanup wait and process shutdown to finish before Kubernetes forces termination. Lease expiry remains the recovery path after a node loss or forced kill.
+
 ## Network isolation
 
 Both namespaces default-deny ingress and egress. Jobs can reach DNS, `gitlab.finservice.tech` over443 and coordinator8080. The manager can additionally reach Kubernetes API. There is no direct job access to STF API, Grid or the provider ADB servers.

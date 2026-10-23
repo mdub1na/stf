@@ -42,8 +42,8 @@ data:
         helper_ephemeral_storage_request = "256Mi"
         helper_ephemeral_storage_limit = "1Gi"
         poll_timeout = 300
-        cleanup_grace_period_seconds = 90
-        pod_termination_grace_period_seconds = 90
+        cleanup_grace_period_seconds = 180
+        pod_termination_grace_period_seconds = 180
         enable_service_links = false
         [runners.kubernetes.pod_labels]
           "app.kubernetes.io/name" = "stf-ci-job"

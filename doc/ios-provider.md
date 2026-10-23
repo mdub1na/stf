@@ -193,6 +193,11 @@ hypervisor; a provider cannot recover hardware absent from the VM.
 
 To renew a Personal Team runner:
 
+For scheduled renewal with the existing Personal Team, see the
+[Mac signer and guarded Linux installer](../tools/wda-renewal/README.md).
+It drains the selected device, verifies a rebuilt runner and preserves pairing
+state. The following steps remain the manual fallback.
+
 1. Reconnect the selected iPhone to the signing Mac and open the same WDA project.
 2. Select the existing Team and runner bundle ID, enable automatic signing,
    then build/install the runner for that device. Keep the same identifier.

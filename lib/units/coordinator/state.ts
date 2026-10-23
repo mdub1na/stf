@@ -19,29 +19,48 @@ export class FileStateStore implements StateStore {
       const requestStates = new Set(['queued', 'allocated', 'cancelled', 'expired', 'failed'])
       const leaseStates = new Set(['allocating', 'active', 'cleaning', 'released', 'expired'
         , 'quarantined'])
+      const validProject = (value: unknown) => value === undefined ||
+        typeof value === 'string' && /^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$/.test(value)
       const valid = state && state.version === 1 && Array.isArray(state.requests) &&
         Array.isArray(state.leases) && state.requests.every(request => request &&
           typeof request.id === 'string' && request.id && typeof request.key === 'string' &&
           request.key && typeof request.fingerprint === 'string' && request.fingerprint &&
+          validProject(request.projectId) &&
           requestStates.has(request.state) && validTime(request.createdAt) &&
           validTime(request.queueDeadlineAt) && request.input &&
           typeof request.input.runId === 'string' && request.input.runId &&
           ['Android', 'iOS'].includes(request.input.platform) &&
+          (request.input.runner === undefined ||
+            ['appium', 'maestro'].includes(request.input.runner)) &&
+          (request.input.runner !== 'maestro' || request.input.platform === 'Android') &&
           validTime(request.input.queueTimeoutSeconds) && request.input.queueTimeoutSeconds > 0 &&
           validTime(request.input.maxDurationSeconds) && request.input.maxDurationSeconds > 0) &&
         state.leases.every(lease => lease && typeof lease.id === 'string' && lease.id &&
+          validProject(lease.projectId) &&
+          (lease.maestroCleanupConfirmed === undefined ||
+            typeof lease.maestroCleanupConfirmed === 'boolean') &&
           typeof lease.requestId === 'string' && lease.requestId &&
           typeof lease.runId === 'string' && lease.runId && leaseStates.has(lease.state) &&
           validTime(lease.createdAt) && validTime(lease.expiresAt) && validTime(lease.deadlineAt) &&
           lease.device && typeof lease.device.serial === 'string' && lease.device.serial &&
           ['Android', 'iOS'].includes(lease.device.platform) && lease.capabilities &&
           typeof lease.capabilities === 'object' && !Array.isArray(lease.capabilities) &&
-          lease.capabilities['appium:udid'] === lease.device.serial)
+          (lease.runner === 'maestro' ? lease.device.platform === 'Android' &&
+            (!lease.maestroBaseline || Array.isArray(lease.maestroBaseline.packages) &&
+              lease.maestroBaseline.packages.every(name => typeof name === 'string') &&
+              lease.maestroBaseline.settings &&
+              typeof lease.maestroBaseline.settings === 'object' &&
+              Object.values(lease.maestroBaseline.settings)
+                .every(value => typeof value === 'string')) :
+            (lease.runner === undefined || lease.runner === 'appium') &&
+              lease.capabilities['appium:udid'] === lease.device.serial))
       if (!valid || new Set(state.requests.map(request => request.id)).size !==
-          state.requests.length || new Set(state.requests.map(request => request.key)).size !==
+          state.requests.length || new Set(state.requests.map(request =>
+          (request.projectId || 'legacy') + '\0' + request.key)).size !==
           state.requests.length || new Set(state.leases.map(lease => lease.id)).size !==
           state.leases.length || state.leases.some(lease =>
-          !state.requests.some(request => request.id === lease.requestId))) {
+          !state.requests.some(request => request.id === lease.requestId &&
+            (request.projectId || 'legacy') === (lease.projectId || 'legacy')))) {
         throw new Error('Invalid coordinator state; refusing to discard recovery information')
       }
       await chmod(this.filename, 0o600)

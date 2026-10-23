@@ -84,6 +84,7 @@ class FakeFarm implements FarmBackend {
   captureEntered: ReturnType<typeof deferred> | null = null
   commandBarrier: ReturnType<typeof deferred> | null = null
   commandEntered: ReturnType<typeof deferred> | null = null
+  commandError = false
   createError = false
   createErrorAfterSession = false
   malformedCreate = false
@@ -91,6 +92,28 @@ class FakeFarm implements FarmBackend {
   deleteStatus = 200
   retainDeletedSession = false
   sessionCounter = 0
+  gridError = false
+  gridCalls = 0
+  maestroCleanupError = false
+  baselineSaved: (() => void) | null = null
+  maestroLeases = new Set<string>()
+
+  async maestroBaseline(device: FarmDevice) {
+    this.events.push('maestro-baseline:' + device.serial)
+    return {packages: [], settings: {'system/accelerometer_rotation': '0'}}
+  }
+
+  async maestroPrepare(device: FarmDevice) {
+    this.baselineSaved?.()
+    this.events.push('maestro-prepare:' + device.serial)
+  }
+
+  async maestroCleanup(device: FarmDevice) {
+    this.events.push('maestro-cleanup:' + device.serial)
+    if (this.maestroCleanupError) {
+ throw new Error('Driver did not stop')
+}
+  }
 
   async identity() {
     return {email: owner}
@@ -108,10 +131,17 @@ class FakeFarm implements FarmBackend {
   }
 
   async grid() {
+    this.gridCalls++
+    if (this.gridError) {
+ throw new Error('Grid unavailable')
+}
     return structuredClone(this.slots)
   }
 
-  async capture(serial: string, leaseId: string, timeout: number) {
+  async capture(serial: string, leaseId: string, timeout: number, runner?: string) {
+    if (runner === 'maestro') {
+ this.maestroLeases.add(leaseId)
+}
     this.events.push('capture:' + serial)
     this.captureEntered?.resolve()
     if (this.captureBarrier) {
@@ -143,6 +173,9 @@ class FakeFarm implements FarmBackend {
   }
 
   async release(serial: string, leaseId: string) {
+    if (this.maestroLeases.has(leaseId)) {
+ await this.maestroCleanup(this.inventory.find(item => item.serial === serial)!)
+}
     this.events.push('release:' + serial)
     const device = this.inventory.find(item => item.serial === serial)!
     if (device.owner?.email !== owner || device.automationLeaseId !== leaseId) {
@@ -191,6 +224,9 @@ class FakeFarm implements FarmBackend {
     if (this.commandBarrier) {
       await this.commandBarrier.promise
     }
+    if (this.commandError) {
+      throw new Error('WebDriver command outcome is unknown')
+    }
     return response(200, null)
   }
 }
@@ -222,6 +258,34 @@ async function fixture(settings: Partial<CoordinatorOptions> = {}, farm = new Fa
 }
 
 describe('coordinator allocation and lifetime', () => {
+  it('rejects unknown projects before persisting or capturing devices', async() => {
+    const {engine, farm, store} = await fixture()
+    engine.setProjectLimits(new Map([['enabled-project', 1]]))
+    await assert.rejects(engine.submit(input(), 'unknown-project-request', 'removed-project'),
+      error => error instanceof CoordinatorError && error.status === 403)
+    assert.equal(store.state.requests.length, 0)
+    assert.equal(farm.captures.length, 0)
+  })
+
+  it('fails disabled queued projects after restart and schedules enabled projects', async() => {
+    const original = await fixture()
+    original.engine.setProjectLimits(new Map([['removed-project', 1], ['enabled-project', 1]]))
+    const removed = await original.engine.submit(input({serial: 'ANDROID-A'}),
+      'same-key', 'removed-project')
+    const enabled = await original.engine.submit(input({serial: 'ANDROID-B'}),
+      'same-key', 'enabled-project')
+    const restarted = new Coordinator(original.config, pools, original.farm,
+      original.store, original.now)
+    restarted.setProjectLimits(new Map([['enabled-project', 1]]))
+    await restarted.start()
+    await restarted.tick()
+    assert.equal(restarted.requestView(removed.id).state, 'failed')
+    assert.equal(restarted.requestView(removed.id).error, 'project_disabled')
+    assert.equal(restarted.requestView(removed.id).leaseId, undefined)
+    assert.equal(restarted.requestView(enabled.id).state, 'allocated')
+    assert.deepEqual(original.farm.captures.map(item => item.serial), ['ANDROID-B'])
+  })
+
   it('makes repeated submissions idempotent and rejects a changed payload', async() => {
     const {engine, farm} = await fixture()
     const first = await engine.submit(input(), 'worker-1')
@@ -625,6 +689,72 @@ describe('coordinator session isolation and uncertain cleanup', () => {
     }
   })
 
+  it('recovers a failed command after confirming termination of its known session', async() => {
+    const {engine, allocate, create, farm, store} = await fixture()
+    const lease = await allocate()
+    const session = await create(lease.id)
+    farm.commandError = true
+    await rejectCode(engine.webdriver(lease.id, 'GET', '/session/' + session + '/source'),
+      'upstream_unknown', 502)
+    assert.equal(engine.leaseView(lease.id).state, 'quarantined')
+    assert.equal(store.state.leases[0]!.commandInFlight, true)
+    await engine.recover(lease.id)
+    assert.equal(engine.leaseView(lease.id).state, 'expired')
+    assert.equal(store.state.leases[0]!.commandInFlight, undefined)
+    assert.equal(store.state.leases[0]!.sessionId, undefined)
+    assert.equal(farm.inventory[0]!.owner, null)
+    const deleted = farm.events.indexOf('webdriver:DELETE:/session/' + session)
+    assert.ok(deleted >= 0 && farm.events.indexOf('release:ANDROID-A') > deleted)
+  })
+
+  it('retains the known session until a cancelled in-flight command has settled', async() => {
+    const {engine, allocate, create, farm, store} = await fixture()
+    const lease = await allocate()
+    const session = await create(lease.id)
+    farm.commandBarrier = deferred()
+    farm.commandEntered = deferred()
+    const command = engine.webdriver(lease.id, 'GET', '/session/' + session + '/source')
+    const settled = command.catch(error => error)
+    await farm.commandEntered.promise
+    try {
+      await engine.release(lease.id)
+      await engine.tick()
+      assert.equal(engine.leaseView(lease.id).state, 'cleaning')
+      assert.equal(store.state.leases[0]!.sessionId, session,
+        'Keep the SID so a late command failure cannot erase termination evidence')
+      assert.equal(store.state.leases[0]!.commandInFlight, true)
+      assert.ok(!farm.events.includes('release:ANDROID-A'))
+      farm.commandError = true
+    }
+    finally {
+      farm.commandBarrier.resolve()
+    }
+    assert.ok(await settled instanceof CoordinatorError)
+    await engine.recover(lease.id)
+    assert.equal(engine.leaseView(lease.id).state, 'released')
+    assert.equal(store.state.leases[0]!.commandInFlight, undefined)
+    assert.equal(farm.inventory[0]!.owner, null)
+    assert.equal(farm.events.filter(event =>
+      event === 'webdriver:DELETE:/session/' + session).length, 2)
+  })
+
+  it('keeps an uncertain command quarantined when no session identity was preserved', async() => {
+    const {engine, allocate, create, farm, store, config, now} = await fixture()
+    const lease = await allocate()
+    const session = await create(lease.id)
+    farm.commandError = true
+    await rejectCode(engine.webdriver(lease.id, 'GET', '/session/' + session + '/source'),
+      'upstream_unknown', 502)
+    // Recovery of an older durable record must not invent proof from an empty marker.
+    delete store.state.leases[0]!.sessionId
+    const restarted = new Coordinator(config, pools, farm, store, now)
+    await restarted.start()
+    assert.equal(restarted.leaseView(lease.id).state, 'quarantined')
+    assert.equal(store.state.leases[0]!.commandInFlight, true)
+    assert.equal(farm.inventory[0]!.automationLeaseId, lease.id)
+    assert.ok(!farm.events.includes('release:ANDROID-A'))
+  })
+
   it('holds the phone while a previously accepted command is still running', async() => {
     const {engine, allocate, create, farm, advance} = await fixture()
     const lease = await allocate()
@@ -756,5 +886,125 @@ describe('coordinator session isolation and uncertain cleanup', () => {
     await engine.tick()
     assert.equal(farm.captures.length, 1, 'One free Grid slot grants at most one pending lease')
     assert.equal(engine.requestView(second.id).state, 'queued')
+  })
+})
+
+
+describe('coordinator Maestro allocation and cleanup', () => {
+  it('quarantines a saved Maestro lease after worker ownership is lost', async() => {
+    const {allocate, farm, store, config} = await fixture()
+    const lease = await allocate({runner: 'maestro', serial: 'ANDROID-A'})
+    assert.ok(store.state.leases[0]?.maestroBaseline)
+    const device = farm.inventory.find(item => item.serial === lease.device.serial)!
+    // A worker restart loses its in-memory cleanup guard; the phone's native driver may survive.
+    device.owner = null
+    device.usage = null
+    device.automationLeaseId = null
+    const restarted = new Coordinator(config, pools, farm, store, () => initialTime + 1000)
+    await restarted.start()
+    assert.equal(restarted.leaseView(lease.id).state, 'quarantined')
+    assert.equal(store.state.leases[0]?.maestroCleanupConfirmed, undefined)
+    assert.ok(!farm.events.includes('maestro-cleanup:ANDROID-A'),
+      'An unfenced free phone must not receive coordinator shell cleanup')
+    assert.ok(!farm.events.includes('release:ANDROID-A'))
+    const queued = await restarted.submit(input({runner: 'maestro', serial: 'ANDROID-A'}),
+      'after-worker-loss')
+    await restarted.tick()
+    assert.equal(restarted.requestView(queued.id).state, 'queued')
+    assert.equal(farm.captures.length, 1, 'The phone must not be reissued without cleanup proof')
+    await restarted.recover(lease.id)
+    assert.equal(restarted.leaseView(lease.id).state, 'quarantined')
+  })
+
+  it('persists provider cleanup proof across failed inventory verification', async() => {
+    const {engine, allocate, farm, store, config} = await fixture()
+    const lease = await allocate({runner: 'maestro', serial: 'ANDROID-A'})
+    const release = farm.release.bind(farm)
+    farm.release = async(serial, id) => {
+      await release(serial, id)
+      farm.inventoryError = true
+    }
+    await engine.release(lease.id)
+    await engine.tick()
+    assert.equal(engine.leaseView(lease.id).state, 'quarantined')
+    assert.equal(store.state.leases[0]?.maestroCleanupConfirmed, true,
+      'The provider ACK must be durable even if the following inventory check fails')
+    assert.equal(farm.inventory[0]?.owner, null)
+    farm.inventoryError = false
+    const restarted = new Coordinator(config, pools, farm, store, () => initialTime + 1000)
+    await restarted.start()
+    assert.equal(restarted.leaseView(lease.id).state, 'expired')
+    assert.equal(farm.events.filter(event => event === 'maestro-cleanup:ANDROID-A').length, 1)
+    assert.equal(farm.events.filter(event => event === 'release:ANDROID-A').length, 1)
+  })
+
+  it('allocates Maestro without querying Grid or consuming an Appium port', async() => {
+    const farm = new FakeFarm()
+    farm.gridError = true
+    const {engine, allocate, store} = await fixture({}, farm)
+    farm.baselineSaved = () => assert.deepEqual(store.state.leases[0]?.maestroBaseline,
+      {packages: [], settings: {'system/accelerometer_rotation': '0'}})
+    const lease = await allocate({runner: 'maestro'})
+    assert.equal(farm.gridCalls, 0)
+    assert.deepEqual(lease.capabilities, {})
+    assert.equal(lease.webdriverUrl, undefined)
+    assert.equal(lease.connection.type, 'adb')
+    assert.equal(lease.runner, 'maestro')
+    assert.equal(engine.adbTarget(lease.id).serial, lease.device.serial)
+    await rejectCode(engine.webdriver(lease.id, 'POST', '/session', {}), 'runner_conflict', 409)
+  })
+
+  it('continues Maestro scheduling when a queued Appium request cannot reach Grid', async() => {
+    const farm = new FakeFarm()
+    farm.gridError = true
+    const {engine} = await fixture({}, farm)
+    const appium = await engine.submit(input(), 'appium')
+    const maestro = await engine.submit(input({runner: 'maestro'}), 'maestro')
+    await engine.tick()
+    assert.equal(engine.requestView(appium.id).state, 'queued')
+    assert.equal(engine.requestView(maestro.id).state, 'allocated')
+    assert.equal(farm.captures.length, 1)
+  })
+
+  it('closes lease streams and confirms driver cleanup before releasing STF', async() => {
+    const {engine, allocate, farm} = await fixture()
+    const lease = await allocate({runner: 'maestro'})
+    engine.setAdbCloser(id => farm.events.push('close-adb:' + id))
+    await engine.release(lease.id)
+    await engine.tick()
+    assert.equal(engine.leaseView(lease.id).state, 'released')
+    assert.ok(farm.events.indexOf('close-adb:' + lease.id) <
+      farm.events.indexOf('maestro-cleanup:ANDROID-A'))
+    assert.ok(farm.events.indexOf('maestro-cleanup:ANDROID-A') <
+      farm.events.indexOf('release:ANDROID-A'))
+    assert.throws(() => engine.adbTarget(lease.id), /no longer active/)
+  })
+
+  it('keeps the device quarantined when Maestro cleanup cannot be confirmed', async() => {
+    const {engine, allocate, farm} = await fixture()
+    const lease = await allocate({runner: 'maestro'})
+    farm.maestroCleanupError = true
+    await engine.release(lease.id)
+    await engine.tick()
+    assert.equal(engine.leaseView(lease.id).state, 'quarantined')
+    assert.equal(farm.inventory[0]?.automationLeaseId, lease.id)
+    assert.ok(!farm.events.includes('release:ANDROID-A'))
+  })
+
+  it('recovers a persisted Maestro baseline and cleans before reissuing the device', async() => {
+    const {engine, allocate, farm, store, config} = await fixture()
+    const lease = await allocate({runner: 'maestro'})
+    const restarted = new Coordinator(config, pools, farm, store, () => initialTime + 1000)
+    await restarted.start()
+    assert.equal(restarted.leaseView(lease.id).state, 'expired')
+    assert.ok(farm.events.includes('maestro-cleanup:ANDROID-A'))
+    assert.equal(farm.inventory[0]?.owner, null)
+    await engine.stop()
+  })
+
+  it('rejects physical iOS Maestro before putting a request in the queue', async() => {
+    const {engine} = await fixture()
+    await rejectCode(engine.submit(input({runner: 'maestro', platform: 'iOS'}), 'invalid'),
+      'unsupported_runner', 400)
   })
 })

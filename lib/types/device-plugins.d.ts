@@ -207,6 +207,7 @@ export interface GroupPlugin extends EventEmitter<GroupEvents> {
   , usage?: string | null
   , identifier?: string
   , leaseId?: string | null
+  , automationRunner?: string | null
   ): Bluebird<OwnerMessage>
   keepalive(): void
   leave(reason: string): Bluebird<OwnerMessage>

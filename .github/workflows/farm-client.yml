@@ -1,0 +1,29 @@
+name: Farm client
+on:
+  pull_request:
+    paths:
+      - 'tools/test-runner/**'
+      - 'tools/runtime-overlay/**'
+      - 'kuber/ci-runners/**'
+      - '.github/workflows/farm-client.yml'
+      - '.github/workflows/docker.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  client:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '22.18.0'
+      - name: Verify installed client and lifecycle
+        run: |
+          npm ci --prefix tools/test-runner --ignore-scripts --no-audit --no-fund
+          npm test --prefix tools/test-runner
+      - name: Verify pinned runtime compiler
+        run: |
+          node tools/runtime-overlay/compile.mjs
+          find .runtime-overlay/lib -type f -name '*.js' -print0 | xargs -0 -n 1 node --check

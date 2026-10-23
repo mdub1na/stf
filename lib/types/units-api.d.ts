@@ -76,6 +76,7 @@ export type AddUserDeviceBody = {
   serial: string
   timeout?: number
   leaseId?: string
+  automationRunner?: 'maestro'
 }
 
 export type AutomationLeaseBody = {

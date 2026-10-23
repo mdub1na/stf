@@ -2,6 +2,12 @@ name: Docker
 
 on:
   workflow_dispatch:
+    inputs:
+      target:
+        type: choice
+        description: Image set to build
+        default: standard
+        options: [standard, farm-ci]
   pull_request:
     paths-ignore: ['**.md', 'doc/**', 'kuber/**']
   push:
@@ -14,6 +20,7 @@ concurrency:
 
 jobs:
   standard:
+    if: github.event_name != 'workflow_dispatch' || inputs.target != 'farm-ci'
     uses: ./.github/workflows/docker-build.yml
     permissions:
       contents: read
@@ -38,3 +45,60 @@ jobs:
           context: .
           file: Dockerfile-debian-x86_64
           platforms: linux/amd64
+
+  farm-ci:
+    name: Farm coordinator and CI worker images
+    if: github.event_name == 'workflow_dispatch' && inputs.target == 'farm-ci'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '22.18.0'
+      - name: Check and package the standalone client
+        run: |
+          npm ci --prefix tools/test-runner --ignore-scripts --no-audit --no-fund
+          npm test --prefix tools/test-runner
+          node tools/test-runner/build.mjs
+          node tools/runtime-overlay/compile.mjs
+      - name: Pack the worker client
+        working-directory: tools/test-runner
+        run: |
+          npm pack --ignore-scripts --pack-destination ../../kuber/ci-runners
+          mv ../../kuber/ci-runners/finservice-stf-test-runner-0.1.0.tgz ../../kuber/ci-runners/runner-package.tgz
+      - uses: docker/setup-buildx-action@v4
+      - uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Build and publish the coordinator/provider runtime
+        id: runtime
+        uses: docker/build-push-action@v7
+        with:
+          context: .runtime-overlay
+          file: kuber/ci-runners/Dockerfile.runtime
+          platforms: linux/amd64
+          push: true
+          tags: ghcr.io/${{ github.repository }}:farm-ci-${{ github.sha }}
+      - name: Build and publish the CI worker
+        id: worker
+        uses: docker/build-push-action@v7
+        with:
+          context: kuber/ci-runners
+          file: kuber/ci-runners/Dockerfile
+          platforms: linux/amd64
+          push: true
+          tags: ghcr.io/${{ github.repository }}:ci-worker-${{ github.sha }}
+      - name: Record immutable images
+        env:
+          RUNTIME_DIGEST: ${{ steps.runtime.outputs.digest }}
+          WORKER_DIGEST: ${{ steps.worker.outputs.digest }}
+        run: |
+          printf 'Runtime: ghcr.io/%s@%s\nWorker: ghcr.io/%s@%s\n' \
+            '${{ github.repository }}' "$RUNTIME_DIGEST" \
+            '${{ github.repository }}' "$WORKER_DIGEST" >> "$GITHUB_STEP_SUMMARY"

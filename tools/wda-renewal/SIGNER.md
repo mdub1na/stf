@@ -10,7 +10,7 @@ to `e7e2665a00633dc174d7fc579f7e606bc9ba782a`. Fetch that commit from
 `https://github.com/appium/WebDriverAgent.git`, check it out detached, and keep the
 checkout clean. `projectPath` must name its `WebDriverAgent.xcodeproj`. Production
 source, configuration, state and artifacts must live in durable private storage;
-a temporary proof directory is unsuitable for scheduled renewal after a reboot.
+a temporary proof directory is unsuitable for subsequent manual renewals.
 
 Create a regular, current-user-owned configuration file with mode `0600`. Paths
 must be absolute and contain no symlinks or `..`. Configure these fields privately:
@@ -72,7 +72,7 @@ contains a fixed reason code and, when available, `logPath`; exit status is nonz
 
 DerivedData is removed in `finally` on success and failure. Private attempt logs
 and profile-cache backups retain the latest 20 attempts, excluding the active run.
-Signed artifacts are retained by the separate renewal service; this signer does
+Signed artifacts are retained by the one-shot renewal command; this signer does
 not prune them. Apple account authentication or signing failures remain blocked
 for operator review.
 

@@ -2,7 +2,7 @@
 
 This record covers one connected iPhone 14 Plus and the current signing Mac.
 Two other configured iPhones were offline. Their installation and provider
-fencing were not verified, and they are not enabled in the renewal service.
+fencing were not verified, and they are not configured in the renewal command.
 
 ## Signing and coordinator
 
@@ -28,7 +28,7 @@ fencing were not verified, and they are not enabled in the renewal service.
 
 ## Installation and recovery
 
-The first service cycle stopped before `ios install`: pymobiledevice3 attempted
+The first renewal attempt stopped before `ios install`: pymobiledevice3 attempted
 to create its cache under the helper image's read-only home. The helper was
 removed, the original phone pod returned to 4/4 Ready, and the same persistent
 drain and pending artifact remained. The helper now uses private HOME/XDG
@@ -51,28 +51,36 @@ The successful cycle completed at `2026-10-23T15:39:50Z`. A subsequent explicit
 cycle returned `notDue=1`, `renewed=0`, `failed=0`; it performed no rebuild or
 phone restart.
 
-## Scheduled service
+## One-shot command
 
-LaunchAgent `tech.finservice.stf.wda-renewal` was installed and observed running.
-Its first background cycle also returned `notDue=1`, `failed=0` and recorded the
-next hourly check. Configuration enables the single validated online phone,
-with a 48-hour renewal threshold. Expired-profile recovery remains opt-in.
+The current interface is `renew.py --config PATH`: it makes one pass and exits.
+The earlier LaunchAgent `tech.finservice.stf.wda-renewal` was safely uninstalled
+with no pending operation. Its plist, processes and inactive runtime snapshots
+were removed. The daemon, LaunchAgent installer, interval configuration and
+periodic loop were removed from the code. The accepted profile, worker journal,
+pairing state and recovery baseline were preserved.
 
-The installed code matches source commit `5f1e3779`; its combined SHA-256 is
-`d3e17efc8e1b62aea72637c99d16c3a4e516932441301710862d88e5ead5999d`.
-Code and three private configurations are copied into content-addressed runtime
-directories, independently of the development worktree. The LaunchAgent plist
-and private state use mode `0600`. A live `caffeinate -s` assertion was observed.
+The Mac has an on-demand launcher at
+`Library/Application Support/STF/WdaRenewal/renew-wda`, with a private copy of
+the CLI and its worker/signer/helper. It references `config/renew.json` and
+does not depend on an open worktree. It has no autostart or scheduler.
+
+A real invocation at `2026-10-23T16:24:54Z` exited with code 0 and
+`notDue=1`, `renewed=0`, `offline=0`, `busy=0`, `failed=0`. It connected once,
+performed no rebuild or phone restart, and saved no `nextCheckAt` field.
+All 109 Python tests also passed after extracting the one-shot CLI. They cover
+default single-pass execution, local-only status, concurrent invocation,
+pending recovery and nonzero exit for failed/offline/busy targets.
 
 State, profiles and artifacts live in the current user's private
 `Library/Application Support/STF/WdaRenewal` directory. Secrets, team/device
 identifiers, provisioning files, raw logs and kubeconfig are not committed.
 
-This proves initial signing, renewal, recovery from the observed installer
-failure and scheduled checks. It does not prove multi-week operation, renewals
-while the Mac is asleep/offline, unattended Apple reauthentication, or the two
-offline phones. The Mac must remain running on AC, logged in with its signing
-Keychain accessible.
+The Mac and its signing Keychain are required only while a command runs. Profile
+checks and renewals happen on invocation; there is no unattended renewal claim.
+The two offline phones and Apple reauthentication remain unverified. The
+hardware installation and CI below used the unchanged signer/worker before
+the CLI extraction; no second installation was needed for the fresh profile.
 
 ## Real-device CI regression
 

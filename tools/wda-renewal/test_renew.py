@@ -1,4 +1,4 @@
-"""Offline service and LaunchAgent controls using only synthetic private inputs."""
+"""Offline one-shot renewal controls using only synthetic private inputs."""
 
 import contextlib
 import datetime as dt
@@ -8,7 +8,6 @@ import io
 import json
 import os
 from pathlib import Path
-import plistlib
 import stat
 import sys
 import tempfile
@@ -28,8 +27,7 @@ def load_module(name, filename):
 
 
 worker_module = load_module("worker", "worker.py")
-service = load_module("service", "service.py")
-installer = load_module("wda_renewal_install_service", "install-service.py")
+renew = load_module("wda_renewal_renew", "renew.py")
 NOW = dt.datetime(2030, 1, 1, 12, tzinfo=dt.timezone.utc)
 BUNDLE = "org.example.fixture.WebDriverAgentRunner.xctrunner"
 SERIALS = ("0000000000000000000000000000000000000001",
@@ -38,9 +36,9 @@ SERIALS = ("0000000000000000000000000000000000000001",
 PROFILE_UUID = "00000000-0000-0000-0000-000000000001"
 
 
-class ServiceCase(unittest.TestCase):
+class RenewalCase(unittest.TestCase):
     def setUp(self):
-        temporary = tempfile.TemporaryDirectory(prefix="wda-service-test-")
+        temporary = tempfile.TemporaryDirectory(prefix="wda-renew-test-")
         self.addCleanup(temporary.cleanup)
         self.root = Path(temporary.name).resolve()
         self.state = self.root / "state"
@@ -49,7 +47,7 @@ class ServiceCase(unittest.TestCase):
         self.old_profile.write_bytes(b"fake initial CMS profile")
         self.old_profile.chmod(0o600)
         self.signer_data = {"previousProfilePath": str(self.old_profile),
-                            "previousExpiresAt": service.iso(NOW + dt.timedelta(hours=12)),
+                            "previousExpiresAt": renew.iso(NOW + dt.timedelta(hours=12)),
                             "buildTimeoutSeconds": 900}
         self.worker_data = {"stateDirectory": str(self.root / "workers"),
                             "minValidityHours": 48,
@@ -60,12 +58,12 @@ class ServiceCase(unittest.TestCase):
         self.write_json(self.worker_path, self.worker_data)
         self.config = {"version": 1, "stateDirectory": str(self.state),
                        "signerConfigPath": str(self.signer_path), "workerConfigPath": str(self.worker_path)}
-        self.config_path = self.root / "service-config.json"
+        self.config_path = self.root / "renew-config.json"
         self.write_json(self.config_path, self.config)
-        self.clock = mock.patch.object(service, "now", return_value=NOW)
+        self.clock = mock.patch.object(renew, "now", return_value=NOW)
         self.clock.start()
         self.addCleanup(self.clock.stop)
-        self.process_run = mock.patch.object(service.subprocess, "run", side_effect=AssertionError("unexpected process"))
+        self.process_run = mock.patch.object(renew.subprocess, "run", side_effect=AssertionError("unexpected process"))
         self.process_run.start()
         self.addCleanup(self.process_run.stop)
 
@@ -92,7 +90,7 @@ class ServiceCase(unittest.TestCase):
 
     def device(self, **changes):
         device = {"present": True, "ready": True, "owner": None, "using": False,
-                  "claimed": False, "ios": {"wda": {"expiresAt": service.iso(NOW + dt.timedelta(hours=12))}}}
+                  "claimed": False, "ios": {"wda": {"expiresAt": renew.iso(NOW + dt.timedelta(hours=12))}}}
         device.update(changes)
         return device
 
@@ -120,7 +118,7 @@ class ServiceCase(unittest.TestCase):
             zipped.writestr("WebDriverAgentRunner-Runner.app/embedded.mobileprovision", b"fake renewed CMS profile")
         archive.chmod(0o600)
         manifest = {"version": 1, "bundleId": BUNDLE, "profileUUID": PROFILE_UUID,
-                    "deviceUDIDs": list(SERIALS), "expiresAt": service.iso(NOW + dt.timedelta(days=7)),
+                    "deviceUDIDs": list(SERIALS), "expiresAt": renew.iso(NOW + dt.timedelta(days=7)),
                     "appPath": str(app), "archivePath": str(archive),
                     "archiveSha256": hashlib.sha256(archive.read_bytes()).hexdigest(), "sourceSHA": "0" * 40}
         path = self.root / ("manifest" + suffix + ".json")
@@ -135,40 +133,40 @@ class ServiceCase(unittest.TestCase):
         return mock.Mock(side_effect=publish)
 
 
-class CycleTests(ServiceCase):
+class CycleTests(RenewalCase):
     def test_active_operation_lock_refuses_cycle_before_worker_or_signer(self):
         self.select_devices(1)
         factory = self.factory({SERIALS[0]: self.fake_worker()})
         signer = mock.Mock(side_effect=AssertionError("active cycle must not sign"))
-        with service.operation_lock(self.state):
+        with renew.operation_lock(self.state):
             with self.assertRaises(worker_module.RenewalError) as caught:
-                service.cycle(self.config, factory, signer)
-        self.assertEqual("service_cycle_active", str(caught.exception))
+                renew.cycle(self.config, factory, signer)
+        self.assertEqual("renewal_active", str(caught.exception))
         factory.assert_not_called()
         signer.assert_not_called()
 
     def test_not_due_offline_not_ready_and_missing_expiry_never_sign_or_run(self):
         self.worker_data["devices"].append({"serial": "0000000000000000000000000000000000000004", "bundleId": BUNDLE})
         self.write_json(self.worker_path, self.worker_data)
-        devices = [self.device(ios={"wda": {"expiresAt": service.iso(NOW + dt.timedelta(hours=49))}}),
+        devices = [self.device(ios={"wda": {"expiresAt": renew.iso(NOW + dt.timedelta(hours=49))}}),
                    self.device(present=False), self.device(ready=False), self.device(ios={})]
         workers = {target["serial"]: self.fake_worker(device) for target, device in zip(self.worker_data["devices"], devices)}
         signer = mock.Mock(side_effect=AssertionError("signing must be skipped"))
-        status = service.cycle(self.config, self.factory(workers), signer)
+        status = renew.cycle(self.config, self.factory(workers), signer)
         self.assertEqual((1, 3, 0, 0), (status["notDue"], status["offline"], status["failed"], status["renewed"]))
         signer.assert_not_called()
         for worker in workers.values():
             worker.run.assert_not_called()
-        self.assertEqual(service.iso(NOW + dt.timedelta(hours=1)), status["nextCheckAt"])
+        self.assertNotIn("nextCheckAt", status)
 
     def test_missing_device_is_offline_and_constructor_error_does_not_stop_other_devices(self):
         missing = self.fake_worker()
         missing.device.side_effect = worker_module.RenewalError("device_missing")
-        not_due = self.fake_worker(self.device(ios={"wda": {"expiresAt": service.iso(NOW + dt.timedelta(days=4))}}))
+        not_due = self.fake_worker(self.device(ios={"wda": {"expiresAt": renew.iso(NOW + dt.timedelta(days=4))}}))
         workers = {SERIALS[0]: worker_module.RenewalError("fixture_constructor_failed"),
                    SERIALS[1]: missing, SERIALS[2]: not_due}
         signer = mock.Mock(side_effect=AssertionError("signing must be skipped"))
-        status = service.cycle(self.config, self.factory(workers), signer)
+        status = renew.cycle(self.config, self.factory(workers), signer)
         self.assertEqual((1, 1, 1, 0), (status["failed"], status["offline"], status["notDue"], status["renewed"]))
         self.assertIn("fixture_constructor_failed", status["errors"])
         signer.assert_not_called()
@@ -181,7 +179,7 @@ class CycleTests(ServiceCase):
                                                   claimed=True, usage="automation"))
         path, manifest = self.artifact()
         signer = self.fake_signer(path, manifest)
-        status = service.cycle(self.config, self.factory({SERIALS[0]: manual, SERIALS[1]: automation}), signer)
+        status = renew.cycle(self.config, self.factory({SERIALS[0]: manual, SERIALS[1]: automation}), signer)
         self.assertEqual((1, 1, 0), (status["busy"], status["renewed"], status["failed"]))
         manual.run.assert_not_called()
         automation.run.assert_called_once_with(manifest)
@@ -193,7 +191,7 @@ class CycleTests(ServiceCase):
         self.initial_state(manifestPath=str(path))
         workers = {serial: self.fake_worker() for serial in SERIALS[:2]}
         signer = mock.Mock(side_effect=AssertionError("cached artifact must be reused"))
-        status = service.cycle(self.config, self.factory(workers), signer)
+        status = renew.cycle(self.config, self.factory(workers), signer)
         self.assertEqual((2, 0), (status["renewed"], status["failed"]))
         signer.assert_not_called()
         for worker in workers.values():
@@ -207,7 +205,7 @@ class CycleTests(ServiceCase):
         failed.run.side_effect = worker_module.RenewalError("fixture_install_failed")
         succeeded = self.fake_worker()
         signer = self.fake_signer(path, manifest)
-        status = service.cycle(self.config, self.factory({SERIALS[0]: failed, SERIALS[1]: succeeded}), signer)
+        status = renew.cycle(self.config, self.factory({SERIALS[0]: failed, SERIALS[1]: succeeded}), signer)
         self.assertEqual((1, 1), (status["failed"], status["renewed"]))
         self.assertIn("fixture_install_failed", status["errors"])
         succeeded.run.assert_called_once_with(manifest)
@@ -222,7 +220,7 @@ class CycleTests(ServiceCase):
         worker.run.side_effect = worker_module.RenewalError("fixture_install_failed")
         factory = self.factory({SERIALS[0]: worker})
         signer = self.fake_signer(path, manifest)
-        first = service.cycle(self.config, factory, signer)
+        first = renew.cycle(self.config, factory, signer)
         self.assertEqual((1, 0), (first["failed"], first["renewed"]))
         pending = self.saved_state()
         self.assertEqual({SERIALS[0]: str(path)}, pending["pending"])
@@ -233,7 +231,7 @@ class CycleTests(ServiceCase):
         worker.run.side_effect = None
         worker.run.return_value = {"status": "renewed"}
         signer.reset_mock()
-        second = service.cycle(self.config, factory, signer)
+        second = renew.cycle(self.config, factory, signer)
         self.assertEqual((0, 1), (second["failed"], second["renewed"]))
         worker.device.assert_not_called()
         worker.run.assert_called_once_with(manifest)
@@ -252,7 +250,7 @@ class CycleTests(ServiceCase):
         before = self.initial_state()
         path, manifest = self.artifact()
         worker = self.fake_worker(result={"status": "blocked"})
-        status = service.cycle(self.config, self.factory({SERIALS[0]: worker}), self.fake_signer(path, manifest))
+        status = renew.cycle(self.config, self.factory({SERIALS[0]: worker}), self.fake_signer(path, manifest))
         after = self.saved_state()
         self.assertEqual((1, 0), (status["failed"], status["renewed"]))
         self.assertEqual(before["currentProfilePath"], after["currentProfilePath"])
@@ -265,7 +263,7 @@ class CycleTests(ServiceCase):
         before = self.initial_state()
         worker = self.fake_worker()
         signer = mock.Mock(side_effect=worker_module.RenewalError("signer_fixture_failed"))
-        status = service.cycle(self.config, self.factory({SERIALS[0]: worker}), signer)
+        status = renew.cycle(self.config, self.factory({SERIALS[0]: worker}), signer)
         self.assertEqual((1, 0), (status["failed"], status["renewed"]))
         self.assertIn("signer_fixture_failed", status["errors"])
         worker.run.assert_not_called()
@@ -288,8 +286,9 @@ class CycleTests(ServiceCase):
         first.run.side_effect = finish_and_stop
         factory = self.factory({SERIALS[0]: first, SERIALS[1]: second})
         signer = self.fake_signer(path, manifest)
-        status = service.cycle(self.config, factory, signer, stop_event=stop)
-        self.assertEqual((1, 0), (status["renewed"], status["failed"]))
+        status = renew.cycle(self.config, factory, signer, stop_event=stop)
+        self.assertEqual((1, 1), (status["renewed"], status["failed"]))
+        self.assertEqual(["renewal_interrupted"], status["errors"])
         self.assertEqual(1, factory.call_count)
         first.run.assert_called_once_with(manifest)
         second.device.assert_not_called()
@@ -307,10 +306,10 @@ class CycleTests(ServiceCase):
                 self.worker_data["allowExpiredWdaRecovery"] = enabled
                 self.write_json(self.worker_path, self.worker_data)
                 device = self.device(ready=False, ios={"wda": {"profile": profile,
-                                     "expiresAt": service.iso(NOW + dt.timedelta(hours=hours))}})
+                                     "expiresAt": renew.iso(NOW + dt.timedelta(hours=hours))}})
                 worker = self.fake_worker(device)
                 signer = self.fake_signer(path, manifest)
-                status = service.cycle(self.config, self.factory({SERIALS[0]: worker}), signer)
+                status = renew.cycle(self.config, self.factory({SERIALS[0]: worker}), signer)
                 self.assertEqual((0, 1, 0) if recover else (1, 0, 0),
                                  (status["offline"], status["renewed"], status["failed"]))
                 if recover:
@@ -327,8 +326,8 @@ class CycleTests(ServiceCase):
         worker = self.fake_worker()
         factory = self.factory({SERIALS[0]: worker})
         signer = self.fake_signer(path, manifest)
-        with mock.patch.object(service, "retain_profile", side_effect=worker_module.RenewalError("fixture_profile_copy_failed")):
-            first = service.cycle(self.config, factory, signer)
+        with mock.patch.object(renew, "retain_profile", side_effect=worker_module.RenewalError("fixture_profile_copy_failed")):
+            first = renew.cycle(self.config, factory, signer)
         self.assertEqual((1, 0), (first["failed"], first["renewed"]))
         self.assertEqual({SERIALS[0]: str(path)}, self.saved_state()["accepted"])
         self.assertEqual(before["currentProfilePath"], self.saved_state()["currentProfilePath"])
@@ -336,7 +335,7 @@ class CycleTests(ServiceCase):
         worker.device.side_effect = AssertionError("accepted recovery must not probe device")
         worker.run.side_effect = AssertionError("accepted recovery must not reinstall")
         signer.reset_mock()
-        second = service.cycle(self.config, factory, signer)
+        second = renew.cycle(self.config, factory, signer)
         self.assertEqual((0, 1), (second["failed"], second["renewed"]))
         worker.device.assert_not_called()
         worker.run.assert_not_called()
@@ -351,7 +350,7 @@ class CycleTests(ServiceCase):
         self.initial_state(pending={SERIALS[0]: str(missing)})
         worker = self.fake_worker()
         signer = mock.Mock(side_effect=AssertionError("pending artifact must not be replaced"))
-        status = service.cycle(self.config, self.factory({SERIALS[0]: worker}), signer)
+        status = renew.cycle(self.config, self.factory({SERIALS[0]: worker}), signer)
         self.assertEqual((1, 0), (status["failed"], status["renewed"]))
         self.assertEqual({SERIALS[0]: str(missing)}, self.saved_state()["pending"])
         worker.device.assert_not_called()
@@ -363,7 +362,7 @@ class CycleTests(ServiceCase):
         self.initial_state(manifestPath=str(self.root / "missing-cache.json"))
         path, manifest = self.artifact()
         signer = self.fake_signer(path, manifest)
-        status = service.cycle(self.config, self.factory({SERIALS[0]: self.fake_worker()}), signer)
+        status = renew.cycle(self.config, self.factory({SERIALS[0]: self.fake_worker()}), signer)
         self.assertEqual((0, 1), (status["failed"], status["renewed"]))
         signer.assert_called_once()
 
@@ -375,7 +374,7 @@ class CycleTests(ServiceCase):
         Path(cached["archivePath"]).write_bytes(b"corrupted synthetic archive")
         worker = self.fake_worker()
         signer = self.fake_signer(replacement_path, replacement)
-        status = service.cycle(self.config, self.factory({SERIALS[0]: worker}), signer)
+        status = renew.cycle(self.config, self.factory({SERIALS[0]: worker}), signer)
         self.assertEqual((0, 1), (status["failed"], status["renewed"]))
         signer.assert_called_once()
         worker.run.assert_called_once_with(replacement)
@@ -386,21 +385,21 @@ class CycleTests(ServiceCase):
         accepted.write_bytes(b"fake already accepted CMS profile")
         accepted.chmod(0o600)
         state = self.initial_state(currentProfilePath=str(accepted),
-                                   currentProfileExpiresAt=service.iso(NOW + dt.timedelta(days=3)))
+                                   currentProfileExpiresAt=renew.iso(NOW + dt.timedelta(days=3)))
         path, manifest = self.artifact()
         response = {"status": "signed", "manifestPath": str(path)}
-        with mock.patch.object(service.subprocess, "run", return_value=mock.Mock(returncode=0, stdout=json.dumps(response))):
-            self.assertEqual(manifest, service.signing(self.config, state, self.state))
+        with mock.patch.object(renew.subprocess, "run", return_value=mock.Mock(returncode=0, stdout=json.dumps(response))):
+            self.assertEqual(manifest, renew.signing(self.config, state, self.state))
         invocation = json.loads((self.state / "signer-invocation.json").read_text())
         self.assertEqual(state["currentProfilePath"], invocation["previousProfilePath"])
         self.assertEqual(state["currentProfileExpiresAt"], invocation["previousExpiresAt"])
         self.assertEqual(self.signer_data, json.loads(self.signer_path.read_text()))
 
     def test_accepting_an_older_device_install_cannot_regress_a_newer_signer_baseline(self):
-        state = self.initial_state(currentProfileExpiresAt=service.iso(NOW + dt.timedelta(days=8)))
+        state = self.initial_state(currentProfileExpiresAt=renew.iso(NOW + dt.timedelta(days=8)))
         before = dict(state)
         _, manifest = self.artifact()
-        service.retain_profile(state, manifest, self.state)
+        renew.retain_profile(state, manifest, self.state)
         self.assertEqual(before, state)
         self.assertEqual(b"fake initial CMS profile", Path(state["currentProfilePath"]).read_bytes())
 
@@ -409,7 +408,7 @@ class CycleTests(ServiceCase):
         _, manifest = self.artifact()
         app_profile = Path(manifest["appPath"]) / "embedded.mobileprovision"
         app_profile.write_bytes(b"untrusted app directory drift")
-        service.retain_profile(state, manifest, self.state)
+        renew.retain_profile(state, manifest, self.state)
         self.assertEqual(b"fake renewed CMS profile", Path(state["currentProfilePath"]).read_bytes())
         self.assertEqual(manifest["expiresAt"], state["currentProfileExpiresAt"])
         self.assertEqual(b"untrusted app directory drift", app_profile.read_bytes())
@@ -427,11 +426,11 @@ class CycleTests(ServiceCase):
         worker.run.side_effect = accept_then_corrupt
         factory = self.factory({SERIALS[0]: worker})
         signer = self.fake_signer(path, manifest)
-        first = service.cycle(self.config, factory, signer)
+        first = renew.cycle(self.config, factory, signer)
         self.assertEqual((1, 0), (first["failed"], first["renewed"]))
         worker.reset_mock()
         signer.reset_mock()
-        second = service.cycle(self.config, factory, signer)
+        second = renew.cycle(self.config, factory, signer)
         self.assertEqual((1, 0), (second["failed"], second["renewed"]))
         worker.device.assert_not_called()
         worker.run.assert_not_called()
@@ -455,7 +454,7 @@ class CycleTests(ServiceCase):
                     zipped.writestr("WebDriverAgentRunner-Runner.app/embedded.mobileprovision", content)
         manifest["archiveSha256"] = hashlib.sha256(archive.read_bytes()).hexdigest()
         with self.assertRaises(worker_module.RenewalError):
-            service.retain_profile(state, manifest, self.state)
+            renew.retain_profile(state, manifest, self.state)
         self.assertEqual(before, state)
 
     def test_invalid_or_failed_signer_response_does_not_publish_an_artifact(self):
@@ -465,28 +464,30 @@ class CycleTests(ServiceCase):
             with self.subTest(returncode=returncode, response=response):
                 state = self.initial_state()
                 stdout = response if isinstance(response, str) else json.dumps(response)
-                with mock.patch.object(service.subprocess, "run", return_value=mock.Mock(returncode=returncode, stdout=stdout)):
+                with mock.patch.object(renew.subprocess, "run", return_value=mock.Mock(returncode=returncode, stdout=stdout)):
                     with self.assertRaises(worker_module.RenewalError):
-                        service.signing(self.config, state, self.state)
+                        renew.signing(self.config, state, self.state)
                 self.assertNotIn("manifestPath", state)
                 self.assertNotIn("manifestPath", self.saved_state())
 
 
-class ConfigTests(ServiceCase):
+class ConfigTests(RenewalCase):
     def test_default_and_boundary_configurations_are_valid(self):
-        self.assertIsInstance(service.validate_config(self.config), dict)
-        for interval, threshold in ((300, 48), (86400, 120)):
-            with self.subTest(interval=interval, threshold=threshold):
-                value = dict(self.config, checkIntervalSeconds=interval, renewBeforeHours=threshold)
-                self.assertIsInstance(service.validate_config(value), dict)
+        self.assertIsInstance(renew.validate_config(self.config), dict)
+        for threshold in (48, 120):
+            with self.subTest(threshold=threshold):
+                value = dict(self.config, renewBeforeHours=threshold)
+                self.assertIsInstance(renew.validate_config(value), dict)
 
-    def test_interval_and_threshold_require_integer_values_in_range(self):
-        for field, invalid in (("checkIntervalSeconds", (True, False, "3600", 3600.0, 299, 86401)),
-                               ("renewBeforeHours", (True, False, "48", 48.0, 47, 121))):
-            for value in invalid:
-                with self.subTest(field=field, value=value):
-                    with self.assertRaises(worker_module.RenewalError):
-                        service.validate_config(dict(self.config, **{field: value}))
+    def test_threshold_requires_an_integer_value_in_range(self):
+        for value in (True, False, "48", 48.0, 47, 121):
+            with self.subTest(value=value):
+                with self.assertRaises(worker_module.RenewalError):
+                    renew.validate_config(dict(self.config, renewBeforeHours=value))
+
+    def test_scheduling_configuration_is_rejected(self):
+        with self.assertRaises(worker_module.RenewalError):
+            renew.validate_config(dict(self.config, checkIntervalSeconds=3600))
 
     def test_config_rejects_unknown_missing_and_noninteger_version(self):
         missing = dict(self.config)
@@ -495,7 +496,7 @@ class ConfigTests(ServiceCase):
                       dict(self.config, extraSetting=True), missing, [], None):
             with self.subTest(value=value):
                 with self.assertRaises(worker_module.RenewalError):
-                    service.validate_config(value)
+                    renew.validate_config(value)
 
     def test_config_paths_reject_relative_parent_traversal_and_symlinked_components(self):
         link = self.root / "linked-root"
@@ -504,7 +505,7 @@ class ConfigTests(ServiceCase):
             for path in ("relative", str(self.root / "child" / ".." / "target"), str(link / "target")):
                 with self.subTest(field=field, path=path):
                     with self.assertRaises(worker_module.RenewalError):
-                        service.validate_config(dict(self.config, **{field: path}))
+                        renew.validate_config(dict(self.config, **{field: path}))
 
     def test_nested_config_files_require_exactly_0600(self):
         for path in (self.signer_path, self.worker_path):
@@ -512,11 +513,11 @@ class ConfigTests(ServiceCase):
                 with self.subTest(path=path.name, mode=oct(mode)):
                     path.chmod(mode)
                     with self.assertRaises(worker_module.RenewalError):
-                        service.validate_config(self.config)
+                        renew.validate_config(self.config)
                     path.chmod(0o600)
 
 
-class ArtifactRetentionTests(ServiceCase):
+class ArtifactRetentionTests(RenewalCase):
     def test_retention_preserves_latest_three_and_current_pending_accepted_and_active_journal(self):
         published = self.root / "published"
         published.mkdir(mode=0o700)
@@ -556,7 +557,7 @@ class ArtifactRetentionTests(ServiceCase):
         marker.write_bytes(b"outside fixture")
         link = published / "20300103T120000Z-00000000"
         link.symlink_to(outside, target_is_directory=True)
-        service.prune_artifacts(self.config, state, self.worker_data)
+        renew.prune_artifacts(self.config, state, self.worker_data)
         self.assertEqual([0, 1, 2, 3, 7, 8, 9], [number for number, path in enumerate(releases) if path.exists()])
         self.assertTrue(unrecognized.is_dir())
         self.assertTrue(incomplete.is_dir())
@@ -564,141 +565,66 @@ class ArtifactRetentionTests(ServiceCase):
         self.assertEqual(b"outside fixture", marker.read_bytes())
 
 
-class InstallerTests(ServiceCase):
-    def setUp(self):
-        super().setUp()
-        self.home = self.root / "fake-home"
-        self.home.mkdir(mode=0o700)
-        self.install_root = self.root / "installed"
-        self.launchctl = mock.Mock(return_value=mock.Mock(returncode=0, stdout=b"", stderr=b""))
-
-    def install(self, uninstall=False):
-        argv = ["install-service.py", "--config", str(self.config_path), "--install-root", str(self.install_root)]
-        if uninstall:
-            argv.append("--uninstall")
+class CommandTests(RenewalCase):
+    def invoke(self, *arguments):
         output = io.StringIO()
-        with mock.patch.object(sys, "argv", argv), mock.patch.object(installer.Path, "home", return_value=self.home), \
-                mock.patch.object(installer.subprocess, "run", self.launchctl), \
-                mock.patch.object(installer.os, "umask", return_value=0o022), contextlib.redirect_stdout(output):
-            result = installer.main()
+        with mock.patch.object(sys, "argv", ["renew.py", "--config", str(self.config_path), *arguments]), \
+                mock.patch.object(renew.signal, "signal"), \
+                mock.patch.object(renew.os, "umask", return_value=0o022), contextlib.redirect_stdout(output):
+            result = renew.main()
         return result, json.loads(output.getvalue())
 
-    def installed_definition(self):
-        path = self.home / "Library" / "LaunchAgents" / (installer.LABEL + ".plist")
-        return path, plistlib.loads(path.read_bytes())
-
-    def test_installer_freezes_private_code_and_config_and_launches_with_no_secret_environment(self):
-        sentinel = "synthetic-token-not-for-launchagent"
-        with mock.patch.dict(os.environ, {"FIXTURE_PRIVATE_TOKEN": sentinel}):
-            result, response = self.install()
+    def test_default_command_runs_one_cycle_and_exits(self):
+        status = {"checkedAt": renew.iso(NOW), "renewed": 0, "notDue": 3, "failed": 0}
+        with mock.patch.object(renew, "cycle", return_value=status) as cycle:
+            result, response = self.invoke()
         self.assertEqual(0, result)
-        self.assertEqual("installed", response["status"])
-        plist_path, definition = self.installed_definition()
-        arguments = definition["ProgramArguments"]
-        self.assertEqual(["/usr/bin/caffeinate", "-s"], arguments[:2])
-        self.assertEqual("--config", arguments[4])
-        release = Path(arguments[3]).parent
-        frozen_config = Path(arguments[5])
-        self.assertIn(self.install_root, release.parents)
-        self.assertIn(self.install_root, frozen_config.parents)
-        self.assertNotEqual(self.config_path, frozen_config)
-        for filename in installer.FILES:
-            path = release / filename
-            self.assertEqual(Path(__file__).with_name(filename).read_bytes(), path.read_bytes())
-            self.assertEqual(0o600, stat.S_IMODE(path.stat().st_mode))
-        snapshot = json.loads(frozen_config.read_text())
-        self.assertEqual(self.config["stateDirectory"], snapshot["stateDirectory"])
-        self.assertEqual(1, snapshot["version"])
-        snapshots = [frozen_config]
-        for field, original in (("signerConfigPath", self.signer_data), ("workerConfigPath", self.worker_data)):
-            path = Path(snapshot[field])
-            self.assertIn(self.install_root, path.parents)
-            self.assertNotEqual(Path(self.config[field]), path)
-            self.assertEqual(original, json.loads(path.read_text()))
-            snapshots.append(path)
-        original_bytes = {path: path.read_bytes() for path in snapshots}
-        self.write_json(self.config_path, {"fake": "edited source"})
-        self.write_json(self.signer_path, {"fake": "edited signer source"})
-        self.write_json(self.worker_path, {"fake": "edited worker source"})
-        for path, content in original_bytes.items():
-            self.assertEqual(content, path.read_bytes())
-            self.assertEqual(0o600, stat.S_IMODE(path.stat().st_mode))
-        self.assertEqual(0o600, stat.S_IMODE(plist_path.stat().st_mode))
-        self.assertEqual({"PATH", "PYTHONUNBUFFERED"}, set(definition["EnvironmentVariables"]))
-        self.assertNotIn(sentinel.encode(), plist_path.read_bytes())
-        for key in ("StandardOutPath", "StandardErrorPath"):
-            log = Path(definition[key])
-            self.assertIn(self.install_root, log.parents)
-            self.assertEqual(0o600, stat.S_IMODE(log.stat().st_mode))
-        self.launchctl.assert_called_once_with(["launchctl", "bootstrap", "gui/" + str(os.getuid()), str(plist_path)],
-                                               capture_output=True, check=True, timeout=30)
+        self.assertEqual(status, response)
+        cycle.assert_called_once()
+        self.assertNotIn("nextCheckAt", response)
 
-    def test_existing_code_release_cannot_be_silently_rewritten(self):
-        self.install()
-        plist_path, definition = self.installed_definition()
-        code = Path(definition["ProgramArguments"][3])
-        code.write_bytes(b"tampered synthetic service")
-        plist_path.unlink()
-        self.launchctl.reset_mock()
-        with self.assertRaises(worker_module.RenewalError):
-            self.install()
-        self.assertEqual(b"tampered synthetic service", code.read_bytes())
-        self.launchctl.assert_not_called()
+    def test_failed_cycle_returns_nonzero_and_preserves_error_reason(self):
+        status = {"failed": 1, "errors": ["fixture_install_failed"]}
+        with mock.patch.object(renew, "cycle", return_value=status) as cycle:
+            result, response = self.invoke()
+        self.assertEqual(1, result)
+        self.assertEqual(status, response)
+        cycle.assert_called_once()
 
-    def test_existing_config_snapshot_cannot_be_silently_rewritten(self):
-        self.install()
-        plist_path, definition = self.installed_definition()
-        snapshot = Path(definition["ProgramArguments"][5])
-        snapshot.write_bytes(b"tampered synthetic config")
-        plist_path.unlink()
-        self.launchctl.reset_mock()
-        with self.assertRaises(worker_module.RenewalError):
-            self.install()
-        self.assertEqual(b"tampered synthetic config", snapshot.read_bytes())
-        self.launchctl.assert_not_called()
+    def test_offline_or_busy_target_returns_nonzero_even_after_partial_success(self):
+        for skipped in ("offline", "busy"):
+            with self.subTest(skipped=skipped):
+                status = {"renewed": 1, "notDue": 1, "failed": 0, skipped: 1}
+                with mock.patch.object(renew, "cycle", return_value=status) as cycle:
+                    result, response = self.invoke()
+                self.assertEqual(1, result)
+                self.assertEqual(status, response)
+                cycle.assert_called_once()
 
-    def test_failed_bootstrap_removes_launchagent_definition(self):
-        self.launchctl.side_effect = RuntimeError("synthetic launchctl failure")
-        with self.assertRaises(RuntimeError):
-            self.install()
-        path = self.home / "Library" / "LaunchAgents" / (installer.LABEL + ".plist")
-        self.assertFalse(path.exists())
+    def test_status_reads_previous_result_without_a_cycle_or_external_process(self):
+        status = {"checkedAt": renew.iso(NOW), "renewed": 1, "failed": 0}
+        self.write_json(self.state / "status.json", status)
+        with mock.patch.object(renew, "cycle", side_effect=AssertionError("status must stay local")) as cycle:
+            result, response = self.invoke("--status")
+        self.assertEqual(0, result)
+        self.assertEqual(status, response)
+        cycle.assert_not_called()
 
-    def test_uninstall_refuses_pending_work_without_calling_launchctl(self):
-        self.install()
-        manifest_path, _ = self.artifact()
-        self.initial_state(pending={SERIALS[0]: str(manifest_path)})
-        self.launchctl.reset_mock()
-        with self.assertRaises(worker_module.RenewalError):
-            self.install(uninstall=True)
-        self.launchctl.assert_not_called()
-        plist_path, _ = self.installed_definition()
-        self.assertTrue(plist_path.is_file())
+    def test_competing_invocation_fails_without_overwriting_active_command_status(self):
+        before = {"checkedAt": renew.iso(NOW), "renewed": 1, "failed": 0}
+        self.write_json(self.state / "status.json", before)
+        with mock.patch.object(renew, "cycle", side_effect=worker_module.RenewalError("renewal_active")):
+            result, response = self.invoke()
+        self.assertEqual(1, result)
+        self.assertEqual(["renewal_active"], response["errors"])
+        self.assertEqual(before, json.loads((self.state / "status.json").read_text()))
 
-    def test_uninstall_refuses_active_cycle_even_with_empty_pending_without_launchctl(self):
-        self.install()
-        self.initial_state()
-        self.launchctl.reset_mock()
-        with service.operation_lock(self.state):
-            with self.assertRaises(worker_module.RenewalError) as caught:
-                self.install(uninstall=True)
-        self.assertEqual("service_cycle_active", str(caught.exception))
-        self.launchctl.assert_not_called()
-        plist_path, _ = self.installed_definition()
-        self.assertTrue(plist_path.is_file())
-
-    def test_symlinked_log_directory_is_refused_without_touching_its_target(self):
-        self.install_root.mkdir(mode=0o700)
-        outside = self.root / "outside-logs"
-        outside.mkdir(mode=0o700)
-        marker = outside / "preserved"
-        marker.write_bytes(b"unrelated synthetic log")
-        (self.install_root / "logs").symlink_to(outside, target_is_directory=True)
-        with self.assertRaises(worker_module.RenewalError):
-            self.install()
-        self.launchctl.assert_not_called()
-        self.assertEqual(b"unrelated synthetic log", marker.read_bytes())
-        self.assertEqual([marker], list(outside.iterdir()))
+    def test_command_exception_returns_nonzero_and_writes_sanitized_status(self):
+        with mock.patch.object(renew, "cycle", side_effect=RuntimeError("private synthetic details")):
+            result, response = self.invoke()
+        self.assertEqual(1, result)
+        self.assertEqual(["operation_failed"], response["errors"])
+        self.assertEqual(response, json.loads((self.state / "status.json").read_text()))
 
 
 if __name__ == "__main__":

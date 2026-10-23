@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Check WDA profiles hourly on the signing Mac; renew free devices sequentially."""
+"""Renew due WDA profiles once, then exit; resume an unfinished renewal safely."""
 
 import argparse
 import contextlib
@@ -64,12 +64,11 @@ def private_directory(value):
 
 def validate_config(config):
     required = {'version', 'stateDirectory', 'signerConfigPath', 'workerConfigPath'}
-    optional = {'checkIntervalSeconds', 'renewBeforeHours'}
+    optional = {'renewBeforeHours'}
     require(isinstance(config, dict) and required <= config.keys() and
-            config.keys() <= required | optional, 'invalid_service_config')
+            config.keys() <= required | optional, 'invalid_renewal_config')
     require(type(config['version']) is int and config['version'] == 1, 'config_version')
-    interval, threshold = config.get('checkIntervalSeconds', 3600), config.get('renewBeforeHours', 48)
-    require(type(interval) is int and 300 <= interval <= 86400, 'invalid_check_interval')
+    threshold = config.get('renewBeforeHours', 48)
     require(type(threshold) is int and 48 <= threshold <= 120, 'invalid_renewal_threshold')
     state = absolute_path(config['stateDirectory'])
     if state.exists():
@@ -237,6 +236,7 @@ def prune_artifacts(config, state, workers):
 def _cycle(config, worker_factory=Worker, signer=signing, stop_event=None):
     config = validate_config(config)
     state_dir = private_directory(config['stateDirectory'])
+    # Keep the original filename so pending operations survive the manual-command migration.
     state_file = state_dir / 'service-state.json'
     state = read_private(state_file) if state_file.exists() or state_file.is_symlink() else {'pending': {}}
     require(isinstance(state, dict) and isinstance(state.get('pending'), dict) and
@@ -244,7 +244,7 @@ def _cycle(config, worker_factory=Worker, signer=signing, stop_event=None):
             all(isinstance(key, str) and isinstance(path, str) and path
                 for key, path in state['pending'].items()) and
             all(state['pending'].get(key) == path for key, path in state.get('accepted', {}).items()),
-            'service_state_invalid')
+            'renewal_state_invalid')
     workers = read_private(config['workerConfigPath'])
     require(isinstance(workers.get('devices'), list) and workers['devices'], 'invalid_worker_devices')
     minimum = workers.get('minValidityHours', 48)
@@ -254,6 +254,8 @@ def _cycle(config, worker_factory=Worker, signer=signing, stop_event=None):
     threshold = config.get('renewBeforeHours', 48)
     for target in workers['devices']:
         if stop_event is not None and stop_event.is_set():
+            status['failed'] += 1
+            status['errors'].append('renewal_interrupted')
             break
         serial = None
         try:
@@ -313,7 +315,6 @@ def _cycle(config, worker_factory=Worker, signer=signing, stop_event=None):
         status['failed'] += 1
         status['errors'].append('artifact_retention_' + error_code(error))
     status['lastSuccessAt'] = state.get('lastSuccessAt')
-    status['nextCheckAt'] = iso(now() + dt.timedelta(seconds=config.get('checkIntervalSeconds', 3600)))
     save_json(state_dir / 'status.json', status)
     return status
 
@@ -330,7 +331,7 @@ def operation_lock(state_dir):
         try:
             fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
         except BlockingIOError:
-            raise RenewalError('service_cycle_active') from None
+            raise RenewalError('renewal_active') from None
         yield
 
 
@@ -344,8 +345,7 @@ def main():
     os.umask(0o077)
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--config', required=True)
-    parser.add_argument('--once', action='store_true')
-    parser.add_argument('--status', action='store_true')
+    parser.add_argument('--status', action='store_true', help='show the last completed command result without connecting')
     args = parser.parse_args()
     config = validate_config(read_private(args.config))
     state_dir = private_directory(config['stateDirectory'])
@@ -353,32 +353,18 @@ def main():
         print(json.dumps(read_private(state_dir / 'status.json')))
         return 0
     stop = threading.Event()
+    # Finish a current device before honoring an interrupt; never start the next one.
     signal.signal(signal.SIGTERM, lambda *_: stop.set())
     signal.signal(signal.SIGINT, lambda *_: stop.set())
-    lock_path = absolute_path(str(state_dir / 'service.lock'))
-    if lock_path.exists():
-        private_file(lock_path)
-    with lock_path.open('a') as lock:
-        os.fchmod(lock.fileno(), 0o600)
-        try:
-            fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
-        except BlockingIOError:
-            print(json.dumps({'status': 'already_running'}))
-            return 0
-        while not stop.is_set():
-            try:
-                result = cycle(config, stop_event=stop)
-            except Exception as error:
-                if isinstance(error, RenewalError) and str(error) == 'service_cycle_active' and not args.once:
-                    stop.wait(5)
-                    continue
-                result = {'checkedAt': iso(now()), 'failed': 1, 'errors': [error_code(error)]}
-                save_json(state_dir / 'status.json', result)
-            print(json.dumps(result), flush=True)
-            if args.once:
-                return 1 if result.get('failed') else 0
-            stop.wait(config.get('checkIntervalSeconds', 3600))
-    return 0
+    try:
+        result = cycle(config, stop_event=stop)
+    except Exception as error:
+        result = {'checkedAt': iso(now()), 'failed': 1, 'errors': [error_code(error)]}
+        # Another invocation owns status.json while its operation lock is held.
+        if not (isinstance(error, RenewalError) and str(error) == 'renewal_active'):
+            save_json(state_dir / 'status.json', result)
+    print(json.dumps(result), flush=True)
+    return 1 if any(result.get(key, 0) for key in ('failed', 'offline', 'busy')) else 0
 
 
 if __name__ == '__main__':

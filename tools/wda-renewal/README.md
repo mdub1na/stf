@@ -1,8 +1,10 @@
 # Personal Team WDA renewal
 
-This service signs WebDriverAgent on a Mac and replaces it on an idle Linux USB
-device. It keeps the same runner bundle ID and signing identity. Signing keys
-stay in the Mac Keychain. Linux receives only a verified signed application.
+Run `renew.py` on demand to sign WebDriverAgent on a Mac and replace it on an
+idle Linux USB device. It keeps the same runner bundle ID and signing identity.
+Signing keys stay in the Mac Keychain. Linux receives only a verified signed
+application. The command makes one pass and exits; it installs no background
+service, monitoring process or schedule.
 
 Apple's [Personal Team rules](https://developer.apple.com/help/account/basics/about-your-developer-account)
 give provisioning profiles a seven-day lifetime. Renewing requires rebuilding
@@ -13,9 +15,10 @@ visible in the private status file and never becomes a successful renewal.
 
 ## Lifecycle
 
-1. `service.py` checks the configured devices hourly. Profiles with more than
-   48 hours left need no build or device restart. Disconnected devices with no
-   usable metadata are skipped; existing interrupted operations are resumed.
+1. Each invocation of `renew.py` checks the configured devices once. Profiles
+   with more than 48 hours left need no build or device restart. Offline or
+   manually occupied phones are reported; interrupted operations resume using
+   their existing journal and artifact.
 2. `sign.py` builds pinned WDA `e7e2665a00633dc174d7fc579f7e606bc9ba782a`
    with the existing Xcode account. It verifies the exact bundle, Personal Team,
    device membership, expiry improvement and signatures, including nested code.
@@ -74,7 +77,7 @@ stopped admission, no held/queued operations, an empty drain list and a reviewed
 reverse migration of the **current** state that preserves all records. Never
 restore an old backup over history created after the upgrade.
 
-## Private configuration and Mac service
+## Private configuration and manual command
 
 Keep configuration, source cache, profiles, artifacts, logs and journals outside
 Git. Use directories `0700` and JSON/profile/archive files `0600`. Account IDs,
@@ -109,43 +112,46 @@ known WDA profile has already expired. It still requires the worker's fresh USB
 profile proof, matching Deployment, no foreign owner and no Grid session. Leave
 it disabled until this recovery path is verified for the selected provider.
 
-Service configuration:
+Renewal command configuration:
 
 ```json
 {
   "version": 1,
-  "stateDirectory": "/secure/wda/service",
+  "stateDirectory": "/secure/wda/renewal",
   "signerConfigPath": "/secure/wda/config/signer.json",
   "workerConfigPath": "/secure/wda/config/worker.json",
-  "renewBeforeHours": 48,
-  "checkIntervalSeconds": 3600
+  "renewBeforeHours": 48
 }
 ```
 
-Before enabling the service, deploy the reviewed coordinator runtime and test one
+Before the first renewal, deploy the reviewed coordinator runtime and test one
 signed artifact on one available phone. The existing provider must support
 fenced automation lease IDs. Do not place Apple credentials in a Kubernetes
 Secret or farm CI job to make this work.
 
 ```sh
-python3 tools/wda-renewal/service.py --config /secure/wda/config/service.json --once
-python3 tools/wda-renewal/install-service.py --config /secure/wda/config/service.json --install-root /secure/wda/runtime
-python3 tools/wda-renewal/service.py --config /secure/wda/config/service.json --status
+python3 tools/wda-renewal/renew.py --config /secure/wda/config/renew.json
+python3 tools/wda-renewal/renew.py --config /secure/wda/config/renew.json --status
 ```
 
-The LaunchAgent `tech.finservice.stf.wda-renewal` uses immutable private copies
-of the code and all three configurations, so changing or archiving a development
-worktree does not alter it. Configuration changes require a reviewed reinstall.
-It runs as the logged-in user and uses `caffeinate -s` to prevent system sleep
-on AC without keeping the display lit. The Mac must remain powered, connected
-to AC and logged in with an accessible signing Keychain. The service cannot
-renew profiles while the Mac is shut down, and it does not bypass Apple login
-or device unlock prompts. No global power settings or automatic login are set.
+The first command runs the whole operation and exits. `--status` only reads the
+last saved result; it does not query or monitor the farm. Exit status is zero
+when every configured phone was renewed or confirmed `notDue`; failures,
+offline phones and manual occupancy return nonzero with explicit counts.
+
+The Mac needs Xcode, its signing account/Keychain and access to the farm only
+while this command runs. It can be disconnected or switched off afterward.
+Run the command again when renewal is needed. No LaunchAgent, `caffeinate`,
+periodic loop or global power setting is installed.
+
+Keep the existing `stateDirectory` when upgrading an earlier installation. The
+internal `service-state.json` filename is retained for baseline and interrupted
+operation compatibility; it is a private state file, not a running service.
 
 On a failure inspect the private status and attempt logs. Do not clear a drain
 merely to make a failed job green. Re-running the worker uses the same journal;
-do not replace its pending artifact with a different build. Stop or replace the
-service only after confirming no renewal operation is pending.
+do not replace its pending artifact with a different build. Re-run the same
+command after resolving the reported cause to resume the pending operation.
 
 ## Verification
 
@@ -156,10 +162,10 @@ npm run test:unit
 
 The Python tests use fake devices, processes and Kubernetes clients. They cover
 signature/profile constraints, unsafe archives, cache rollback, durable recovery,
-foreign ownership, busy Grid, exact-profile retirement and service scheduling.
+foreign ownership, busy Grid, exact-profile retirement and one-shot execution.
 A real signing build, installation, fresh telemetry and Appium CI smoke must be
 recorded separately; fixture tests cannot prove Apple authentication or USB
 availability.
 
 See the [2026-10-23 hardware validation](validation-2026-10-23.md) for the first
-real renewal, recovery evidence and the installed Mac service.
+real renewal, recovery evidence and the subsequent one-shot command validation.

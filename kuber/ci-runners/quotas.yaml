@@ -11,7 +11,7 @@ spec:
     limits.cpu: "6"
     limits.memory: 9Gi
     requests.ephemeral-storage: 6Gi
-    limits.ephemeral-storage: 18Gi
+    limits.ephemeral-storage: 20Gi
     persistentvolumeclaims: "0"
     services.loadbalancers: "0"
     services.nodeports: "0"

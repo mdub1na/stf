@@ -4,6 +4,7 @@ This is the first hardware feasibility step for adding iOS to this STF fork.
 It runs as a separate, single-device service on a Linux USB host. The
 [STF provider](ios-provider.md) registers the phone and adds browser controls
 and signed IPA installation. Appium Grid is not connected yet.
+For a complete local STF deployment, use the [Compose/native quick start](../docker/ios/README.md).
 The prototype owns one WDA session; do not run another Appium/WDA controller
 against the same phone while using it.
 
@@ -37,8 +38,9 @@ An ordinary unsigned `.ipa` cannot be used as the runner.
 | Separate Developer Mode and UI Automation switches | [Appium device preparation](https://github.com/appium/appium-xcuitest-driver/blob/master/docs/getting-started/device-setup.md#required-settings) |
 | Linux support in the later Appium integration | [Non-macOS hosts](https://appium.github.io/appium-xcuitest-driver/12.11/guides/non-macos-hosts/) |
 
-The go-ios commands were checked against the **v1.3.2 source**, not against a
-locally attached iPhone. Install that release using the upstream installation
+The go-ios commands were initially checked against the **v1.3.2 source** and
+subsequently exercised on the [three-iPhone Linux fleet](ios-fleet-validation-2026-10-16.md).
+Install that release using the upstream installation
 instructions; verify the installed executable with `ios version`.
 The runner's full installed bundle identifier and `.xctest` name must match the
 signed artifact; the prototype deliberately has no guessed bundle ID default.
@@ -77,7 +79,7 @@ The prototype reads the selected phone's `address` and `rsdPort` from
 It does not start a second Python tunnel. A go-ios userspace tunnel cannot be
 used for this external RSD connection; use the kernel tunnel below. Initial
 image download/personalization needs outbound network access. Cryptex mounting
-and go-ios WDA launch together remain **unverified on the actual iOS 27 phone**.
+and go-ios WDA launch were subsequently verified on the iOS 27.0.1 fleet.
 
 ## Prepare WDA without a paid developer membership
 

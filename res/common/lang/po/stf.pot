@@ -114,7 +114,7 @@ msgstr ""
 msgid "Admin mode has been enabled."
 msgstr ""
 
-#: res/app/src/features/control/ControlPage.tsx:79
+#: res/app/src/features/control/ControlPage.tsx:80
 msgid "Advanced"
 msgstr ""
 
@@ -156,7 +156,7 @@ msgstr ""
 msgid "App Store"
 msgstr ""
 
-#: res/app/src/features/control/device-control/DeviceControlPanel.tsx:90
+#: res/app/src/features/control/device-control/DeviceControlPanel.tsx:94
 msgid "App switch"
 msgstr ""
 
@@ -181,12 +181,18 @@ msgstr ""
 msgid "Auto Scroll"
 msgstr ""
 
+#: res/app/src/core/devices/enhance.ts:16
 #: res/app/src/core/devices/enhance.ts:29
-msgid "Automating"
+#: res/app/src/features/control/ControlPage.tsx:315
+msgid "Automated"
 msgstr ""
 
-#: res/app/src/features/control/ControlPage.tsx:73
+#: res/app/src/features/control/ControlPage.tsx:74
 msgid "Automation"
+msgstr ""
+
+#: res/app/src/features/control/ControlPage.tsx:315
+msgid "Automation finished"
 msgstr ""
 
 #: res/app/src/core/devices/enhance.ts:28
@@ -209,8 +215,8 @@ msgstr ""
 msgid "Available users"
 msgstr ""
 
-#: res/app/src/features/control/device-control/DeviceControlPanel.tsx:83
-#: res/app/src/features/control/device-control/DeviceMenuItems.tsx:29
+#: res/app/src/features/control/device-control/DeviceControlPanel.tsx:87
+#: res/app/src/features/control/device-control/DeviceMenuItems.tsx:30
 msgid "Back"
 msgstr ""
 
@@ -450,7 +456,7 @@ msgstr ""
 msgid "Critical"
 msgstr ""
 
-#: res/app/src/features/control/device-control/DeviceToolbar.tsx:77
+#: res/app/src/features/control/device-control/DeviceToolbar.tsx:80
 msgid "Current rotation:"
 msgstr ""
 
@@ -468,7 +474,7 @@ msgstr ""
 msgid "Dark"
 msgstr ""
 
-#: res/app/src/features/control/ControlPage.tsx:54
+#: res/app/src/features/control/ControlPage.tsx:55
 msgid "Dashboard"
 msgstr ""
 
@@ -537,7 +543,7 @@ msgstr ""
 msgid "Device booking state"
 msgstr ""
 
-#: res/app/src/features/device-list/device-actions.ts:38
+#: res/app/src/features/device-list/device-actions.ts:39
 msgid "Device cannot get kicked from the group"
 msgstr ""
 
@@ -583,7 +589,7 @@ msgstr ""
 msgid "Device Settings"
 msgstr ""
 
-#: res/app/src/features/control/ControlPage.tsx:109
+#: res/app/src/features/control/ControlPage.tsx:110
 msgid "Device was disconnected"
 msgstr ""
 
@@ -687,7 +693,7 @@ msgid "Encrypted"
 msgstr ""
 
 #: res/app/src/features/control/panes/explorer/ExplorerPane.tsx:218
-#: res/app/src/features/device-list/device-actions.ts:32
+#: res/app/src/features/device-list/device-actions.ts:33
 #: res/app/src/features/settings/keys/AdbKeysCard.tsx:64
 #: res/app/src/ui/AppLayout.tsx:111
 #: res/app/src/ui/AppLayout.tsx:112
@@ -728,7 +734,7 @@ msgstr ""
 msgid "Fast Forward"
 msgstr ""
 
-#: res/app/src/features/control/ControlPage.tsx:85
+#: res/app/src/features/control/ControlPage.tsx:86
 msgid "File Explorer"
 msgstr ""
 
@@ -801,7 +807,7 @@ msgstr ""
 msgid "Go Back"
 msgstr ""
 
-#: res/app/src/features/control/ControlPage.tsx:121
+#: res/app/src/features/control/ControlPage.tsx:122
 msgid "Go to Device List"
 msgstr ""
 
@@ -918,13 +924,13 @@ msgstr ""
 msgid "Hide Manifest"
 msgstr ""
 
-#: res/app/src/features/control/device-control/DeviceToolbar.tsx:132
-#: res/app/src/features/control/device-control/DeviceToolbar.tsx:137
+#: res/app/src/features/control/device-control/DeviceToolbar.tsx:139
+#: res/app/src/features/control/device-control/DeviceToolbar.tsx:144
 msgid "Hide Screen"
 msgstr ""
 
-#: res/app/src/features/control/device-control/DeviceControlPanel.tsx:87
-#: res/app/src/features/control/device-control/DeviceMenuItems.tsx:32
+#: res/app/src/features/control/device-control/DeviceControlPanel.tsx:91
+#: res/app/src/features/control/device-control/DeviceMenuItems.tsx:34
 #: res/app/src/features/docs/DocsPage.tsx:100
 #: res/app/src/features/docs/DocsPage.tsx:64
 #: res/app/src/features/docs/DocsPage.tsx:95
@@ -973,7 +979,7 @@ msgstr ""
 msgid "Incorrect login details"
 msgstr ""
 
-#: res/app/src/features/control/ControlPage.tsx:91
+#: res/app/src/features/control/ControlPage.tsx:92
 msgid "Info"
 msgstr ""
 
@@ -1031,7 +1037,7 @@ msgstr ""
 msgid "Key"
 msgstr ""
 
-#: res/app/src/features/control/screen/DeviceScreen.tsx:181
+#: res/app/src/features/control/screen/DeviceScreen.tsx:184
 msgid "Keyboard"
 msgstr ""
 
@@ -1040,7 +1046,7 @@ msgid "Keys"
 msgstr ""
 
 #: res/app/src/features/control/device-control/DeviceToolbar.tsx:100
-#: res/app/src/features/control/device-control/DeviceToolbar.tsx:96
+#: res/app/src/features/control/device-control/DeviceToolbar.tsx:105
 msgid "Landscape"
 msgstr ""
 
@@ -1100,7 +1106,7 @@ msgstr ""
 msgid "Logout"
 msgstr ""
 
-#: res/app/src/features/control/ControlPage.tsx:60
+#: res/app/src/features/control/ControlPage.tsx:61
 msgid "Logs"
 msgstr ""
 
@@ -1139,7 +1145,7 @@ msgstr ""
 msgid "Memory"
 msgstr ""
 
-#: res/app/src/features/control/device-control/DeviceControlPanel.tsx:80
+#: res/app/src/features/control/device-control/DeviceControlPanel.tsx:84
 msgid "Menu"
 msgstr ""
 
@@ -1251,7 +1257,7 @@ msgstr ""
 msgid "No clipboard data"
 msgstr ""
 
-#: res/app/src/features/control/screen/DeviceScreen.tsx:160
+#: res/app/src/features/control/screen/DeviceScreen.tsx:161
 msgid "No device screen"
 msgstr ""
 
@@ -1491,8 +1497,8 @@ msgstr ""
 msgid "Port Forwarding"
 msgstr ""
 
-#: res/app/src/features/control/device-control/DeviceToolbar.tsx:85
-#: res/app/src/features/control/device-control/DeviceToolbar.tsx:89
+#: res/app/src/features/control/device-control/DeviceToolbar.tsx:88
+#: res/app/src/features/control/device-control/DeviceToolbar.tsx:93
 msgid "Portrait"
 msgstr ""
 
@@ -1514,7 +1520,7 @@ msgstr ""
 
 #: res/app/src/core/devices/enhance.ts:11
 #: res/app/src/core/devices/enhance.ts:24
-#: res/app/src/features/control/ControlPage.tsx:290
+#: res/app/src/features/control/ControlPage.tsx:306
 msgid "Preparing"
 msgstr ""
 
@@ -1601,7 +1607,7 @@ msgstr ""
 msgid "Really delete this user?"
 msgstr ""
 
-#: res/app/src/features/control/device-control/DeviceMenuItems.tsx:36
+#: res/app/src/features/control/device-control/DeviceMenuItems.tsx:39
 msgid "Recents"
 msgstr ""
 
@@ -1701,7 +1707,7 @@ msgstr ""
 msgid "Restart this iPhone? Control will end. After startup, iOS may require the first unlock on the phone."
 msgstr ""
 
-#: res/app/src/features/control/screen/DeviceScreen.tsx:167
+#: res/app/src/features/control/screen/DeviceScreen.tsx:169
 msgid "Retry"
 msgstr ""
 
@@ -1717,15 +1723,15 @@ msgstr ""
 msgid "ROM"
 msgstr ""
 
-#: res/app/src/features/control/device-control/DeviceMenuItems.tsx:40
-#: res/app/src/features/control/device-control/DeviceToolbar.tsx:109
-#: res/app/src/features/control/device-control/DeviceToolbar.tsx:113
+#: res/app/src/features/control/device-control/DeviceMenuItems.tsx:44
+#: res/app/src/features/control/device-control/DeviceToolbar.tsx:114
+#: res/app/src/features/control/device-control/DeviceToolbar.tsx:119
 msgid "Rotate Left"
 msgstr ""
 
-#: res/app/src/features/control/device-control/DeviceMenuItems.tsx:46
-#: res/app/src/features/control/device-control/DeviceToolbar.tsx:119
-#: res/app/src/features/control/device-control/DeviceToolbar.tsx:123
+#: res/app/src/features/control/device-control/DeviceMenuItems.tsx:51
+#: res/app/src/features/control/device-control/DeviceToolbar.tsx:125
+#: res/app/src/features/control/device-control/DeviceToolbar.tsx:130
 msgid "Rotate Right"
 msgstr ""
 
@@ -1765,7 +1771,7 @@ msgid "Save Logs"
 msgstr ""
 
 #: res/app/src/features/control/device-control/device-commands.ts:23
-#: res/app/src/features/control/device-control/DeviceMenuItems.tsx:51
+#: res/app/src/features/control/device-control/DeviceMenuItems.tsx:57
 msgid "Save ScreenShot"
 msgstr ""
 
@@ -1789,7 +1795,7 @@ msgstr ""
 msgid "Screenshot"
 msgstr ""
 
-#: res/app/src/features/control/ControlPage.tsx:67
+#: res/app/src/features/control/ControlPage.tsx:68
 msgid "Screenshots"
 msgstr ""
 
@@ -1873,8 +1879,8 @@ msgstr ""
 msgid "Show Manifest"
 msgstr ""
 
-#: res/app/src/features/control/device-control/DeviceToolbar.tsx:132
-#: res/app/src/features/control/device-control/DeviceToolbar.tsx:137
+#: res/app/src/features/control/device-control/DeviceToolbar.tsx:139
+#: res/app/src/features/control/device-control/DeviceToolbar.tsx:144
 msgid "Show Screen"
 msgstr ""
 
@@ -1962,14 +1968,10 @@ msgstr ""
 msgid "Stop"
 msgstr ""
 
-#: res/app/src/core/devices/enhance.ts:16
-msgid "Stop Automation"
-msgstr ""
-
 #: res/app/src/core/devices/enhance.ts:13
-#: res/app/src/features/control/device-control/DeviceMenuItems.tsx:59
-#: res/app/src/features/control/device-control/DeviceToolbar.tsx:144
-#: res/app/src/features/control/device-control/DeviceToolbar.tsx:150
+#: res/app/src/features/control/device-control/DeviceMenuItems.tsx:66
+#: res/app/src/features/control/device-control/DeviceToolbar.tsx:151
+#: res/app/src/features/control/device-control/DeviceToolbar.tsx:158
 #: res/app/src/features/control/device-control/use-device-actions.ts:67
 msgid "Stop Using"
 msgstr ""
@@ -2019,7 +2021,7 @@ msgstr ""
 msgid "The app was not found on the iPhone after installation."
 msgstr ""
 
-#: res/app/src/features/control/screen/DeviceScreen.tsx:163
+#: res/app/src/features/control/screen/DeviceScreen.tsx:164
 msgid "The current view is marked secure and cannot be viewed remotely."
 msgstr ""
 
@@ -2223,6 +2225,10 @@ msgstr ""
 msgid "The system failed to install the package because the user is restricted from installing apps."
 msgstr ""
 
+#: res/app/src/features/control/ControlPage.tsx:318
+msgid "The test has finished. Take control to interact with the device."
+msgstr ""
+
 #: res/app/src/core/install.ts:269
 msgid "The uploaded file is no longer available. Upload it again."
 msgstr ""
@@ -2305,7 +2311,7 @@ msgstr ""
 msgid "True"
 msgstr ""
 
-#: res/app/src/features/control/ControlPage.tsx:118
+#: res/app/src/features/control/ControlPage.tsx:119
 #: res/app/src/ui/modals.tsx:141
 msgid "Try to reconnect"
 msgstr ""
@@ -2379,6 +2385,7 @@ msgid "USB"
 msgstr ""
 
 #: res/app/src/core/devices/enhance.ts:15
+#: res/app/src/features/control/ControlPage.tsx:323
 msgid "Use"
 msgstr ""
 
@@ -2429,6 +2436,10 @@ msgstr ""
 
 #: res/app/src/features/control/panes/automation/DeviceSettingsCard.tsx:33
 msgid "Vibrate Mode"
+msgstr ""
+
+#: res/app/src/features/control/ControlPage.tsx:316
+msgid "View only. Controls are disabled while the test is running."
 msgstr ""
 
 #: res/app/src/features/control/panes/info/InfoPane.tsx:203

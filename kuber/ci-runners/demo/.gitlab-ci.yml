@@ -10,9 +10,10 @@ variables:
 default:
   image: $FARM_RUNNER_IMAGE
   tags: [stf-farm]
-  timeout: 15m
   interruptible: true
   before_script:
+    - stat -c "Farm token file mode=%a owner=%u" "$FARM_TOKEN_FILE"
+    - chmod 600 "$FARM_TOKEN_FILE"
     - node tests/verify-farm-isolation.mjs
   artifacts:
     when: always
@@ -23,6 +24,7 @@ default:
 
 appium-android-one:
   stage: test
+  timeout: 15m
   variables:
     DEMO_HOLD_SECONDS: "45"
   script:
@@ -30,16 +32,19 @@ appium-android-one:
 
 maestro-android:
   stage: test
+  timeout: 15m
   script:
     - stf utils test run --runner maestro --platform Android --run-id "$CI_PIPELINE_ID-$CI_JOB_ID" -- bash tests/maestro-settings.sh
 
 appium-android-two:
   stage: test
+  timeout: 15m
   script:
     - stf utils test run --runner appium --platform Android --run-id "$CI_PIPELINE_ID-$CI_JOB_ID" -- node tests/appium-settings.mjs
 
 appium-ios:
   stage: test
+  timeout: 15m
   rules:
     - if: '$FARM_TEST_IOS == "true"'
   script:

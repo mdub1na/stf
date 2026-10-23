@@ -23,7 +23,7 @@ Create a project-locked runner through `POST /api/v4/user/runners`, with `runner
 
 The init container copies global settings before registration. The runner template is merged into `[[runners]]`; global `concurrent` must not depend on that merge. Verify the resulting config without printing `token` or the full configuration. The approved setup uses manager v19.5.0 pinned by digest and the matching helper version selected by GitLab Runner.
 
-The manager has no access to farm namespaces through RBAC. Jobs cannot overwrite namespace, service account, bearer token or pod labels through CI variables. Privileged containers, service containers and host mounts are disabled. Build/helper pods run as UID/GID1000; the image must support this user. The approved build image is `registry.finservice.tech/gfs/platform/quality/farm-connection-smoke/ci-worker@sha256:<digest>`. Runner admission allows this repository by digest only. GitLab supplies temporary registry credentials from the job token for images in its own project; no permanent registry PAT is passed to jobs. The registry uses the same34.0.249.190:443 endpoint as GitLab, so no additional network allowance is needed.
+The manager has no access to farm namespaces through RBAC. Jobs cannot overwrite namespace, service account, bearer token or pod labels through CI variables. Privileged containers, service containers and host mounts are disabled. Build/helper pods run as UID/GID1000; the image must support this user. Runner environment sets `HOME=/tmp` so the helper can write Git configuration without a UID1000 passwd entry or root permissions. The approved build image is `registry.finservice.tech/gfs/platform/quality/farm-connection-smoke/ci-worker@sha256:<digest>`. Runner admission allows this repository by digest only. GitLab supplies temporary registry credentials from the job token for images in its own project; no permanent registry PAT is passed to jobs. The registry uses the same34.0.249.190:443 endpoint as GitLab, so no additional network allowance is needed.
 
 ## Network isolation
 
@@ -44,6 +44,8 @@ Set the demo project's `FARM_RUNNER_IMAGE` CI variable to the immutable built im
 The independent private validation repository is `https://gitlab.finservice.tech/gfs/platform/quality/farm-connection-smoke` (project145). The reusable source template is `kuber/ci-runners/demo/`.
 
 Configure `FARM_TOKEN_FILE` as a masked file CI variable containing that project's coordinator token. `FARM_URL` is `http://stf-coordinator.stf.svc.cluster.local:8080` inside this cluster. Other repositories receive separate project identities/tokens. Publish their worker image in their own project registry, or explicitly allow only that project's job tokens to pull a centrally hosted image. Never disable the image project's job-token allowlist for broad cross-project access.
+
+Each new repository also needs its project-locked runner, a distinct coordinator project identity/token digest and a parallelism quota. Keep the same pod/network isolation and exact worker-image allowlist. The prototype loads coordinator project policies at startup; drain existing leases before restarting it to change those policies. The test repository receives neither the coordinator operator token nor a registry push credential.
 
 ```sh
 stf utils test run --runner appium --platform Android --run-id "$CI_PIPELINE_ID-$CI_JOB_ID" -- node tests/appium-settings.mjs

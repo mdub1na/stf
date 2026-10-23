@@ -15,7 +15,7 @@ data:
       executor = "kubernetes"
       limit = 3
       request_concurrency = 3
-      environment = ["FF_USE_LEGACY_KUBERNETES_EXECUTION_STRATEGY=false", "FF_USE_POD_ACTIVE_DEADLINE_SECONDS=true"]
+      environment = ["HOME=/tmp", "FF_USE_LEGACY_KUBERNETES_EXECUTION_STRATEGY=false", "FF_USE_POD_ACTIVE_DEADLINE_SECONDS=true"]
       [runners.kubernetes]
         namespace = "stf-ci-jobs"
         service_account = "stf-ci-job"

@@ -1,0 +1,41 @@
+# Apply this strategic merge patch to ios-prototype after substituting SET_STF_IMAGE_TAG.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ios-prototype
+  namespace: stf-ios-prototype
+spec:
+  template:
+    spec:
+      containers:
+        - name: stf-provider
+          image: ghcr.io/mdub1na/stf:SET_STF_IMAGE_TAG
+          command: [node, lib/cli/index.js, ios-provider]
+          args:
+            - '--serial=$(IOS_UDID)'
+            - --token-file=/token/token
+            - --api-url=http://stf-api.stf.svc.cluster.local:3000
+            - --public-origin=https://stf.finservice.tech
+            - --storage-url=http://stf-storage-temp.stf.svc.cluster.local:3000
+            - --screen-url=wss://stf.finservice.tech/d/stf-ios-provider/17440/
+            - --market-name=iPhone 16 Plus
+            - --connect-push=tcp://stf-triproxy-dev.stf.svc.cluster.local:7270
+            - --connect-sub=tcp://stf-triproxy-dev.stf.svc.cluster.local:7250
+          env:
+            - name: IOS_UDID
+              valueFrom: {configMapKeyRef: {name: ios-device, key: udid}}
+          ports:
+            - {name: screen, containerPort: 17440}
+          securityContext:
+            runAsUser: 1000
+            runAsGroup: 1000
+            allowPrivilegeEscalation: false
+            capabilities: {drop: [ALL]}
+          resources:
+            requests: {cpu: 100m, memory: 128Mi}
+            limits: {cpu: '1', memory: 512Mi}
+          readinessProbe:
+            tcpSocket: {port: screen}
+            periodSeconds: 5
+          volumeMounts:
+            - {name: token, mountPath: /token, readOnly: true}

@@ -89,6 +89,12 @@ Grid URLs or Appium direct-connect discovery. Disable direct-connect features in
 clients that provide them. `APPIUM_SERVER_URL` and `APPIUM_CAPABILITIES_JSON` carry
 the same values as convenient environment variables.
 
+The current physical iOS nodes attach to an existing WDA on Linux. Preserve
+`appium:autoLaunch:false` and omit `appium:bundleId`/`appium:app` from the new-session
+capabilities: those trigger host-side USB app discovery. Activate the installed
+application through the Appium client after session creation. Installing or
+upgrading an iOS application is outside this connection prototype.
+
 Maestro's `ci/maestro-test.sh` can be:
 
 ```sh

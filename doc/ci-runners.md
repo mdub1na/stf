@@ -58,6 +58,8 @@ The wrapper obtains and renews the lease, prepares a local transport, writes `ST
 
 `STF_CONNECTION_FILE` is versioned JSON containing `version`, `runner`, `leaseId`, `device`, and an engine-specific connection. Appium receives a local URL and capabilities. Maestro receives a local ADB server with only its leased serial. Tests must not replace this with the shared farm ADB endpoint. Physical iOS remains Appium-only; Maestro iOS needs a separate macOS simulator pool.
 
+Physical iOS currently attaches to an existing WDA on Linux. Keep `autoLaunch:false`, omit `bundleId`/`app` in session capabilities, then activate an already installed app after connecting. Application installation/upgrade and testing the team's business application are separate from the native Settings connection smoke.
+
 The demo uses Node's standard `fetch` API for W3C Appium commands, so it has no dependency on STF source or an Appium-language SDK. Teams may instead use Kotlin/JUnit, Python, WebdriverIO or another client. Compile tests and resolve dependencies on a regular CI runner, then pass ready artifacts or a prepared image to the farm stage; farm jobs have no general Internet egress. Maestro scenarios remain ordinary YAML. Artifacts are uploaded to GitLab, and STF provides the read-only live device screen.
 
 ## Lifecycle and maintenance

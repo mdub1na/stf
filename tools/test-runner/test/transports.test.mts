@@ -108,3 +108,24 @@ test('coordinator API refuses redirects rather than forwarding credentials', asy
     await temp.close()
   }
 })
+
+
+test('Maestro accepts an empty ADB server probe without revoking later connections', async() => {
+  const temp = await directory(); const api = await farm({runner: 'maestro'})
+  const client = await CoordinatorClient.create({url: api.url, tokenFile: temp.tokenFile})
+  const proxy = await maestroProxy(client, parseLease(api.lease(), 'maestro'), 0)
+  let failure: unknown
+  void proxy.closed.catch(error => { failure = error })
+  try {
+    const port = Number(new URL(proxy.url!).port)
+    // Dadb's ensureServerRunning opens and immediately closes a socket before its real request.
+    const probe = net.connect(port, '127.0.0.1')
+    await once(probe, 'connect')
+    probe.destroy()
+    await once(probe, 'close')
+    const payload = Buffer.from('host:devices-after-empty-probe')
+    assert.deepEqual(await echo(port, payload), payload)
+    assert.equal(failure, undefined)
+  }
+  finally { await proxy.close(); await api.close(); await temp.close() }
+})

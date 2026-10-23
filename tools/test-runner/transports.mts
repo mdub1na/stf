@@ -163,6 +163,9 @@ export async function maestroProxy(client: CoordinatorClient, lease: Lease, loca
       socket.end()
     })
     ws.once('error', () => {
+      // Dadb probes the smart socket with an empty connect/close before each real operation.
+      // Terminating that pair during WS setup is local EOF, rather than lease revocation.
+      if (disposed || stopped) return
       dispose()
       void close(new RunnerError('Coordinator ADB stream failed; device commands are disabled'))
     })

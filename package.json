@@ -26,6 +26,10 @@
     "stf": "./bin/stf"
   },
   "scripts": {
+    "utils": "node tools/adb-tunnel/stf.mts utils",
+    "adb:tunnel": "node tools/adb-tunnel/cli.mts",
+    "adb:tunnel:gateway": "node tools/adb-tunnel/server.mts",
+    "test:adb-tunnel": "node --test tools/adb-tunnel/test/*.test.mts",
     "ios:prototype": "node tools/ios-prototype/main.mts",
     "ios:compose": "sh bin/stf-ios-compose",
     "test:ios-prototype": "node --test tools/ios-prototype/test/*.test.mts",

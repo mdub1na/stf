@@ -25,10 +25,16 @@ Settings so Chrome setup and external websites do not affect the result.
 The tests use the standard STF endpoints:
 
 1. `GET /api/v1/devices` to select a ready, present, unowned device of the requested platform.
-2. `POST /api/v1/user/devices` with `serial` and an idle `timeout` in milliseconds.
+2. `POST /api/v1/user/devices` with `serial`, a fresh `leaseId` and a `timeout` in milliseconds; retain the acknowledged reservation and runtime identity.
 3. Appium session with the selected serial as `appium:udid`.
-4. Appium `quit`, followed by `DELETE /api/v1/user/devices/{serial}`.
-5. `GET /api/v1/user/devices` to verify that ownership was released.
+4. Appium `quit`, followed by the fenced `POST /api/v1/user/devices/{serial}/automation/release` for that lease.
+5. `GET /api/v1/user/devices` to verify that the original reservation was released.
+
+Direct capture requires a lease-capable STF server that acknowledges `leaseId`,
+`owner.reservationId` and `deviceChannel`. It never falls back to unconditional
+release on older servers. The timeout is a wall-clock lease limit, including
+while Appium is active; direct capture does not renew it. Set it above the test's
+maximum duration, or use the coordinator tasks for heartbeat renewal.
 
 The historical `/api/v1/autotests` allocation API is not used. Each smoke owns
 one phone; legacy `STF_AMOUNT`, `STF_NEED_AMOUNT` and group/run settings were

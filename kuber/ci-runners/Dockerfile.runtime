@@ -1,4 +1,0 @@
-# The foundation already contains the same dependency set and STF frontend.
-# This opt-in prototype image replaces only compiled server/CLI code and wire schema.
-FROM ghcr.io/mdub1na/stf@sha256:1a86ee64a11ab83141e2c81eed2d68075c2bbd44051e92a8e35e893eba5b1feb
-COPY --chown=1000:1000 lib/ /app/lib/

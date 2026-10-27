@@ -1412,6 +1412,8 @@ paths:
       responses:
         "200":
           description: Add User Device Status
+          schema:
+            $ref: "#/definitions/AddUserDeviceResponse"
         default:
           description: >
             Unexpected Error:
@@ -1448,7 +1450,7 @@ paths:
         "200":
           description: Device controlling is OK
           schema:
-            $ref: "#/definitions/Response"
+            $ref: "#/definitions/AddUserDeviceResponse"
         default:
           description: >
             Unexpected Error:
@@ -1506,6 +1508,18 @@ paths:
           description: Device Serial
           required: true
           type: string
+        - name: reservationId
+          in: query
+          description: Release only this reservation. Must be used with deviceChannel.
+          type: string
+          minLength: 1
+          maxLength: 128
+        - name: deviceChannel
+          in: query
+          description: Expected device runtime channel. Must be used with reservationId.
+          type: string
+          minLength: 1
+          maxLength: 512
       responses:
         "200":
           description: Delete User Device Status
@@ -1516,6 +1530,7 @@ paths:
             Unexpected Error:
               * 401: Unauthorized => bad credentials
               * 403: Forbidden => device is not controlled by the user
+              * 409: Conflict => device reservation changed
               * 404: Not Found => unknown device 
               * 500: Internal Server Error
               * 504: Gateway Time-out => device is not responding
@@ -2580,6 +2595,35 @@ definitions:
         type: string
       remoteConnectUrl:
         type: string
+  AddUserDeviceResponse:
+    allOf:
+      - $ref: "#/definitions/Response"
+      - type: object
+        required:
+          - owner
+          - deviceChannel
+        properties:
+          owner:
+            description: Owner acknowledged by the provider, including its generated reservation identity
+            type: object
+            properties:
+              email:
+                type: string
+              name:
+                type: string
+              group:
+                type: string
+              reservationId:
+                type: string
+          deviceChannel:
+            description: Runtime channel used for this capture
+            type: string
+          leaseId:
+            description: Exact requested automation lease fence, when supplied
+            type: string
+          automationRunner:
+            type: string
+            enum: [maestro]
   AddUserDevicePayload:
     description: payload object for adding device to user
     required:

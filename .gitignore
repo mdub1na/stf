@@ -6,6 +6,7 @@
 .python-version
 /*.tgz
 /.env
+/docker-compose.override.yaml
 /ios.local.json
 /node_modules/
 /res/build/
@@ -19,5 +20,4 @@ yarn.lock
 /lib/types/wire.d.ts
 /lib/types/stfservice-wire.d.ts
 /res/common/lang/translations/
-.runtime-overlay/
 /node_modules

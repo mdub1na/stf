@@ -23,7 +23,6 @@ export class IosBridge {
   readonly channel: string
   readonly solo = wireutil.makePrivateChannel()
   owner: IosOwner | null = null
-  usage: string | null = null
   private state: IosDeviceState | null = null
   private identity: InstanceType<typeof wire.DeviceIdentityMessage> | null = null
   private registered = false
@@ -35,6 +34,7 @@ export class IosBridge {
   private queue = Promise.resolve()
   private touch: {from: Point, to: Point, started: number} | null = null
   private multitouch = false
+  private touchGestureId: string | null = null
   private lease = randomUUID()
   private installId: string | null = null
   private lastObservation: IosDeviceState | null = null
@@ -70,6 +70,7 @@ export class IosBridge {
           }
           await grouputil.match({serial: options.serial}, message.requirements)
           this.join(message.owner, message.timeout, message.usage, message.leaseId)
+          return {owner: this.owner}
         })
       })
       .on(wire.AutomationLeaseMessage, (channel, message) => {
@@ -98,6 +99,9 @@ export class IosBridge {
       .on(wire.UngroupMessage, (channel, message) => {
         this.transaction(String(channel), async() => {
           await grouputil.match({serial: options.serial}, message.requirements)
+          if (message.reservationId && message.reservationId !== this.owner?.reservationId) {
+            throw new Error('Device session changed')
+          }
           this.leave('ungroup_request')
         })
       })
@@ -131,8 +135,15 @@ export class IosBridge {
           }
         }
       })
-      .on(wire.GestureStartMessage, () => this.resetTouch())
-      .on(wire.TouchResetMessage, () => this.resetTouch())
+      .on(wire.GestureStartMessage, (_channel, message) => {
+        this.resetTouch()
+        this.touchGestureId = message.gestureId || null
+      })
+      .on(wire.TouchResetMessage, (_channel, message) => {
+        if (!message.gestureId || message.gestureId === this.touchGestureId) {
+          this.resetTouch(!message.gestureId)
+        }
+      })
       .on(wire.TouchCommitMessage, () => null)
       .on(wire.GestureStopMessage, () => this.resetTouch())
       .on(wire.TypeMessage, (_channel, message) => this.command('/text', {text: message.text}))
@@ -234,9 +245,12 @@ export class IosBridge {
     }, true))
   }
 
-  private resetTouch() {
+  private resetTouch(keepGestureId = false) {
     this.touch = null
     this.multitouch = false
+    if (!keepGestureId) {
+      this.touchGestureId = null
+    }
   }
 
   private key(key: string) {
@@ -307,8 +321,7 @@ export class IosBridge {
     }
     if (!this.owner) {
       this.ownerAbort = new AbortController()
-      this.owner = owner
-      this.usage = usage || null
+      this.owner = {...owner, reservationId: randomUUID()}
       this.lease = randomUUID()
       this.epoch++
       // GroupMessage/API timeouts are milliseconds; the CLI fallback is seconds.
@@ -319,7 +332,7 @@ export class IosBridge {
         this.automationLease.start(owner.email, this.automationLeaseId,
           timeout || this.options.groupTimeout * 1000)
       }
-      this.broadcast(new wire.JoinGroupMessage(this.options.serial, owner, usage, leaseId))
+      this.broadcast(new wire.JoinGroupMessage(this.options.serial, this.owner, usage, leaseId))
     }
     this.keepalive()
   }
@@ -336,7 +349,6 @@ export class IosBridge {
     this.automationLease.clear()
     this.automationLeaseId = null
     this.owner = null
-    this.usage = null
     this.epoch++
     this.resetTouch()
     this.disconnect()

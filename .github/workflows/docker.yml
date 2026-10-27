@@ -18,6 +18,9 @@ concurrency:
   group: docker-${{ github.ref }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
+permissions:
+  contents: read
+
 jobs:
   standard:
     if: github.event_name != 'workflow_dispatch' || inputs.target != 'farm-ci'
@@ -50,7 +53,7 @@ jobs:
     name: Farm coordinator and CI worker images
     if: github.event_name == 'workflow_dispatch' && inputs.target == 'farm-ci'
     runs-on: ubuntu-24.04
-    timeout-minutes: 30
+    timeout-minutes: 60
     permissions:
       contents: read
       packages: write
@@ -58,13 +61,12 @@ jobs:
       - uses: actions/checkout@v7
       - uses: actions/setup-node@v7
         with:
-          node-version: '22.18.0'
+          node-version-file: '.nvmrc'
       - name: Check and package the standalone client
         run: |
           npm ci --prefix tools/test-runner --ignore-scripts --no-audit --no-fund
           npm test --prefix tools/test-runner
           node tools/test-runner/build.mjs
-          node tools/runtime-overlay/compile.mjs
       - name: Pack the worker client
         working-directory: tools/test-runner
         run: |
@@ -80,8 +82,8 @@ jobs:
         id: runtime
         uses: docker/build-push-action@v7
         with:
-          context: .runtime-overlay
-          file: kuber/ci-runners/Dockerfile.runtime
+          context: .
+          file: Dockerfile
           platforms: linux/amd64
           push: true
           tags: ghcr.io/${{ github.repository }}:farm-ci-${{ github.sha }}

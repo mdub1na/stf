@@ -72,7 +72,7 @@ test('npm package contains every standalone runtime module and executable bin', 
   finally { await temp.close() }
 })
 
-test('npm pack installed under node_modules executes help and a complete fake Appium lease', async() => {
+test('packed client installed offline with an empty cache runs help and a complete fake Appium lease', async() => {
   const temp = await directory()
   const api = await farm()
   const root = fileURLToPath(new URL('..', import.meta.url))
@@ -81,9 +81,24 @@ test('npm pack installed under node_modules executes help and a complete fake Ap
     const {stdout: packed} = await exec('npm', ['pack', '--ignore-scripts', '--json', '--pack-destination', temp.path],
       {cwd: root, timeout: 15000, maxBuffer: 131072})
     const artifact = join(temp.path, JSON.parse(packed)[0].filename)
+    const metadata = JSON.parse(await readFile(join(root, 'package.json'), 'utf8'))
+    const lock = JSON.parse(await readFile(join(root, 'package-lock.json'), 'utf8'))
+    const wsRoot = join(root, 'node_modules', 'ws')
+    const dependency = JSON.parse(await readFile(join(wsRoot, 'package.json'), 'utf8'))
+    assert.equal(dependency.version, lock.packages['node_modules/ws'].version)
+    assert.equal(dependency.version, metadata.dependencies.ws)
+    // npm ci caches the locked tarball, but not necessarily the registry metadata
+    // needed by a later offline install. Supply that dependency as a local archive.
+    const {stdout: packedWs} = await exec('npm', ['pack', wsRoot, '--ignore-scripts', '--offline',
+      '--json', '--pack-destination', temp.path], {cwd: root, timeout: 15000, maxBuffer: 131072})
+    const dependencyArtifact = join(temp.path, JSON.parse(packedWs)[0].filename)
     const prefix = join(temp.path, 'installed')
-    await exec('npm', ['install', '--prefix', prefix, artifact, '--offline', '--ignore-scripts', '--no-audit', '--no-fund'],
+    await exec('npm', ['install', '--prefix', prefix, artifact, dependencyArtifact,
+      '--offline', '--cache', join(temp.path, 'empty-install-cache'),
+      '--ignore-scripts', '--no-audit', '--no-fund'],
       {cwd: temp.path, timeout: 15000, maxBuffer: 131072})
+    const installedDependency = JSON.parse(await readFile(join(prefix, 'node_modules', 'ws', 'package.json'), 'utf8'))
+    assert.equal(installedDependency.version, dependency.version)
     const bin = join(prefix, 'node_modules', '.bin', 'stf')
     const help = await exec(process.execPath, [bin, 'utils', 'test', 'run', '--help'], {timeout: 5000})
     assert.match(help.stdout, /stf utils test run/)

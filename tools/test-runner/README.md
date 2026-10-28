@@ -5,8 +5,10 @@ STF coordinator lease. It supports Appium on Android/iOS and Maestro on physical
 Android. Test source, builds and reports remain in the application's CI project.
 The coordinator owns device allocation, global concurrency and cleanup.
 
-The package supplies the `stf utils test run` command without installing the STF
-server. Node.js 22.18 or newer is required. Dependencies are locked; prepare a
+The package installs its own `stf` executable with `stf utils test run`; the STF
+server executable does not provide this namespace. From this package directory,
+run `npm run build` and use `node stf.mjs utils test run --help` to check the local
+client. Node.js 22.18 or newer is required. Dependencies are locked; prepare a
 worker image with `npm ci --ignore-scripts --omit=optional` in this directory.
 `npm run build` converts the TypeScript sources to plain `.mjs` using Node's
 built-in stripper; no STF or TypeScript compiler dependency is required.
@@ -18,7 +20,9 @@ implied by adding this package; CI images should pin their source/image digest.
 
 Provide `FARM_URL` and a project-scoped `FARM_TOKEN_FILE` (private regular file,
 owned by the worker user; mode 0600 or 0400). `FARM_TOKEN` is supported for CI secret
-variables. Never pass a token as a CLI argument. `COORDINATOR_URL`,
+variables. Each repository should have its own project identity and quota; keep
+the coordinator operator credential out of job variables. Never pass a token as
+a CLI argument. `COORDINATOR_URL`,
 `COORDINATOR_TOKEN_FILE` and `COORDINATOR_TOKEN` are compatibility aliases.
 
 ```sh
@@ -154,6 +158,9 @@ npm test
 ../../node_modules/.bin/tsc -p tsconfig.json --noEmit
 npm pack --dry-run
 ```
+
+The installed-package regression uses local dependency archives and an empty
+npm cache, so it does not depend on pre-warmed registry metadata.
 
 Tests use isolated loopback fake APIs and transports. They cover ordinary Appium
 requests, binary/multiple Maestro connections, occupied-port protection,

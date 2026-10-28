@@ -101,13 +101,13 @@ GitLab OAuth replaced it on 2026-10-05. GitLab login created the approved accoun
 only that account's role was changed to `admin`, with the original administrator
 preserved. The user confirmed browser login and logout; administrator UI access awaits
 confirmation.
-OAuth callback/state/PKCE/cookie checks passed; Grid remains ready with 16 UP
-nodes and zero sessions.
+OAuth callback/state/PKCE/cookie checks passed during the 2026-10-05 cutover;
+Grid then reported 16 UP nodes and zero sessions.
 New-domain redirect, JS/logo loading,
 WebSocket handshake, `/auth/contact` database access and temporary file
 upload/download passed. An unauthenticated `GET /api/v1/devices` returned `401`.
-An explicit authenticated REST API token request and connected-device test
-execution remain unverified.
+For authenticated device checks, use the [Appium harness](../appium-tests/README.md)
+with a token supplied outside Git.
 
 ## Accounts And Credential Locations
 
@@ -191,9 +191,10 @@ adb -H 127.0.0.1 -P 15037 devices -l
 adb -H 127.0.0.1 -P 15038 devices -l
 ```
 
-The initial cutover had no connected Android phones. On 2026-10-18 both ADB
-pools reported six phones in total, and real Appium Settings sessions passed
-on each; see the [Appium setup guide](../appium-tests/README.md).
+Use these lists together with STF device presence and readiness when selecting
+a phone. An available ADB server or Grid relay does not imply that a phone is
+connected. The [Appium harness](../appium-tests/README.md) provides opt-in checks
+for both provider pools.
 
 ## Appium Grid Layout
 
@@ -210,14 +211,13 @@ Appium on pod-local port `4733`. Native and Chrome stereotypes share
 per pod. Port ranges are scoped to each ADB server; concurrent sessions sharing
 an ADB server need distinct `appium:systemPort` values.
 
-On 2026-10-18 the operator requested seven Android nodes and three iOS nodes.
-All three Linux iPhone runtimes now have an Appium sidecar and a dedicated
-single-session Grid relay. Current capacity is **7 Android + 3 iOS**; all ten
-nodes report UP. Generated resources and rollback are described in
-[the node runbook](../appium-tests/ios-node/README.md).
+The GitOps overlay configures **7 Android relays**. Linux iOS Appium sidecars
+and single-session relays are generated separately for each configured phone;
+the farm configuration includes three iOS relays. Check STF presence/readiness
+and the matching relay before allocating a phone. Generated resources and
+rollback are described in [the node runbook](../appium-tests/ios-node/README.md).
 
-The earlier Grid `/status` check returned `ready=true`, 16 nodes `UP` (8 per pool),
-and zero active sessions. The control-plane services in namespace `appium` are:
+The control-plane services in namespace `appium` are:
 
 | Service | Ports |
 | --- | --- |
@@ -227,19 +227,21 @@ and zero active sessions. The control-plane services in namespace `appium` are:
 | `appium-grid-session-queue` | `5559` |
 | `appium-grid-event-bus` | `4442`, `4443` |
 
-Kotlin/Gradle tests use standard STF capture/release endpoints; see
-[`../appium-tests/README.md`](../appium-tests/README.md). Android Settings passed
-18/18 sequential runs on six connected phones across both ADB pools on
-2026-10-18. The initial Linux iOS sidecar/relay passed three final Grid runs with
-concurrent STF viewing, followed by registration of the two other iPhones. See the
-[Appium setup guide](../appium-tests/README.md).
+Kotlin/Gradle smoke tests use standard STF capture/release endpoints; see
+[the harness instructions](../appium-tests/README.md). Each task reserves one
+phone and checks Appium teardown before releasing ownership.
+Coordinator-mode tasks delegate allocation, heartbeat renewal and cleanup to
+the optional [device lease coordinator](../../doc/coordinator.md).
 
-Appium reconciliation is temporarily paused with the Application annotation
-`argocd.argoproj.io/skip-reconcile: "true"` while the capacity and ingress changes
-are pending in the Appium PR. This prevents `develop` from restoring 16 Android
-nodes. After merging the PR, remove this annotation from `argocd/appium` and
-verify synchronization, seven Android replicas and three private iOS relays.
-The iOS preview resources are applied separately, outside the Appium GitOps tree.
+When live capacity is changed before GitOps, keep reconciliation paused with
+`argocd.argoproj.io/skip-reconcile: "true"` until the matching configuration
+reaches `develop`. Before removing the annotation from `argocd/appium`, compare
+the rendered resources with the live deployment. Confirm the `4+3` Android
+replicas and preserve both Appium ingress resources, including the retained
+`appium-grid.putmyhexon.ru` route and TLS Secret. If the plan requires a pod
+rollout, wait for its active Grid sessions to finish before resuming
+reconciliation. Verify synchronization afterward. Per-phone iOS resources are
+applied separately, outside the Appium GitOps tree.
 
 ## Argo CD And Installed Components
 
@@ -288,7 +290,8 @@ Persistent volumes use `local-path`, with these PVCs all `Bound`:
 The STF Certificate `stf-finservice-tech-tls` is `Ready=True`, expiring on
 2027-01-03. Other ingress Certificates were Ready with expiration on 2027-01-02
 at the original inventory check.
-Their TLS Secrets are `appium/appium-grid-putmyhexon-ru-tls`,
+Their TLS Secrets include `appium/appium-grid-finservice-tech-tls`,
+`appium/appium-grid-putmyhexon-ru-tls`,
 `argocd/argocd-putmyhexon-ru-tls`, `stf/stf-finservice-tech-tls` and
 `openldap/ldap-putmyhexon-ru-tls`. ACME issuer/account key name in each ingress
 namespace is `letsencrypt-http` / `letsencrypt-http-account-key`.
@@ -297,10 +300,10 @@ namespace is `letsencrypt-http` / `letsencrypt-http-account-key`.
 
 - SSH/sudo access to the three Kubernetes servers is deferred. No host update,
   reboot, Proxmox change or Mac mini change was performed during STF deployment.
-- Connected-device screen/touch, capture/release and APK tests await Android
-  devices. Both ADB/provider pairs and the 16-node Grid are reachable.
-- A new authenticated STF API token check and Java client adaptation remain
-  separate tasks; legacy allocation APIs and old tokens are not compatible.
+- Verify connected-device behavior with explicit opt-in tests; Grid `/status`
+  alone does not validate input, app installation or reservation cleanup.
+- Supply a current STF API token for client checks. The harness uses standard
+  STF endpoints rather than the historical `/api/v1/autotests` allocation API.
 - Back up k3s, LDAP, RethinkDB and the bootstrapped Secrets before maintenance.
   The kubeconfig and join token stay outside the repository.
 - Router/NAT administration and external host credentials remain unverified.

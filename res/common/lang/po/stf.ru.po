@@ -2684,6 +2684,7 @@ msgstr "Освободить устройство в STF? Внешний сеа�
 msgid "Stop Automation"
 msgstr "Остановить автоматизацию"
 
+
 #: res/app/src/features/control/ControlPage.tsx
 msgid "Stop this automation from its test runner."
 msgstr "Остановите эту автоматизацию через программу запуска теста."

@@ -224,6 +224,19 @@ describe('Linux iOS integration', function() {
       await f.join(900000, 'automation', 'lease-second')
       const second = f.bridge.owner!.reservationId
       assert.ok(first && second && second !== first)
+      const latestJoin = f.sent.filter(item =>
+        item.envelope.type === wire.JoinGroupMessage.$code).at(-1)!
+      assert.equal(wire.JoinGroupMessage.decode(latestJoin.envelope.message).usage, 'automation')
+      const gesture = f.gesture(1)
+      f.send(new wire.TouchDownMessage({seq: 1, contact: 0, x: 0.3, y: 0.4, ...gesture}))
+      f.send(new wire.GestureStartMessage({seq: 0, ...gesture}))
+      f.send(new wire.TouchUpMessage({seq: 2, contact: 0, ...gesture}))
+      f.send(new wire.GestureStopMessage({seq: 3, ...gesture}))
+      await until(() => f.requests.some(request => request.path === '/tap'))
+      const tap = f.requests.find(request => request.path === '/tap')!.body
+      assert.equal(tap.reservationId, second)
+      assert.equal(tap.gestureId, gesture.gestureId)
+      assert.ok(Math.abs(tap.x - 0.3) < 1e-6 && Math.abs(tap.y - 0.4) < 1e-6)
       const replyCount = replies().length
       f.send(new wire.AutomationLeaseMessage(serial, owner, 'lease-first', 'release'), true)
       await until(() => replies().length === replyCount + 1)

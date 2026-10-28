@@ -1,7 +1,7 @@
 # STF coordinator prototype
 
 `stf coordinator` runs a separate STF process for trusted internal test workers.
-One instance owns a request queue, renewable device leases and a lease-scoped
+One instance owns a request queue, renewable device leases and lease-scoped
 Appium/ADB gateways. Workers keep test scenarios, assertions and reports. STF keeps
 its device inventory, access groups and live viewer. Appium Grid keeps its
 WebDriver routing and node slots.
@@ -144,7 +144,9 @@ slow operations and heartbeat execution consistent. A long test can use many
 commands over hours; a long period with no commands may still terminate its
 Appium session. The prototype gateway controls the Appium idle capability.
 
-The current farm has one STF processor. Ownership persistence acknowledgements are ordered per device in that processor; scaling processors requires a separate ordering review.
+Ownership persistence acknowledgements are ordered per device within a processor.
+Use one processor for this prototype; distributing ownership transitions across
+several processors requires a separate ordering review.
 
 Durable state transitions are serialized, while STF/Grid network calls run
 outside that state queue. Allocations and cleanup on separate devices can run
@@ -188,6 +190,11 @@ two processes against one state file or overlapping device/port pools. A missing
 or discarded state file must not be used to justify handing out phones from an
 interrupted run. Investigate upstream ownership/sessions before a deliberate
 state reset. A corrupt state file prevents safe startup.
+The loader accepts state v1 and v2. It preserves existing requests and leases,
+adds an empty maintenance list when loading v1, and writes v2 from then on.
+Version 2 persists device drains across restarts. An older v1-only runtime
+rejects this file. Keep the current state and use a reviewed migration for any
+rollback; never restore an earlier snapshot over newer lease history.
 The prototype retains request/lease history in this file. New requests are
 rejected after 10000 saved requests; automatic history retention/compaction is
 future work. Reusing an existing idempotency key still reads its original
@@ -196,15 +203,18 @@ request. Do not remove history or replace the state file during live leases.
 ## API
 
 All `/api/v1` routes require authentication. They accept
-`Authorization: Bearer <coordinator API token>` or HTTP Basic with username
-`coordinator` and the same token as password. Basic authentication supports
+`Authorization: Bearer <operator or project token>` or HTTP Basic with username
+`coordinator` and that credential as password. Basic authentication supports
 clients such as Appium Java Client at the WebDriver gateway. Use TLS for
 remote access; loopback port-forward is suitable for a local prototype.
 
-The worker token is a separate secret from the STF service-account token.
-Workers never need the STF token. Every authenticated prototype worker has the
-same internal principal and can inspect/cancel the shared queue and leases;
-restrict distribution of this token accordingly.
+Worker credentials are separate from the STF service-account token, which stays
+with the coordinator. A project credential can inspect, cancel and command only
+its project's requests and leases, subject to that project's concurrency quota.
+Foreign request/lease IDs return 404. The operator credential from
+`--api-token-file` can inspect every project and recover quarantined leases;
+requests submitted with it belong to the `legacy` project. Do not give the
+operator credential to CI jobs. Project credentials cannot call recovery (403).
 
 | Method | Route | Result |
 |---|---|---|
@@ -219,6 +229,9 @@ restrict distribution of this token accordingly.
 | POST | `/api/v1/leases/:id/renew` | Renew with `{}`; returns lease |
 | DELETE | `/api/v1/leases/:id` | 202 and lease cleanup state |
 | POST | `/api/v1/leases/:id/recover` | Retry cleanup of a quarantined lease with `{}` |
+| POST | `/api/v1/maintenance` | Operator-only durable iOS drain with `{serial, operationId}` |
+| GET | `/api/v1/maintenance/:id` | Operator-only drain status |
+| DELETE | `/api/v1/maintenance/:id` | Operator-only completion after fresh device/signing/Grid checks |
 | POST | `/api/v1/leases/:id/webdriver/session` | Create the lease's single W3C session |
 | any | `/api/v1/leases/:id/webdriver/session/:sessionId/...` | Forward only that lease's session commands |
 
@@ -309,6 +322,9 @@ smoke tasks remain supported for controlled diagnostics.
 Build from the repository with its supported Node.js version, then prepare
 private files outside the checkout. The examples never print token contents.
 The STF account token file is obtained through normal STF account management.
+The example below prepares the operator credential for local inspection. For CI,
+configure a separate project token in `--project-tokens-file` and give workers
+only that project credential.
 
 ```sh
 node build.mts compile
@@ -373,6 +389,13 @@ Before applying, review a rendered private overlay with the immutable image,
 real pool mapping and worker-reachable public URL. Set explicit kubeconfig and
 context for every cluster operation; the shell's default cluster may be unrelated.
 
+This runtime reads v1/v2 state and writes v2. Preserve the existing PVC across
+the upgrade. Do not roll back to a v1-only image on that PVC: it cannot load v2
+or enforce its maintenance drains. A reverse migration requires stopped
+admission, no queued or held work, no drains and a reviewed conversion of the
+current state that retains all request/lease history. Keep rollback experiments
+isolated from the farm PVC.
+
 1. Deploy and verify the matching fenced STF API/processor/providers. Save the
    prior immutable images and resource configuration for rollback.
 2. Create namespace `stf` if it does not already exist, and create
@@ -412,55 +435,27 @@ labelled `stf-coordinator-access=allowed`. Egress permits cluster DNS, STF API
 TCP3000 and Grid router TCP4444. No direct ADB connection is needed from the
 coordinator. Adapt these exact selectors if upstream URLs or cluster DNS differ.
 
-## Validation record
+## Checking the prototype
 
-The prototype was exercised on the farm on 2026-10-18 with coordinator source
-`faec4cace8e92032db2afaa2aee806973db6f71b` and immutable image
-`ghcr.io/mdub1na/stf@sha256:1a86ee64a11ab83141e2c81eed2d68075c2bbd44051e92a8e35e893eba5b1feb`.
-The fenced API/processor/providers used source `5ab96333`; their fenced protocol
-code is unchanged in the coordinator image. The deployment additionally disables
-service-link environment injection as described above.
+Use the supported Node.js version, JDK 17 or later, and `kubectl` with Kustomize.
+Run the device-free server, worker-client and shared WDA regressions:
 
-- All 55 coordinator CLI, state, engine and HTTP regression tests passed. The
-  complete unit suite, lint/type checks and production build also passed;
-  Kotlin's 25 device-free regression tests passed in the harness workflow.
-- The real CLI and two real Kotlin workers passed against local STF/Grid
-  fixtures, including authentication rejection, a forced process crash,
-  retained queued work and cleanup of the exact tagged session.
-- Direct fenced capture/renew/release passed on a physical Android and iPhone.
-  Stale lease requests returned 409 and preserved current ownership.
-- Three independent Kotlin workers passed physical Settings scenarios: two
-  Android workers concurrently and an iOS worker waiting in the queue. The
-  coordinator held at most two leases. The Android workers shared one remote
-  ADB host and used distinct system ports. All three leases reached `released`.
-- The hardware run used worker TTL15 seconds and heartbeat every three seconds.
-  Renewals kept each run alive for substantially longer than its initial TTL.
-  The entire demonstration took about 183 seconds. The largest observed time
-  for a pair of sequential local status/lease reads was 0.298 seconds; this is
-  a small-run observation, not a load benchmark.
-- Stopping heartbeat with a live physical Android Appium session produced
-  gateway 409, terminal `expired`, no matching Grid session and a free STF
-  device. A subsequent lease was unaffected by the old lease's STF
-  renew/release and coordinator renew requests, all of which returned 409.
-  This proves end-to-end HTTP fencing; the rejecting internal layer is not
-  inferred from those HTTP responses.
-- A temporary shell supervisor allowed SIGKILL of the exact coordinator child
-  while a physical Appium session was active. Kubernetes restarted the same
-  container once; persisted state recovery expired the old lease, removed its
-  session and freed STF ownership in about three seconds. No manual cleanup or
-  quarantine reset was needed. The ordinary `stf coordinator` command was
-  restored after the exercise.
+```sh
+npm test
+(cd kuber/appium-tests && ./gradlew test --console=plain)
+node --test kuber/appium-tests/ios-node/*.test.mjs
+kubectl kustomize kuber/coordinator
+```
 
-The running preview retains one replica, a persistent state volume, a maximum
-of two concurrent leases, worker TTL180/heartbeat30 seconds, a six-hour absolute
-lease ceiling and upstream timeout120 seconds. Its returned worker URL is
-`http://127.0.0.1:18080` for the local port-forward demonstration. Cluster CI
-workers need an appropriate reachable `--public-url` before new allocations.
+For hardware checks, start the coordinator with private credentials, an isolated
+state file and an explicit device/port pool. Run the opt-in Kotlin coordinator
+Settings tasks described in the [worker guide](../kuber/appium-tests/README.md#coordinator-prototype).
+Check allocation, queue waiting, independent heartbeats, cancellation and
+recovery; verify terminal leases, Grid session removal, STF ownership release
+and port reuse after each run. Test stale renew/release requests against a
+replacement lease as well.
 
-These short runs do not establish multi-hour reliability, large-queue throughput
-or fairness under sustained contention. There was no multi-hour soak test.
-Final health checks found one ready coordinator replica, no held or queued
-leases, all ten Grid nodes UP with zero sessions, and seven present/ready STF
-devices with no owners. The two absent Android devices predated this rollout.
-Real response snapshots, device identifiers, credentials and detailed logs stay
-in private operator storage rather than this repository.
+Fixture checks and short Settings runs do not establish multi-hour reliability,
+large-queue throughput or fairness under sustained contention. Record those
+measurements separately. Keep response snapshots, real device identifiers,
+credentials and detailed logs in private operator storage.

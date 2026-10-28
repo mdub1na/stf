@@ -1,7 +1,8 @@
 # Personal Team WDA renewal
 
-Run `renew.py` on demand to sign WebDriverAgent on a Mac and replace it on an
-idle Linux USB device. It keeps the same runner bundle ID and signing identity.
+Run `renew.py` on demand to sign WebDriverAgent (WDA) on a Mac and replace it
+on an idle iPhone in a Linux Kubernetes deployment. It keeps the same runner
+bundle ID and signing identity.
 Signing keys stay in the Mac Keychain. Linux receives only a verified signed
 application. The command makes one pass and exits; it installs no background
 service, monitoring process or schedule.
@@ -12,6 +13,40 @@ and reinstalling the application; replacing a profile file alone is insufficient
 Xcode account authentication, two-factor authentication, agreements, a locked
 Keychain or device trust may still require a person. A failed attempt remains
 visible in the private status file and never becomes a successful renewal.
+
+## Quickstart
+
+You need a Mac with Python 3, Git, `kubectl`, Xcode and the existing signing
+account/Keychain. The iPhone must already have trusted, signed WDA. The worker
+expects the [four-container iOS deployment](../../kuber/appium-tests/ios-node/README.md),
+with the selected runner image pinned by digest and its usbmuxd socket mounted.
+Other provider layouts need an adapter; this worker does not install into a
+standalone Docker or native provider.
+
+1. Deploy the [coordinator](../../doc/coordinator.md) and matching fenced
+   providers. Keep its current state/PVC and review the v2 migration below.
+   The kubeconfig needs permission to inspect, execute in and scale the selected
+   Deployments, and create/delete the temporary installer pod.
+2. Prepare the private pinned WDA checkout and signer configuration from
+   [SIGNER.md](SIGNER.md), then the worker and renewal configuration below.
+   Keep the previous accepted profile as the signing baseline. Start with one
+   available phone and review its namespace, Deployment and bundle ID.
+3. From the STF checkout, run one renewal pass:
+
+```sh
+python3 tools/wda-renewal/renew.py --config /secure/wda/config/renew.json
+```
+
+Read the last result without connecting to the farm:
+
+```sh
+python3 tools/wda-renewal/renew.py --config /secure/wda/config/renew.json --status
+```
+
+`--status` requires an existing saved result. It does not check the current
+phone or trigger a renewal. The command returns zero when every target was
+renewed or confirmed `notDue`; failed, offline or manually occupied targets
+produce a nonzero result. The Mac is needed only while the command runs.
 
 ## Lifecycle
 
@@ -77,7 +112,7 @@ stopped admission, no held/queued operations, an empty drain list and a reviewed
 reverse migration of the **current** state that preserves all records. Never
 restore an old backup over history created after the upgrade.
 
-## Private configuration and manual command
+## Private configuration
 
 Keep configuration, source cache, profiles, artifacts, logs and journals outside
 Git. Use directories `0700` and JSON/profile/archive files `0600`. Account IDs,
@@ -124,25 +159,9 @@ Renewal command configuration:
 }
 ```
 
-Before the first renewal, deploy the reviewed coordinator runtime and test one
-signed artifact on one available phone. The existing provider must support
-fenced automation lease IDs. Do not place Apple credentials in a Kubernetes
-Secret or farm CI job to make this work.
-
-```sh
-python3 tools/wda-renewal/renew.py --config /secure/wda/config/renew.json
-python3 tools/wda-renewal/renew.py --config /secure/wda/config/renew.json --status
-```
-
-The first command runs the whole operation and exits. `--status` only reads the
-last saved result; it does not query or monitor the farm. Exit status is zero
-when every configured phone was renewed or confirmed `notDue`; failures,
-offline phones and manual occupancy return nonzero with explicit counts.
-
-The Mac needs Xcode, its signing account/Keychain and access to the farm only
-while this command runs. It can be disconnected or switched off afterward.
-Run the command again when renewal is needed. No LaunchAgent, `caffeinate`,
-periodic loop or global power setting is installed.
+Keep Apple credentials in the Mac account/Keychain; do not copy them into a
+Kubernetes Secret or farm CI job. Run the command again when renewal is needed.
+No LaunchAgent, `caffeinate`, periodic loop or global power setting is installed.
 
 Keep the existing `stateDirectory` when upgrading an earlier installation. The
 internal `service-state.json` filename is retained for baseline and interrupted
@@ -167,5 +186,7 @@ A real signing build, installation, fresh telemetry and Appium CI smoke must be
 recorded separately; fixture tests cannot prove Apple authentication or USB
 availability.
 
-See the [2026-10-23 hardware validation](validation-2026-10-23.md) for the first
-real renewal, recovery evidence and the subsequent one-shot command validation.
+The [2026-10-23 hardware record](validation-2026-10-23.md) describes an earlier
+renewal on one iPhone 14 Plus. It does not validate the refreshed branch or the
+two phones that were offline during that trial. Repeat the hardware check after
+changing the coordinator, runtime, signer or worker.

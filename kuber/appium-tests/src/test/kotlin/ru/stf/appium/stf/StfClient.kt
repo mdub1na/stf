@@ -26,7 +26,10 @@ data class CapturedDevice(
   val model: String,
   val platform: String,
   val version: String,
-  val provider: String
+  val provider: String,
+  val reservationId: String = "",
+  val deviceChannel: String = "",
+  val leaseId: String = ""
 )
 
 data class DeviceSelector(
@@ -90,7 +93,10 @@ class StfClient(
             identity.reservationId.isNotBlank() && identity.deviceChannel.isNotBlank()) {
             "STF did not acknowledge the reservation identity; a lease-capable STF server is required"
           }
-          return StfReservation(device) { release(identity) }
+          val captured = device.copy(
+            reservationId = identity.reservationId, deviceChannel = identity.deviceChannel, leaseId = identity.leaseId
+          )
+          return StfReservation(captured) { release(identity) }
         } catch (error: StfRequestException) {
           if (error.status != 403 && error.status != 409) throw error
         }

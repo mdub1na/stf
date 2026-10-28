@@ -100,13 +100,32 @@ class StfClientTest {
 
   @Test
   fun `uses a fresh bounded lease and the acknowledged runtime instead of the discovery snapshot`() = FakeStf().use { server ->
-    server.client.capture(DeviceSelector("Android"), 42_000, Duration.ZERO).use { }
+    server.client.capture(DeviceSelector("Android"), 42_000, Duration.ZERO).use { reservation ->
+      assertEquals(server.lastLeaseId, reservation.device.leaseId)
+      assertEquals("reservation-1", reservation.device.reservationId)
+      assertEquals("runtime:android", reservation.device.deviceChannel)
+    }
     assertTrue(server.lastLeaseId.matches(Regex("[a-f0-9-]{36}")))
     assertEquals(server.lastLeaseId, server.lastReleaseLeaseId)
     assertEquals(42_000, server.lastTimeout)
     assertTrue(server.paths.contains("/api/v1/user/devices/android/automation/release"))
     assertFalse(server.methods.contains("DELETE"))
     assertFalse(server.paths.any { it.endsWith("/renew") })
+  }
+
+  @Test
+  fun `generates a new lease UUID for each capture by the same account`() = FakeStf().use { server ->
+    val first = server.client.capture(DeviceSelector("Android"), wait = Duration.ZERO)
+    val firstId = first.device.leaseId
+    first.close()
+    val second = server.client.capture(DeviceSelector("Android"), wait = Duration.ZERO)
+    val secondId = second.device.leaseId
+    assertNotEquals(firstId, secondId)
+    assertEquals(4, java.util.UUID.fromString(firstId).version())
+    assertEquals(4, java.util.UUID.fromString(secondId).version())
+    second.close()
+    assertEquals(2, server.releaseCalls)
+    assertFalse(server.methods.contains("DELETE"))
   }
 
   @Test

@@ -36,11 +36,11 @@ finally {
   restoreDb()
 }
 
-function fixture(leaseId = 'new-lease') {
+function fixture(leaseId: string | null = 'new-lease') {
   unlockDevice.resetHistory()
   const channelRouter = new EventEmitter()
   const push = {send: sinon.spy()}
-  const req = {body: {serial: 'device', timeout: 42000, leaseId}
+  const req = {body: {serial: 'device', timeout: 42000, ...(leaseId ? {leaseId} : {})}
     , user: {email: 'runner@example.test', name: 'Runner', group: 'runner-group'
       , privilege: 'user', groups: {subscribed: ['visible-group']}}
     , options: {channelRouter, push}}
@@ -49,7 +49,7 @@ function fixture(leaseId = 'new-lease') {
     body = JSON.parse(JSON.stringify(value))
     return response
   }}
-  function joined(id: string, reservationId: string) {
+  function joined(id: string | null, reservationId: string) {
     channelRouter.emit(wireutil.global, Buffer.from(wireutil.global), wireutil.envelope(
       new wire.JoinGroupMessage('device', {
         email: req.user.email, name: req.user.name, group: req.user.group, reservationId
@@ -69,6 +69,25 @@ async function until(check: () => boolean) {
 }
 
 describe('device capture acknowledgment API', function() {
+  it('returns reservation identity for legacy capture without adding a lease', async function() {
+    const f = fixture(null)
+    f.capture()
+    await until(() => f.push.send.calledOnce)
+    const [channel, bytes] = f.push.send.firstCall.args[0]
+    assert.equal(channel, 'runtime-one')
+    const envelope = wire.Envelope.decode(bytes)
+    assert.equal(wire.GroupMessage.decode(envelope.message).leaseId, null)
+    f.joined('older-managed-lease', 'old-reservation')
+    assert.equal(f.body(), null, 'A managed capture cannot acknowledge a legacy request')
+    f.joined(null, 'legacy-provider-reservation')
+    assert.deepEqual(f.body(), {success: true, description: 'Device successfully added'
+      , owner: {email: 'runner@example.test', name: 'Runner', group: 'runner-group'
+        , reservationId: 'legacy-provider-reservation'}
+      , deviceChannel: 'runtime-one'})
+    assert.equal(f.channelRouter.listenerCount(wireutil.global), 0)
+    assert.equal(unlockDevice.callCount, 1)
+  })
+
   it('returns the provider reservation and exact lease after acknowledgment', async function() {
     const f = fixture()
     f.capture()

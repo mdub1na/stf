@@ -270,9 +270,10 @@ The matching STF build extends capture with `leaseId` and adds:
 
 `timeout` is milliseconds on Android and iOS. Provider acknowledgement verifies
 both the owner and exact lease ID. A stale worker under the same STF account
-cannot renew or release a newer lease. Existing direct capture/release paths
-remain available for legacy clients, so only coordinator-managed runs receive
-the coordinator's full queue, port and session lifecycle guarantees. Deploy
+cannot renew or release a newer lease. The included direct Kotlin client also
+uses a fresh lease ID and verifies the acknowledged reservation and runtime
+channel before cleanup. Legacy endpoints remain available; only coordinator-managed
+runs receive the coordinator's queue, port and session lifecycle guarantees. Deploy
 matching API, processor, Android device and iOS provider support before using
 coordinator reservations.
 

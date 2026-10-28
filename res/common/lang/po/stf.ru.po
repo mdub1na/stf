@@ -202,13 +202,19 @@ msgstr "Вы уверены, что хотите перезагрузить ус
 msgid "Auto Scroll"
 msgstr "Автопрокрутка"
 
-#: res/app/src/core/devices/enhance.ts:28
-msgid "Automating"
-msgstr "Автоматизация"
+#: res/app/src/core/devices/enhance.ts:16
+#: res/app/src/core/devices/enhance.ts:29
+#: res/app/src/features/control/ControlPage.tsx:315
+msgid "Automated"
+msgstr "Automated"
 
 #: res/app/src/features/control/ControlPage.tsx:73
 msgid "Automation"
 msgstr "Автоматизация"
+
+#: res/app/src/features/control/ControlPage.tsx:315
+msgid "Automation finished"
+msgstr "Автотест завершён"
 
 #: res/app/src/core/devices/enhance.ts:27
 msgid "Available"
@@ -435,11 +441,15 @@ msgid "Cores"
 msgstr "Ядер"
 
 #: res/app/src/features/control/panes/dashboard/ios-controls/IosControlsCard.tsx:34
-msgid "Could not change the screen lock. Check the iPhone connection and try again."
+msgid ""
+"Could not change the screen lock. Check the iPhone connection and try again."
 msgstr "Не удалось изменить блокировку экрана. Проверьте подключение iPhone и повторите попытку."
 
 #: res/app/src/features/control/panes/dashboard/ios-controls/IosControlsCard.tsx:48
-msgid "Could not shake the iPhone. Keep it unlocked and use the standard AssistiveTouch menu in English or Russian. Release and reconnect the device if the session ended."
+msgid ""
+"Could not shake the iPhone. Keep it unlocked and use the standard "
+"AssistiveTouch menu in English or Russian. Release and reconnect the device "
+"if the session ended."
 msgstr "Не удалось потрясти iPhone. Оставьте его разблокированным и используйте стандартное меню AssistiveTouch на русском или английском языке. Если сеанс завершён, освободите устройство и подключитесь заново."
 
 #: res/app/src/features/control/panes/info/InfoPane.tsx:283
@@ -577,6 +587,10 @@ msgstr "Имя устройства"
 #: res/app/src/features/settings/devices/DevicesSettings.tsx:52
 msgid "Device notes state"
 msgstr "Наличие записей у устройства"
+
+#: res/app/src/features/control/screen/DeviceScreen.tsx:31
+msgid "Device offline"
+msgstr "Устройство недоступно"
 
 #: res/app/src/features/control/panes/info/InfoPane.tsx:175
 msgid "Device Photo"
@@ -1003,7 +1017,8 @@ msgid "Installation failed due to an unknown error."
 msgstr "Установка не удалась по неизвестной причине."
 
 #: res/app/src/core/install.ts:270
-msgid "Installation status is unavailable. Check the status again before retrying."
+msgid ""
+"Installation status is unavailable. Check the status again before retrying."
 msgstr "Статус установки недоступен. Проверьте его ещё раз перед повторной установкой."
 
 #: res/app/src/core/install.ts:156
@@ -1511,7 +1526,9 @@ msgid "Power off iPhone"
 msgstr "Выключить iPhone"
 
 #: res/app/src/features/control/panes/dashboard/ios-controls/IosControlsCard.tsx:107
-msgid "Power off this iPhone? Control will end. Turning it on again requires physical access."
+msgid ""
+"Power off this iPhone? Control will end. Turning it on again requires "
+"physical access."
 msgstr "Выключить этот iPhone? Управление завершится. Для повторного включения нужен физический доступ к телефону."
 
 #: res/app/src/features/control/panes/info/InfoPane.tsx:203
@@ -1610,6 +1627,10 @@ msgstr "Действительно удалить этого пользоват�
 msgid "Recents"
 msgstr "Недавние"
 
+#: res/app/src/features/control/screen/DeviceScreen.tsx:30
+msgid "Reconnecting…"
+msgstr "Переподключение…"
+
 #: res/app/src/features/settings/groups/GroupDetail.tsx:86
 #: res/app/src/features/settings/users/CreateUserForm.tsx:61
 msgid "Regex syntax"
@@ -1703,7 +1724,9 @@ msgid "Restart iPhone"
 msgstr "Перезагрузить iPhone"
 
 #: res/app/src/features/control/panes/dashboard/ios-controls/IosControlsCard.tsx:108
-msgid "Restart this iPhone? Control will end. After startup, iOS may require the first unlock on the phone."
+msgid ""
+"Restart this iPhone? Control will end. After startup, iOS may require the "
+"first unlock on the phone."
 msgstr "Перезагрузить этот iPhone? Управление завершится. После запуска iOS может потребовать первую разблокировку на самом телефоне."
 
 #: res/app/src/features/control/screen/DeviceScreen.tsx:167
@@ -1791,6 +1814,10 @@ msgstr "Расписание"
 msgid "Screen"
 msgstr "Экран"
 
+#: res/app/src/features/control/screen/DeviceScreen.tsx:32
+msgid "Screen disconnected"
+msgstr "Видеопоток прерван"
+
 #: res/app/src/features/control/panes/screenshots/ScreenshotsPane.tsx:58
 #: res/app/src/features/control/panes/screenshots/ScreenshotsPane.tsx:75
 msgid "Screenshot"
@@ -1865,7 +1892,9 @@ msgid "Settings cleared"
 msgstr "Настройки сброшены"
 
 #: res/app/src/ui/IosDeviceHealth.tsx:79
-msgid "Several WDA profiles match this device. The earliest expiry is shown; verify the installed build."
+msgid ""
+"Several WDA profiles match this device. The earliest expiry is shown; verify"
+" the installed build."
 msgstr "Найдено несколько профилей WDA. Показана ближайшая дата окончания; проверьте установленную сборку."
 
 #: res/app/src/features/control/panes/dashboard/ios-controls/IosControlsCard.tsx:91
@@ -1965,10 +1994,6 @@ msgstr "Статус"
 msgid "Stop"
 msgstr "Стоп"
 
-#: res/app/src/core/devices/enhance.ts:15
-msgid "Stop Automation"
-msgstr "Остановить автоматизацию"
-
 #: res/app/src/core/devices/enhance.ts:12
 #: res/app/src/features/control/device-control/DeviceMenuItems.tsx:56
 #: res/app/src/features/control/device-control/DeviceToolbar.tsx:140
@@ -2000,6 +2025,10 @@ msgstr "Тег"
 msgid "Take Screenshot"
 msgstr "Сделать снимок экрана"
 
+#: res/app/src/features/control/ControlPage.tsx:385
+msgid "Take control to view and interact with the device."
+msgstr "Нажмите «Использовать», чтобы видеть экран и управлять устройством."
+
 #: res/app/src/features/control/panes/info/InfoPane.tsx:206
 msgid "Temperature"
 msgstr "Температура"
@@ -2015,7 +2044,9 @@ msgid "The app may already be installed. Check the iPhone before retrying."
 msgstr "Приложение уже могло установиться. Проверьте iPhone перед повторной попыткой."
 
 #: res/app/src/features/control/panes/dashboard/install/InstallCard.tsx:84
-msgid "The app was installed but could not be opened. Open it on the iPhone and check developer trust."
+msgid ""
+"The app was installed but could not be opened. Open it on the iPhone and "
+"check developer trust."
 msgstr "Приложение установлено, но открыть его не удалось. Откройте его на iPhone и проверьте доверие разработчику."
 
 #: res/app/src/core/install.ts:274
@@ -2049,7 +2080,9 @@ msgid "The IPA exceeds the 1 GiB limit."
 msgstr "Размер IPA превышает ограничение 1 ГиБ."
 
 #: res/app/src/core/install.ts:262
-msgid "The IPA signature or provisioning profile is invalid. Upload a signed development, ad hoc, or enterprise IPA."
+msgid ""
+"The IPA signature or provisioning profile is invalid. Upload a signed "
+"development, ad hoc, or enterprise IPA."
 msgstr "Некорректная подпись или профиль приложения. Загрузите подписанный IPA для разработки, ad hoc или корпоративного распространения."
 
 #: res/app/src/features/control/panes/dashboard/ios-controls/IosControlsCard.tsx:117
@@ -2065,7 +2098,9 @@ msgid "The iPhone could not install this IPA."
 msgstr "iPhone не смог установить этот IPA."
 
 #: res/app/src/features/control/panes/dashboard/ios-controls/IosControlsCard.tsx:64
-msgid "The iPhone did not confirm the power command. Check its connection before trying again."
+msgid ""
+"The iPhone did not confirm the power command. Check its connection before "
+"trying again."
 msgstr "iPhone не подтвердил команду питания. Проверьте подключение перед повторной попыткой."
 
 #: res/app/src/features/control/panes/dashboard/ios-controls/IosControlsCard.tsx:87
@@ -2085,7 +2120,9 @@ msgid "The iPhone provider is unavailable."
 msgstr "Сервис подключения iPhone недоступен."
 
 #: res/app/src/features/control/panes/dashboard/ios-controls/IosControlsCard.tsx:84
-msgid "The lock screen remains visible while the display is awake. If a passcode is required, enter it on the device screen in STF."
+msgid ""
+"The lock screen remains visible while the display is awake. If a passcode is"
+" required, enter it on the device screen in STF."
 msgstr "Экран блокировки виден, пока дисплей активен. Если нужен код-пароль, введите его на экране устройства в STF."
 
 #: res/app/src/core/install.ts:180
@@ -2270,7 +2307,9 @@ msgid "The schedule can only be changed while the group is pending"
 msgstr "Расписание можно изменить, только пока группа в ожидании"
 
 #: res/app/src/features/control/panes/dashboard/ios-controls/IosControlsCard.tsx:27
-msgid "The screen is still locked. Swipe up and enter the passcode on the device screen."
+msgid ""
+"The screen is still locked. Swipe up and enter the passcode on the device "
+"screen."
 msgstr "Экран остаётся заблокированным. Проведите вверх и введите код-пароль на экране устройства."
 
 #: res/app/src/core/install.ts:196
@@ -2292,6 +2331,10 @@ msgid ""
 msgstr ""
 "Не удалось установить пакет, так как данному пользователю запрещена "
 "установка приложений."
+
+#: res/app/src/features/control/ControlPage.tsx:318
+msgid "The test has finished. Take control to interact with the device."
+msgstr "Тест завершён. Нажмите «Использовать», чтобы управлять устройством."
 
 #: res/app/src/core/install.ts:268
 msgid "The uploaded file is no longer available. Upload it again."
@@ -2352,7 +2395,10 @@ msgid "Title"
 msgstr "Заглавие"
 
 #: res/app/src/ui/IosDeviceHealth.tsx:82
-msgid "To renew WDA, rebuild the runner with your Apple Team, reinstall it on this iPhone and confirm developer trust. The Linux provider reconnects automatically."
+msgid ""
+"To renew WDA, rebuild the runner with your Apple Team, reinstall it on this "
+"iPhone and confirm developer trust. The Linux provider reconnects "
+"automatically."
 msgstr "Для продления подписи WDA пересоберите Runner со своей Apple Team, переустановите его на этот iPhone и подтвердите доверие разработчику. Сервис на Linux подключится автоматически."
 
 #: res/app/src/features/device-list/DeviceStats.tsx:39
@@ -2497,6 +2543,14 @@ msgstr "Обновление версии"
 msgid "Vibrate Mode"
 msgstr "Режим вибрации"
 
+#: res/app/src/features/control/ControlPage.tsx:382
+msgid "View only"
+msgstr "Только просмотр"
+
+#: res/app/src/features/control/ControlPage.tsx:316
+msgid "View only. Controls are disabled while the test is running."
+msgstr "Идёт автотест. Управление устройством временно отключено."
+
 #: res/app/src/features/control/panes/info/InfoPane.tsx:207
 msgid "Voltage"
 msgstr "Напряжение"
@@ -2617,51 +2671,19 @@ msgstr "Вы"
 msgid "You (or someone else) kicked the device."
 msgstr "Вы (или кто-то еще) отключили устройство."
 
-msgid "Unlock the iPhone on the device."
-msgstr "Разблокируйте iPhone на самом устройстве."
-
-msgid "If a passcode is required, enter it on the device screen in STF."
-msgstr "Если требуется код-пароль, введите его на экране устройства в STF."
-
-msgid "Could not unlock the iPhone. Check its connection and try again."
-msgstr "Не удалось разблокировать iPhone. Проверьте подключение и повторите попытку."
-
-msgid "Automated"
-msgstr "Automated"
-
-msgid "Automation finished"
-msgstr "Автотест завершён"
-
-msgid "View only. Controls are disabled while the test is running."
-msgstr "Идёт автотест. Управление устройством временно отключено."
-
-msgid "The test has finished. Take control to interact with the device."
-msgstr "Тест завершён. Нажмите «Использовать», чтобы управлять устройством."
-
-#: res/app/src/features/control/screen/DeviceScreen.tsx
-msgid "Device offline"
-msgstr "Устройство недоступно"
-
-#: res/app/src/features/control/screen/DeviceScreen.tsx
-msgid "Reconnecting…"
-msgstr "Переподключение…"
-
-#: res/app/src/features/control/screen/DeviceScreen.tsx
-msgid "Screen disconnected"
-msgstr "Видеопоток прерван"
-
-msgid "View only"
-msgstr "Только просмотр"
-
-msgid "Take control to view and interact with the device."
-msgstr "Нажмите «Использовать», чтобы видеть экран и управлять устройством."
-
+#: res/app/src/features/control/ControlPage.tsx
 msgid "Release reservation"
 msgstr "Освободить устройство"
 
-msgid "Release this STF reservation? The external automation session must be stopped separately."
+#: res/app/src/features/control/ControlPage.tsx
+msgid ""
+"Release this STF reservation? The external automation session must be "
+"stopped separately."
 msgstr "Освободить устройство в STF? Внешний сеанс автоматизации нужно остановить отдельно."
+
+msgid "Stop Automation"
+msgstr "Остановить автоматизацию"
 
 #: res/app/src/features/control/ControlPage.tsx
 msgid "Stop this automation from its test runner."
-msgstr "Остановите эту автоматизацию через средство запуска теста."
+msgstr "Остановите эту автоматизацию через программу запуска теста."

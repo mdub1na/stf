@@ -205,6 +205,34 @@ describe('Linux iOS integration', function() {
       serial, owner, 'lease-b', 'renew', 900000))).success, false)
   })
 
+  it('retains provider reservation identity across coordinator lease acknowledgements',
+    async function() {
+      const f = await fixture()
+      const replies = () => f.sent.filter(item =>
+        item.channel === 'reply' && item.envelope.type === wire.TransactionDoneMessage.$code)
+      await f.join(900000, 'automation', 'lease-first')
+      const first = f.bridge.owner!.reservationId
+      const joined = f.sent.find(item => item.envelope.type === wire.JoinGroupMessage.$code)!
+      const reservation = wire.JoinGroupMessage.decode(joined.envelope.message)
+      assert.equal(reservation.leaseId, 'lease-first')
+      assert.equal(reservation.owner.reservationId, first)
+      const acknowledged = wire.TransactionDoneMessage.decode(replies().at(-1)!.envelope.message)
+      assert.equal(JSON.parse(acknowledged.body!).owner.reservationId, first)
+
+      f.send(new wire.AutomationLeaseMessage(serial, owner, 'lease-first', 'release'), true)
+      await until(() => f.bridge.owner === null)
+      await f.join(900000, 'automation', 'lease-second')
+      const second = f.bridge.owner!.reservationId
+      assert.ok(first && second && second !== first)
+      const replyCount = replies().length
+      f.send(new wire.AutomationLeaseMessage(serial, owner, 'lease-first', 'release'), true)
+      await until(() => replies().length === replyCount + 1)
+      assert.equal(wire.TransactionDoneMessage.decode(replies().at(-1)!.envelope.message).success,
+        false)
+      assert.equal(f.bridge.owner!.reservationId, second)
+      f.bridge.leave('test_complete')
+    })
+
   it('streams authorized automation without extending its lease', async function() {
     const f = await fixture()
     let usage: string | null = 'automation'

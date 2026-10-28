@@ -9,7 +9,7 @@ The initial single-phone hardware trial passed through the public HTTPS Grid,
 including native element inspection, scrolling, screenshots and concurrent STF
 screen viewing. Three consecutive post-restart runs passed with the same WDA
 session; only the Appium container restarted. See the
-[validation record](../../docs/appium-validation-2026-10-18.md).
+[Appium setup and coverage](../README.md).
 
 ## Install beside an existing runtime
 

@@ -193,7 +193,7 @@ adb -H 127.0.0.1 -P 15038 devices -l
 
 The initial cutover had no connected Android phones. On 2026-10-18 both ADB
 pools reported six phones in total, and real Appium Settings sessions passed
-on each; see the [validation record](./appium-validation-2026-10-18.md).
+on each; see the [Appium setup guide](../appium-tests/README.md).
 
 ## Appium Grid Layout
 
@@ -232,7 +232,7 @@ Kotlin/Gradle tests use standard STF capture/release endpoints; see
 18/18 sequential runs on six connected phones across both ADB pools on
 2026-10-18. The initial Linux iOS sidecar/relay passed three final Grid runs with
 concurrent STF viewing, followed by registration of the two other iPhones. See the
-[validation record](./appium-validation-2026-10-18.md).
+[Appium setup guide](../appium-tests/README.md).
 
 Appium reconciliation is temporarily paused with the Application annotation
 `argocd.argoproj.io/skip-reconcile: "true"` while the capacity and ingress changes

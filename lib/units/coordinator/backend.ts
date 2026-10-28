@@ -1,0 +1,100 @@
+import {CoordinatorError, endpoint} from './config.js'
+import type {FarmBackend, FarmDevice, GridStatus, UpstreamResponse} from './types.js'
+
+type StfDevice = Omit<FarmDevice, 'provider'> & {provider: string | {name: string}}
+
+export class BackendError extends Error {
+  constructor(readonly status: number, readonly operation: string) {
+    super(`${operation} returned HTTP ${status}`)
+  }
+}
+
+export class HttpFarmBackend implements FarmBackend {
+  private readonly stfUrl: string
+  private readonly gridUrl: string
+
+  constructor(stfUrl: string, gridUrl: string, private readonly token: string,
+    private readonly timeoutMs: number) {
+    this.stfUrl = endpoint(stfUrl).replace(/(?:\/api\/v1)?$/, '/api/v1')
+    this.gridUrl = endpoint(gridUrl)
+  }
+
+  private async stf(method: string, route: string, body?: unknown): Promise<any> {
+    const response = await fetch(this.stfUrl + route, {
+      method, redirect: 'error', signal: AbortSignal.timeout(this.timeoutMs)
+    , headers: {Authorization: 'Bearer ' + this.token, 'Content-Type': 'application/json'}
+    , ...(body === undefined ? {} : {body: JSON.stringify(body)})
+    })
+    if (!response.ok) {
+      throw new BackendError(response.status, 'STF ' + method + ' ' + route.split('/')[1])
+    }
+    const value = await response.json() as any
+    if (value.success === false) {
+      throw new BackendError(502, 'STF operation')
+    }
+    return value
+  }
+
+  async identity(): Promise<{email: string}> {
+    const result = await this.stf('GET', '/user')
+    if (typeof result.user?.email !== 'string') {
+      throw new CoordinatorError(503, 'stf_identity', 'STF service account is unavailable')
+    }
+    return {email: result.user.email}
+  }
+
+  async devices(): Promise<FarmDevice[]> {
+    const result = await this.stf('GET', '/devices')
+    return result.devices.map((device: StfDevice) => ({
+      serial: device.serial, model: device.model || '', version: device.version || ''
+    , platform: device.platform, provider: typeof device.provider === 'string' ?
+        device.provider : device.provider?.name || ''
+    , present: device.present, ready: device.ready, using: device.using, claimed: device.claimed
+    , owner: device.owner || null, usage: device.usage || null
+    , automationLeaseId: device.automationLeaseId || null
+    }))
+  }
+
+  async grid(): Promise<GridStatus> {
+    const response = await fetch(this.gridUrl + '/status', {
+      redirect: 'error', signal: AbortSignal.timeout(this.timeoutMs)
+    })
+    if (!response.ok) {
+      throw new BackendError(response.status, 'Grid status')
+    }
+    const result = await response.json() as {value: GridStatus}
+    if (!result.value?.ready || !Array.isArray(result.value.nodes)) {
+      throw new BackendError(503, 'Grid readiness')
+    }
+    return result.value
+  }
+
+  async capture(serial: string, leaseId: string, timeout: number) {
+    await this.stf('POST', '/user/devices', {serial, leaseId, timeout})
+  }
+
+  async renew(serial: string, leaseId: string, timeout: number) {
+    await this.stf('POST', `/user/devices/${encodeURIComponent(serial)}/automation/renew`, {
+      leaseId, timeout
+    })
+  }
+
+  async release(serial: string, leaseId: string) {
+    await this.stf('POST', `/user/devices/${encodeURIComponent(serial)}/automation/release`,
+      {leaseId})
+  }
+
+  async webdriver(method: string, route: string, body?: unknown): Promise<UpstreamResponse> {
+    const response = await fetch(this.gridUrl + route, {
+      method, redirect: 'error', signal: AbortSignal.timeout(this.timeoutMs)
+    , headers: {'Content-Type': 'application/json'}
+    , ...(body === undefined ? {} : {body: JSON.stringify(body)})
+    })
+    const bytes = Buffer.from(await response.arrayBuffer())
+    if (bytes.length > 32 * 1024 * 1024) {
+      throw new BackendError(502, 'Oversized WebDriver response')
+    }
+    return {status: response.status, contentType: response.headers.get('content-type') ||
+      'application/json', body: bytes}
+  }
+}

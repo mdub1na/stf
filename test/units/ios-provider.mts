@@ -116,12 +116,12 @@ describe('Linux iOS integration', function() {
       bridge.handle(channel, transaction ?
         wireutil.transaction('reply', message) : wireutil.envelope(message))
     }
-    const join = async(timeout = 900000, usage?: string) => {
+    const join = async(timeout = 900000, usage?: string, leaseId?: string) => {
       await bridge.poll()
       send(new wire.DeviceRegisteredMessage(serial), false, bridge.solo)
       send(new wire.GroupMessage(owner, timeout, [
         new wire.DeviceRequirement('serial', serial, wire.RequirementType.EXACT)
-      ], usage), true)
+      ], usage, leaseId), true)
       await until(() => bridge.owner !== null)
     }
     const gesture = (order: number) => ({
@@ -154,6 +154,45 @@ describe('Linux iOS integration', function() {
     assert.equal(wire.LeaveGroupMessage.decode(left!.envelope.message).owner.email, owner.email)
     assert.equal(f.bridge.owner, null)
   })
+
+  it('retains provider reservation identity across coordinator lease acknowledgements',
+    async function() {
+      const f = await fixture()
+      const replies = () => f.sent.filter(item =>
+        item.channel === 'reply' && item.envelope.type === wire.TransactionDoneMessage.$code)
+      await f.join(900000, 'automation', 'lease-first')
+      const first = f.bridge.owner!.reservationId
+      const joined = f.sent.find(item => item.envelope.type === wire.JoinGroupMessage.$code)!
+      const reservation = wire.JoinGroupMessage.decode(joined.envelope.message)
+      assert.equal(reservation.leaseId, 'lease-first')
+      assert.equal(reservation.owner.reservationId, first)
+      const acknowledged = wire.TransactionDoneMessage.decode(replies().at(-1)!.envelope.message)
+      assert.equal(JSON.parse(acknowledged.body!).owner.reservationId, first)
+
+      f.send(new wire.AutomationLeaseMessage(serial, owner, 'lease-first', 'release'), true)
+      await until(() => f.bridge.owner === null)
+      await f.join(900000, 'automation', 'lease-second')
+      const second = f.bridge.owner!.reservationId
+      assert.ok(first && second && second !== first)
+      assert.equal(f.bridge.usage, 'automation')
+      const gesture = f.gesture(1)
+      f.send(new wire.TouchDownMessage({seq: 1, contact: 0, x: 0.3, y: 0.4, ...gesture}))
+      f.send(new wire.GestureStartMessage({seq: 0, ...gesture}))
+      f.send(new wire.TouchUpMessage({seq: 2, contact: 0, ...gesture}))
+      f.send(new wire.GestureStopMessage({seq: 3, ...gesture}))
+      await until(() => f.requests.some(request => request.path === '/tap'))
+      const tap = f.requests.find(request => request.path === '/tap')!.body
+      assert.equal(tap.reservationId, second)
+      assert.equal(tap.gestureId, gesture.gestureId)
+      assert.ok(Math.abs(tap.x - 0.3) < 1e-6 && Math.abs(tap.y - 0.4) < 1e-6)
+      const replyCount = replies().length
+      f.send(new wire.AutomationLeaseMessage(serial, owner, 'lease-first', 'release'), true)
+      await until(() => replies().length === replyCount + 1)
+      assert.equal(wire.TransactionDoneMessage.decode(replies().at(-1)!.envelope.message).success,
+        false)
+      assert.equal(f.bridge.owner!.reservationId, second)
+      f.bridge.leave('test_complete')
+    })
 
   it('streams authorized automation without extending its lease', async function() {
     const f = await fixture()

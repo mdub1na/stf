@@ -14,6 +14,10 @@ preserved for rollback. The Appium overlay configures seven Android relays
 sidecar and device-bound relay. Configured capacity and connected-device
 availability are separate checks; see the service inventory and node runbook.
 
+The optional `stf coordinator` process queues device requests and renews leases
+for trusted workers. Its [deployment](coordinator/README.md) is separate from
+the GitOps root.
+
 ## Documents
 
 - [Current requirements](./docs/requirements.md)
@@ -28,6 +32,10 @@ availability are separate checks; see the service inventory and node runbook.
 - [Historical STF roadmap](./docs/roadmap.md)
 - [GitOps layout](./docs/gitops-layout.md)
 - [Decision log](./docs/decision-log.md)
+- [Linux iOS provider](../doc/ios-provider.md)
+- [Local iOS setup and signing](../docker/ios/README.md)
+- [Kubernetes iPhone fleet](./ios-prototype/README.md)
+- [Device lease coordinator](../doc/coordinator.md)
 
 ## Reading order for implementation
 

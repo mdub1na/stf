@@ -230,6 +230,8 @@ The control-plane services in namespace `appium` are:
 Kotlin/Gradle smoke tests use standard STF capture/release endpoints; see
 [the harness instructions](../appium-tests/README.md). Each task reserves one
 phone and checks Appium teardown before releasing ownership.
+Coordinator-mode tasks delegate allocation, heartbeat renewal and cleanup to
+the optional [device lease coordinator](../../doc/coordinator.md).
 
 When live capacity is changed before GitOps, keep reconciliation paused with
 `argocd.argoproj.io/skip-reconcile: "true"` until the matching configuration

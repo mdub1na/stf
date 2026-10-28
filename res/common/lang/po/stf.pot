@@ -183,7 +183,7 @@ msgstr ""
 
 #: res/app/src/core/devices/enhance.ts:16
 #: res/app/src/core/devices/enhance.ts:29
-#: res/app/src/features/control/ControlPage.tsx:461
+#: res/app/src/features/control/ControlPage.tsx:462
 msgid "Automated"
 msgstr ""
 
@@ -191,7 +191,7 @@ msgstr ""
 msgid "Automation"
 msgstr ""
 
-#: res/app/src/features/control/ControlPage.tsx:453
+#: res/app/src/features/control/ControlPage.tsx:454
 msgid "Automation finished"
 msgstr ""
 
@@ -543,7 +543,7 @@ msgstr ""
 msgid "Device booking state"
 msgstr ""
 
-#: res/app/src/features/device-list/device-actions.ts:45
+#: res/app/src/features/device-list/device-actions.ts:46
 msgid "Device cannot get kicked from the group"
 msgstr ""
 
@@ -697,9 +697,9 @@ msgid "Encrypted"
 msgstr ""
 
 #: res/app/src/features/control/ControlPage.tsx:404
-#: res/app/src/features/control/ControlPage.tsx:428
+#: res/app/src/features/control/ControlPage.tsx:429
 #: res/app/src/features/control/panes/explorer/ExplorerPane.tsx:218
-#: res/app/src/features/device-list/device-actions.ts:39
+#: res/app/src/features/device-list/device-actions.ts:40
 #: res/app/src/features/settings/keys/AdbKeysCard.tsx:64
 #: res/app/src/ui/AppLayout.tsx:111
 #: res/app/src/ui/AppLayout.tsx:112
@@ -1526,7 +1526,7 @@ msgstr ""
 
 #: res/app/src/core/devices/enhance.ts:11
 #: res/app/src/core/devices/enhance.ts:24
-#: res/app/src/features/control/ControlPage.tsx:447
+#: res/app/src/features/control/ControlPage.tsx:448
 msgid "Preparing"
 msgstr ""
 
@@ -1626,7 +1626,7 @@ msgstr ""
 msgid "Regex syntax"
 msgstr ""
 
-#: res/app/src/features/control/ControlPage.tsx:467
+#: res/app/src/features/control/ControlPage.tsx:470
 #: res/app/src/ui/release-reservation.ts:6
 #: res/app/src/ui/release-reservation.ts:8
 msgid "Release reservation"
@@ -1996,6 +1996,10 @@ msgstr ""
 msgid "Stop Automation"
 msgstr ""
 
+#: res/app/src/features/control/ControlPage.tsx:467
+msgid "Stop this automation from its test runner."
+msgstr ""
+
 #: res/app/src/core/devices/enhance.ts:13
 #: res/app/src/features/control/device-control/DeviceMenuItems.tsx:66
 #: res/app/src/features/control/device-control/DeviceToolbar.tsx:151
@@ -2023,7 +2027,7 @@ msgstr ""
 msgid "Tag"
 msgstr ""
 
-#: res/app/src/features/control/ControlPage.tsx:456
+#: res/app/src/features/control/ControlPage.tsx:457
 msgid "Take control to view and interact with the device."
 msgstr ""
 
@@ -2257,7 +2261,7 @@ msgstr ""
 msgid "The system failed to install the package because the user is restricted from installing apps."
 msgstr ""
 
-#: res/app/src/features/control/ControlPage.tsx:455
+#: res/app/src/features/control/ControlPage.tsx:456
 msgid "The test has finished. Take control to interact with the device."
 msgstr ""
 
@@ -2417,7 +2421,7 @@ msgid "USB"
 msgstr ""
 
 #: res/app/src/core/devices/enhance.ts:15
-#: res/app/src/features/control/ControlPage.tsx:479
+#: res/app/src/features/control/ControlPage.tsx:482
 msgid "Use"
 msgstr ""
 
@@ -2470,11 +2474,11 @@ msgstr ""
 msgid "Vibrate Mode"
 msgstr ""
 
-#: res/app/src/features/control/ControlPage.tsx:453
+#: res/app/src/features/control/ControlPage.tsx:454
 msgid "View only"
 msgstr ""
 
-#: res/app/src/features/control/ControlPage.tsx:464
+#: res/app/src/features/control/ControlPage.tsx:465
 msgid "View only. Controls are disabled while the test is running."
 msgstr ""
 

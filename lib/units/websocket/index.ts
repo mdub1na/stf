@@ -403,6 +403,7 @@ export default function(options: WebsocketOptions) {
             , present: true
             , provider: message.provider
             , owner: null
+            , automationLeaseId: null
             , status: message.status
             , ready: false
             , reverseForwards: []
@@ -421,6 +422,7 @@ export default function(options: WebsocketOptions) {
             serial: message.serial
           , channel: message.channel
           , owner: null // @todo Get rid of need to reset this here.
+          , automationLeaseId: null
           , ready: true
           , reverseForwards: [] // @todo Get rid of need to reset this here.
           }
@@ -457,6 +459,7 @@ export default function(options: WebsocketOptions) {
             , owner: message.owner
             , likelyLeaveReason: 'owner_change'
             , usage: message.usage
+            , automationLeaseId: message.leaseId || null
             }
           , user
           )
@@ -475,6 +478,8 @@ export default function(options: WebsocketOptions) {
         , data: datautil.applyOwner({
               serial: message.serial
             , owner: null
+            , usage: null
+            , automationLeaseId: null
             , likelyLeaveReason: message.reason
             }
           , user

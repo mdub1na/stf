@@ -5,11 +5,10 @@ runtime. A loopback adapter on port 18101 attaches Appium to the existing WDA
 session on port 18100. It never creates or deletes a WDA session and restores
 shared WDA settings when Appium closes. No WDA port is published.
 
-The initial single-phone hardware trial passed through the public HTTPS Grid,
-including native element inspection, scrolling, screenshots and concurrent STF
-screen viewing. Three consecutive post-restart runs passed with the same WDA
-session; only the Appium container restarted. See the
-[Appium setup and coverage](../README.md).
+Use the [opt-in Settings smoke](../README.md) to check native element inspection,
+gestures, screenshots and cleanup through Grid. Check that the STF WDA session
+survives Appium creation and teardown; server readiness alone does not verify
+that lifecycle.
 
 ## Install beside an existing runtime
 
@@ -72,9 +71,10 @@ match when the client supplies it. Re-render after an iOS upgrade. A config
 hash updates the relay pod when its stereotype changes.
 
 Use `APPIUM_SERVER_URL=https://appium-grid.finservice.tech` for the farm test.
-It automatically selects a free iPhone from registered UP relay UDIDs. All three
-preview iPhones now have dedicated relays; unregistered phones are not reserved.
-`STF_SERIAL` remains an optional pin. Readiness and version mismatches fail before session creation.
+It selects a free STF iPhone from registered UP relay UDIDs; unregistered phones
+are not reserved. `STF_SERIAL` remains an optional pin. A registered relay does
+not make a disconnected phone eligible. Readiness and version mismatches fail
+before session creation.
 
 ## Rollback
 

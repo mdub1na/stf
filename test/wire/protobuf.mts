@@ -499,6 +499,8 @@ var pbjs5Decodings: Sample[] = [
     , x: 0.12345600128173828
     , y: 0.9876539707183838
     , pressure: null
+    , gestureId: null
+    , reservationId: null
     }
   }
 , {
@@ -612,6 +614,8 @@ describe('wire protobuf', function() {
       , x: 1.5
       , y: 2.5
       , pressure: null
+      , gestureId: null
+      , reservationId: null
       })
     })
 
@@ -807,6 +811,28 @@ describe('wire protobuf', function() {
         , sample.what
         ).to.eql(sample.values)
       })
+    })
+
+    it('round-trips provider gesture identity without changing legacy message codes', function() {
+      const scope = {gestureId: 'source:1', reservationId: 'reservation'}
+      const messages = [
+        new wire.GestureStartMessage({seq: 0, ...scope})
+      , new wire.TouchDownMessage({seq: 1, contact: 0, x: 0.5, y: 0.5, ...scope})
+      , new wire.TouchMoveMessage({seq: 2, contact: 0, x: 0.5, y: 0.4, ...scope})
+      , new wire.TouchCommitMessage({seq: 3, ...scope})
+      , new wire.TouchResetMessage({seq: 4, ...scope, cancel: false})
+      , new wire.TouchUpMessage({seq: 5, contact: 0, ...scope})
+      , new wire.GestureStopMessage({seq: 6, ...scope})
+      ]
+      const types = [wire.GestureStartMessage, wire.TouchDownMessage, wire.TouchMoveMessage
+        , wire.TouchCommitMessage, wire.TouchResetMessage, wire.TouchUpMessage
+        , wire.GestureStopMessage]
+      for (const [index, message] of messages.entries()) {
+        const decoded = types[index]!.decode(message.encodeNB())
+        expect(decoded.gestureId).to.equal(scope.gestureId)
+        expect(decoded.reservationId).to.equal(scope.reservationId)
+      }
+      expect(wire.TouchResetMessage.decode(messages[4]!.encodeNB()).cancel).to.equal(false)
     })
 
     it('should decode an unset optional message field as null', function() {

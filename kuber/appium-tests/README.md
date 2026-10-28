@@ -115,9 +115,9 @@ needed to build/sign WDA; it does not need to run these sessions. See the
 The existing STF runtime owns one WDA session. Connecting an ordinary second
 WDA client directly would replace it, so the prepared [iOS node trial](ios-node/README.md)
 uses a loopback session adapter. It preserves the STF session and restores its
-settings on Appium teardown. All three preview iPhones have dedicated Grid relays
-and Appium sidecars. The Grid has seven Android nodes (four in pool 1, three in
-pool 2) and three iOS nodes; each iOS relay is bound to one physical phone.
+settings on Appium teardown. Each configured iPhone needs its own sidecar and
+device-bound Grid relay. Registered relay capacity does not imply that its phone
+is connected, unlocked or ready; check STF and the selected relay before a run.
 
 `IOS_WDA_URL` is an advanced override resolved by the Appium server, not by the
 test machine. Omit it for the prepared sidecar, which has its own loopback default.
@@ -148,10 +148,10 @@ Gradle writes JUnit XML under `build/test-results/<task>` and HTML under
 are collected independently before Appium quit. Cleanup errors are attached to
 the original failure; they do not hide it. No automatic UI-test retry is used.
 
-Previous hardware checks covered Android and iOS Settings sessions through the
-public Grid, concurrent STF viewing and preservation of the shared WDA session.
-These checks do not establish application-specific or multi-hour stability;
-repeat the relevant smoke task after changing a device runtime or Grid deployment.
+The [Linux iOS node runbook](ios-node/README.md) covers sidecar installation,
+Grid registration and rollback. Settings smoke checks native app activation,
+hierarchy, gestures and screenshots; it does not establish Chrome compatibility
+or application-specific behavior.
 
 ## Coordinator prototype
 
@@ -201,7 +201,7 @@ controls heartbeat frequency and lease TTL. Heartbeats do not keep an idle
 Appium session alive. In coordinator mode the new-command timeout is controlled
 by the service (currently 120 seconds); a local environment override cannot
 change it. A legitimate longer pause needs a corresponding coordinator policy
-change. Our Settings smoke/demo scenarios remain intentionally short.
+change. The Settings smoke/demo scenarios remain intentionally short.
 
 ### Independent parallel workers
 

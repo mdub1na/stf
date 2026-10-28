@@ -76,7 +76,8 @@ var builder = function(yargs: Argv) {
     , default: true
     })
     .option('oauth-domain', {
-      describe: 'Optional email domain to allow authentication for.'
+      describe: 'Optional exact email domain to allow authentication for, ' +
+        'e.g. "example.org". Subdomains are not included.'
     , type: 'string'
     , default: process.env.OAUTH_DOMAIN
     , demand: false

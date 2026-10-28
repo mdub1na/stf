@@ -420,6 +420,17 @@ message DevicePhoneMessage {
   optional string network = 4;
 }
 
+message DeviceCpuMessage {
+  optional string name = 1;
+  optional int32 cores = 2;
+  optional double freq = 3;
+}
+
+message DeviceMemoryMessage {
+  optional int32 ram = 1;
+  optional double rom = 2;
+}
+
 message DeviceIdentityMessage {
   required string serial = 1;
   required string platform = 2;
@@ -435,6 +446,9 @@ message DeviceIdentityMessage {
   optional string cpuPlatform = 13;
   optional string openGLESVersion = 14;
   optional string marketName = 15;
+  optional DeviceCpuMessage cpu = 16;
+  optional DeviceMemoryMessage memory = 17;
+  optional string releasedAt = 18;
 }
 
 message DeviceProperty {
@@ -465,6 +479,7 @@ message OwnerMessage {
   required string email = 1;
   required string name = 2;
   required string group = 3;
+  optional string reservationId = 4;
 }
 
 message GroupMessage {
@@ -491,6 +506,7 @@ message AutoGroupMessage {
 
 message UngroupMessage {
   repeated DeviceRequirement requirements = 2;
+  optional string reservationId = 3;
 }
 
 message JoinGroupMessage {
@@ -538,6 +554,8 @@ message TouchDownMessage {
   required float x = 3;
   required float y = 4;
   optional float pressure = 5;
+  optional string gestureId = 6;
+  optional string reservationId = 7;
 }
 
 message TouchMoveMessage {
@@ -546,27 +564,40 @@ message TouchMoveMessage {
   required float x = 3;
   required float y = 4;
   optional float pressure = 5;
+  optional string gestureId = 6;
+  optional string reservationId = 7;
 }
 
 message TouchUpMessage {
   required uint32 seq = 1;
   required uint32 contact = 2;
+  optional string gestureId = 3;
+  optional string reservationId = 4;
 }
 
 message TouchCommitMessage {
   required uint32 seq = 1;
+  optional string gestureId = 2;
+  optional string reservationId = 3;
 }
 
 message TouchResetMessage {
   required uint32 seq = 1;
+  optional string gestureId = 2;
+  optional bool cancel = 3;
+  optional string reservationId = 4;
 }
 
 message GestureStartMessage {
   required uint32 seq = 1;
+  optional string gestureId = 2;
+  optional string reservationId = 3;
 }
 
 message GestureStopMessage {
   required uint32 seq = 1;
+  optional string gestureId = 2;
+  optional string reservationId = 3;
 }
 
 message TypeMessage {

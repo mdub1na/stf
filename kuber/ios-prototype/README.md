@@ -3,15 +3,14 @@
 Manual prototype deployment, outside Argo CD. It uses the USB worker
 `k3s-worker-1` and namespace `stf-ios-prototype`. Existing STF/Android resources
 are not edited. The phone must be passed through from Proxmox to this VM.
-The [2026-10-15 hardware record](validation-2026-10-15.md) records the first
-successful Linux run and its remaining checks.
+The [provider guide](../../doc/ios-provider.md) describes runtime behavior and
+hardware coverage; [local setup](../../docker/ios/README.md) covers WDA signing.
 
 The image contains Node 24, go-ios v1.3.2 (download checksum verified),
 pymobiledevice3 v11.32.0, usbmuxd and iproxy. It contains no signing identities,
-WDA artifacts, API tokens or kubeconfig. GitHub Actions publishes only a separate
-`ios-prototype-COMMIT_SHA` tag in the existing `ghcr.io/mdub1na/stf` package.
-The image job runs for same-repository PRs touching prototype files and develop
-pushes; fork PRs only test.
+WDA artifacts, API tokens or kubeconfig. Build the runtime image locally from
+`docker/ios/Dockerfile` and publish it through your own image pipeline. The iOS
+workflow validates both runtime architectures without publishing images.
 
 Two containers share one Pod network and the existing host `/run/usbmuxd`
 socket. The host's usbmuxd already owns the phone's USB interface; a second
@@ -27,7 +26,7 @@ deployment uses Recreate. This deployment requires an existing host usbmuxd
 socket, mounted into both containers; it does not install or stop host services.
 Start with a
 development-signed, installed and trusted WDA as described in
-[the hardware runbook](../../doc/ios-prototype.md).
+[the signing guide](../../docker/ios/README.md).
 
 Set the private kubeconfig path explicitly; do not rely on the current context.
 Create a token outside Git and deploy the image published for the selected
@@ -38,7 +37,7 @@ umask 077
 mkdir -p ~/.local/state/stf-ios
 openssl rand -hex 32 > ~/.local/state/stf-ios/token
 bash kuber/ios-prototype/deploy.sh /private/path/k3s-lab.yaml \
-  ghcr.io/mdub1na/stf:ios-prototype-COMMIT_SHA \
+  your-registry/stf-ios:YOUR_RUNTIME_TAG \
   YOUR_UDID YOUR_INSTALLED_WDA_RUNNER_BUNDLE_ID ~/.local/state/stf-ios/token
 ```
 
@@ -65,8 +64,8 @@ kubectl -n stf-ios-prototype exec deployment/ios-prototype -c prototype -- \
 kubectl -n stf-ios-prototype port-forward deployment/ios-prototype 7400:7400
 ```
 
-In another terminal, use the authenticated API examples from the hardware
-runbook. Stop any Mac Xcode/WDA test before starting Linux control of this phone.
+In another terminal, use the authenticated API examples from the provider
+guide. Stop any Mac Xcode/WDA test before starting Linux control of this phone.
 No Mac process participates in this deployment's runtime.
 
 Stop the prototype with
@@ -77,13 +76,13 @@ usbmuxd remain on the host. Keep the PVC while remote pairing/cache is needed.
 
 ## STF integration preview
 
-After the standalone phone is ready, the `STF iOS integration image` CI job
-publishes the complete STF application with the `ios-provider` command. Deploy
-its commit tag or digest to the preview:
+After the standalone phone is ready, build the complete STF application from the
+root `Dockerfile`, publish it through your image pipeline, and deploy its immutable
+digest to the preview:
 
 ```sh
 bash kuber/ios-prototype/integrate-stf.sh /private/path/k3s-lab.yaml \
-  ghcr.io/mdub1na/stf:ios-stf-COMMIT_SHA
+  your-registry/stf@sha256:YOUR_STF_IMAGE_DIGEST
 ```
 
 This updates the STF processor, app, API and WebSocket unit, then adds an unprivileged provider
@@ -93,12 +92,12 @@ adjust the public origin, screen URL and internal service names for another
 installation. Set `--market-name` for the connected phone; the model identifier
 and iOS version come from the device.
 
-The provider registers an ordinary STF device with platform `iOS`. The current
-preview supports portrait viewing, single-finger taps/swipes, Home, text input
-and screenshots. iOS pages hide APK/ADB, shell, logs, file exploration and
+The provider registers an ordinary STF device with platform `iOS`. The provider supports portrait viewing, single-finger taps/swipes, Home, text
+input and screenshots. iOS pages hide APK/ADB, shell, logs, file exploration and
 rotation commands. Signed IPA installation, diagnostics, device information and
 Shake are described in [the provider guide](../../doc/ios-provider.md). Long press,
-multi-touch, clipboard read, landscape and Appium Grid remain outside this preview.
+multi-touch, clipboard read and landscape remain outside this provider. For
+Appium Grid, use the separate [iOS node setup](../appium-tests/ios-node/README.md).
 
 Screen traffic is exposed only through the existing dynamic proxy. The provider
 accepts the configured browser origin and authenticates the forwarded signed

@@ -1,4 +1,5 @@
 import events from 'events'
+import {randomUUID} from 'node:crypto'
 
 import Promise from 'bluebird'
 import syrup from '@devicefarmer/stf-syrup'
@@ -118,7 +119,7 @@ export default syrup.serial()
             if (stopping) {
  throw new Error('Device worker is stopping')
 }
-            currentGroup = newGroup
+            currentGroup = new wire.OwnerMessage({...newGroup, reservationId: randomUUID()})
             currentAutomation = baseline ? {email: newGroup.email, id: leaseId!, baseline} : null
             log.important('Now owned by "%s"', currentGroup.email)
             log.info('Subscribing to group channel "%s"', currentGroup.group)
@@ -150,12 +151,15 @@ export default syrup.serial()
       }
     }
 
-    plugin.leave = function(reason) {
+    plugin.leave = function(reason, reservationId) {
       if (leaving) {
  return leaving
 }
       const operation = Promise.resolve(joining).reflect().then(() => plugin.get())
         .then(async function(group) {
+          if (reservationId && group.reservationId !== reservationId) {
+            throw new grouputil.RequirementMismatchError('reservationId')
+          }
           if (currentAutomation) {
             // A timeout or coordinator outage may end access, but cannot make a running driver free.
             // Keep both ownership and the external epoch after failure so exact-lease release can retry.
@@ -208,10 +212,10 @@ export default syrup.serial()
               , message.automationRunner
             )
           })
-          .then(function() {
+          .then(function(owner) {
             push.send([
               channel
-            , reply.okay()
+            , reply.okay(null, {owner})
             ])
           })
           .catch(grouputil.RequirementMismatchError, function(err) {
@@ -280,7 +284,7 @@ export default syrup.serial()
         , message.requirements
         )
           .then(function() {
-            return plugin.leave('ungroup_request')
+            return plugin.leave('ungroup_request', message.reservationId)
           })
           .then(function() {
             push.send([
@@ -288,7 +292,7 @@ export default syrup.serial()
             , reply.okay()
             ])
           })
-          .catch(grouputil.NoGroupError, function(err) {
+          .catch(grouputil.NoGroupError, grouputil.RequirementMismatchError, function(err) {
             push.send([
               channel
             , reply.fail(err.message)

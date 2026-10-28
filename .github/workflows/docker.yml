@@ -18,6 +18,9 @@ concurrency:
   group: docker-${{ github.ref }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
+permissions:
+  contents: read
+
 jobs:
   standard:
     if: github.event_name != 'workflow_dispatch' || inputs.target != 'farm-ci'

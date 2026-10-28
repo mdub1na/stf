@@ -499,6 +499,8 @@ var pbjs5Decodings: Sample[] = [
     , x: 0.12345600128173828
     , y: 0.9876539707183838
     , pressure: null
+    , gestureId: null
+    , reservationId: null
     }
   }
 , {
@@ -587,6 +589,9 @@ var pbjs5Decodings: Sample[] = [
     , cpuPlatform: null
     , openGLESVersion: null
     , marketName: null
+    , cpu: null
+    , memory: null
+    , releasedAt: null
     }
   }
 ]
@@ -609,6 +614,8 @@ describe('wire protobuf', function() {
       , x: 1.5
       , y: 2.5
       , pressure: null
+      , gestureId: null
+      , reservationId: null
       })
     })
 
@@ -806,6 +813,28 @@ describe('wire protobuf', function() {
       })
     })
 
+    it('round-trips provider gesture identity without changing legacy message codes', function() {
+      const scope = {gestureId: 'source:1', reservationId: 'reservation'}
+      const messages = [
+        new wire.GestureStartMessage({seq: 0, ...scope})
+      , new wire.TouchDownMessage({seq: 1, contact: 0, x: 0.5, y: 0.5, ...scope})
+      , new wire.TouchMoveMessage({seq: 2, contact: 0, x: 0.5, y: 0.4, ...scope})
+      , new wire.TouchCommitMessage({seq: 3, ...scope})
+      , new wire.TouchResetMessage({seq: 4, ...scope, cancel: false})
+      , new wire.TouchUpMessage({seq: 5, contact: 0, ...scope})
+      , new wire.GestureStopMessage({seq: 6, ...scope})
+      ]
+      const types = [wire.GestureStartMessage, wire.TouchDownMessage, wire.TouchMoveMessage
+        , wire.TouchCommitMessage, wire.TouchResetMessage, wire.TouchUpMessage
+        , wire.GestureStopMessage]
+      for (const [index, message] of messages.entries()) {
+        const decoded = types[index]!.decode(message.encodeNB())
+        expect(decoded.gestureId).to.equal(scope.gestureId)
+        expect(decoded.reservationId).to.equal(scope.reservationId)
+      }
+      expect(wire.TouchResetMessage.decode(messages[4]!.encodeNB()).cancel).to.equal(false)
+    })
+
     it('should decode an unset optional message field as null', function() {
       var encoded = new wire.DeviceIntroductionMessage(
         'serial', wire.DeviceStatus.ONLINE, new wire.ProviderMessage('chan', 'name'), 1
@@ -836,6 +865,47 @@ describe('wire protobuf', function() {
         ))
       }
     )
+
+    it('should round-trip DeviceIdentityMessage with cpu, memory, and releasedAt fields',
+      function() {
+        var display = new wire.DeviceDisplayMessage(
+          0, 1080, 2400, 0, 420, 420, 60, 2.625, true, 'url', 6.6
+        )
+      var phone = new wire.DevicePhoneMessage('123', '456', '789', '012', 'LTE')
+      var cpu = new wire.DeviceCpuMessage('Snapdragon 8 Gen 3', 8, 3.3)
+      var memory = new wire.DeviceMemoryMessage(12288, 256.5)
+      var original = new wire.DeviceIdentityMessage(
+        'serial123'
+      , 'Android'
+      , 'Samsung'
+      , 'Carrier'
+      , 'SM-S928B'
+      , '14'
+      , 'arm64-v8a'
+      , '34'
+      , display
+      , phone
+      , 'e3qxxx'
+      , 'qcom'
+      , '3.2'
+      , 'Galaxy S24 Ultra'
+      , cpu
+      , memory
+      , '2024-01-24'
+      )
+
+      var encoded = original.encodeNB()
+      var decoded = wire.DeviceIdentityMessage.decode(encoded)
+
+      expect(decoded.serial).to.equal('serial123')
+      expect(decoded.platform).to.equal('Android')
+      expect(decoded.manufacturer).to.equal('Samsung')
+      expect(decoded.model).to.equal('SM-S928B')
+      expect(decoded.marketName).to.equal('Galaxy S24 Ultra')
+      expect(decoded.releasedAt).to.equal('2024-01-24')
+      expect(fields(decoded.cpu!)).to.eql({name: 'Snapdragon 8 Gen 3', cores: 8, freq: 3.3})
+      expect(fields(decoded.memory!)).to.eql({ram: 12288, rom: 256.5})
+    })
   })
 
   describe('routing', function() {

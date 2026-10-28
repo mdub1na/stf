@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict'
 import http from 'node:http'
 import {once} from 'node:events'
+import sinon from 'sinon'
 import {WebSocket} from 'ws'
 import wire from '../../lib/wire/index.js'
 import wireutil from '../../lib/wire/util.js'
@@ -115,15 +116,19 @@ describe('Linux iOS integration', function() {
       bridge.handle(channel, transaction ?
         wireutil.transaction('reply', message) : wireutil.envelope(message))
     }
-    const join = async(timeout = 900000, usage?: string) => {
+    const join = async(timeout = 900000, usage?: string, leaseId?: string) => {
       await bridge.poll()
       send(new wire.DeviceRegisteredMessage(serial), false, bridge.solo)
       send(new wire.GroupMessage(owner, timeout, [
         new wire.DeviceRequirement('serial', serial, wire.RequirementType.EXACT)
-      ], usage), true)
+      ], usage, leaseId), true)
       await until(() => bridge.owner !== null)
     }
-    return {bridge, client, state, requests, sent, send, join, errors
+    const gesture = (order: number) => ({
+      gestureId: '11111111-1111-4111-8111-111111111111:' + order
+      , reservationId: bridge.owner?.reservationId || null
+    })
+    return {bridge, client, state, requests, sent, send, join, gesture, errors
       , failKeepalive: () => {
  failKeepalive = true
 }
@@ -131,15 +136,63 @@ describe('Linux iOS integration', function() {
       , disconnects: () => disconnects, cancelled: () => cancelled}
   }
 
-  it('keeps iOS automation usage until release', async function() {
+  it('publishes iOS automation usage and releases its owner', async function() {
     const f = await fixture()
     await f.join(900000, 'automation')
     const joined = f.sent.find(item => item.envelope.type === wire.JoinGroupMessage.$code)
-    assert.equal(wire.JoinGroupMessage.decode(joined!.envelope.message).usage, 'automation')
-    assert.equal(f.bridge.usage, 'automation')
+    const reservation = wire.JoinGroupMessage.decode(joined!.envelope.message)
+    assert.equal(reservation.usage, 'automation')
+    assert.ok(reservation.owner.reservationId)
+    assert.equal(reservation.owner.reservationId, f.bridge.owner?.reservationId)
+    const acknowledgement = f.sent.find(item =>
+      item.channel === 'reply' && item.envelope.type === wire.TransactionDoneMessage.$code)!
+    const response = wire.TransactionDoneMessage.decode(acknowledgement.envelope.message)
+    assert.equal(response.success, true)
+    assert.equal(JSON.parse(response.body!).owner.reservationId, reservation.owner.reservationId)
     f.bridge.leave('ungroup_request')
-    assert.equal(f.bridge.usage, null)
+    const left = f.sent.find(item => item.envelope.type === wire.LeaveGroupMessage.$code)
+    assert.equal(wire.LeaveGroupMessage.decode(left!.envelope.message).owner.email, owner.email)
+    assert.equal(f.bridge.owner, null)
   })
+
+  it('retains provider reservation identity across coordinator lease acknowledgements',
+    async function() {
+      const f = await fixture()
+      const replies = () => f.sent.filter(item =>
+        item.channel === 'reply' && item.envelope.type === wire.TransactionDoneMessage.$code)
+      await f.join(900000, 'automation', 'lease-first')
+      const first = f.bridge.owner!.reservationId
+      const joined = f.sent.find(item => item.envelope.type === wire.JoinGroupMessage.$code)!
+      const reservation = wire.JoinGroupMessage.decode(joined.envelope.message)
+      assert.equal(reservation.leaseId, 'lease-first')
+      assert.equal(reservation.owner.reservationId, first)
+      const acknowledged = wire.TransactionDoneMessage.decode(replies().at(-1)!.envelope.message)
+      assert.equal(JSON.parse(acknowledged.body!).owner.reservationId, first)
+
+      f.send(new wire.AutomationLeaseMessage(serial, owner, 'lease-first', 'release'), true)
+      await until(() => f.bridge.owner === null)
+      await f.join(900000, 'automation', 'lease-second')
+      const second = f.bridge.owner!.reservationId
+      assert.ok(first && second && second !== first)
+      assert.equal(f.bridge.usage, 'automation')
+      const gesture = f.gesture(1)
+      f.send(new wire.TouchDownMessage({seq: 1, contact: 0, x: 0.3, y: 0.4, ...gesture}))
+      f.send(new wire.GestureStartMessage({seq: 0, ...gesture}))
+      f.send(new wire.TouchUpMessage({seq: 2, contact: 0, ...gesture}))
+      f.send(new wire.GestureStopMessage({seq: 3, ...gesture}))
+      await until(() => f.requests.some(request => request.path === '/tap'))
+      const tap = f.requests.find(request => request.path === '/tap')!.body
+      assert.equal(tap.reservationId, second)
+      assert.equal(tap.gestureId, gesture.gestureId)
+      assert.ok(Math.abs(tap.x - 0.3) < 1e-6 && Math.abs(tap.y - 0.4) < 1e-6)
+      const replyCount = replies().length
+      f.send(new wire.AutomationLeaseMessage(serial, owner, 'lease-first', 'release'), true)
+      await until(() => replies().length === replyCount + 1)
+      assert.equal(wire.TransactionDoneMessage.decode(replies().at(-1)!.envelope.message).success,
+        false)
+      assert.equal(f.bridge.owner!.reservationId, second)
+      f.bridge.leave('test_complete')
+    })
 
   it('streams authorized automation without extending its lease', async function() {
     const f = await fixture()
@@ -189,7 +242,6 @@ describe('Linux iOS integration', function() {
         await new Promise(resolve => setTimeout(resolve, 20))
         await f.bridge.poll()
         assert.equal(f.bridge.owner, null, 'Observers must not renew automation ownership')
-        assert.equal(f.bridge.usage, null)
       }
       finally {
         Date.now = now
@@ -200,6 +252,66 @@ describe('Linux iOS integration', function() {
       screen.close()
     }
   })
+
+  for (const revoked of ['group visibility', 'viewer token']) {
+    it(`rechecks ${revoked} while the automation owner is unchanged`, async function() {
+      const f = await fixture()
+      await f.join(20000, 'automation')
+      const reservationOwner = f.bridge.owner
+      let allowed = true
+      let identityChecks = 0
+      let deviceChecks = 0
+      const api = http.createServer((req, res) => {
+        if (req.url === '/api/v1/user') {
+          identityChecks++
+          const visible = allowed || revoked !== 'viewer token'
+          res.writeHead(visible ? 200 : 401)
+          res.end(JSON.stringify({success: visible, user: {email: 'viewer@example.test'}}))
+        }
+        else {
+          assert.equal(req.url, '/api/v1/devices/' + serial)
+          deviceChecks++
+          res.writeHead(allowed ? 200 : 403)
+          res.end(JSON.stringify({success: allowed, device: {serial, owner, usage: 'automation'}}))
+        }
+      })
+      servers.push(api)
+      const apiUrl = await listen(api)
+      const clock = sinon.useFakeTimers({toFake: ['setInterval', 'clearInterval']})
+      const screen = createScreenServer({client: f.client, apiUrl, publicOrigin: origin, serial
+        , owner: () => f.bridge.owner})
+      const ws = new WebSocket((await listen(screen.server)).replace('http:', 'ws:'), {
+        headers: {origin, cookie: 'session=signed'}
+      })
+      let frames = 0
+      ws.on('message', (_data, binary) => {
+        if (binary) {
+          frames++
+        }
+      })
+      try {
+        await once(ws, 'open')
+        ws.send('on')
+        await until(() => frames >= 2)
+        const closed = once(ws, 'close')
+        allowed = false
+        clock.tick(5000)
+        const [code] = await closed
+        assert.equal(code, 1008)
+        assert.ok(identityChecks >= 2, 'The same-owner stream must recheck viewer credentials')
+        assert.equal(f.bridge.owner, reservationOwner,
+          'Revocation must not release the reservation')
+        if (revoked === 'group visibility') {
+          assert.ok(deviceChecks >= 2, 'The same-owner stream must recheck group visibility')
+        }
+      }
+      finally {
+        ws.terminate()
+        screen.close()
+        clock.restore()
+      }
+    })
+  }
 
   it('aborts forwarded input on release and permits a new session', async function() {
     const f = await fixture('iPhone 16 Plus', true)
@@ -224,8 +336,11 @@ describe('Linux iOS integration', function() {
     assert.equal(identity.platform, 'iOS')
     assert.equal(identity.model, 'iPhone17,4')
     assert.equal(identity.display.width, 1290)
-    f.send(new wire.TouchDownMessage(0, 0, 0.3, 0.4))
-    f.send(new wire.TouchUpMessage(1, 0))
+    const gesture = f.gesture(1)
+    f.send(new wire.GestureStartMessage({seq: 0, ...gesture}))
+    f.send(new wire.TouchDownMessage({seq: 1, contact: 0, x: 0.3, y: 0.4, ...gesture}))
+    f.send(new wire.TouchUpMessage({seq: 2, contact: 0, ...gesture}))
+    f.send(new wire.GestureStopMessage({seq: 3, ...gesture}))
     f.send(new wire.PasteMessage('Hello iPhone'), true)
     f.send(new wire.KeyPressMessage('home'))
     await until(() => f.requests.length === 3)
@@ -279,6 +394,125 @@ describe('Linux iOS integration', function() {
     assert.equal(f.requests.length, 0)
   })
 
+  it('does not release a new reservation for an old reservation ID', async function() {
+    const f = await fixture()
+    await f.join()
+    const previousId = f.bridge.owner!.reservationId!
+    f.bridge.leave('test')
+    await f.join()
+    const replacement = f.bridge.owner!
+    assert.ok(previousId)
+    assert.ok(replacement.reservationId)
+    assert.notEqual(previousId, replacement.reservationId)
+    assert.ok(!('reservationId' in owner), 'The provider must not mutate the caller owner')
+    f.send(new wire.UngroupMessage([], previousId), true)
+    await until(() => f.sent.some(item =>
+      item.envelope.type === wire.TransactionDoneMessage.$code &&
+      !wire.TransactionDoneMessage.decode(item.envelope.message).success))
+    assert.equal(f.bridge.owner, replacement)
+    f.send(new wire.UngroupMessage([], replacement.reservationId), true)
+    await until(() => f.bridge.owner === null)
+  })
+
+  it('reorders an iOS gesture whose prefix and Stop arrive before Start', async function() {
+    const f = await fixture()
+    await f.join()
+    const gesture = f.gesture(1)
+    f.send(new wire.TouchDownMessage({seq: 1, contact: 0, x: 0.3, y: 0.4, ...gesture}))
+    f.send(new wire.GestureStopMessage({seq: 4, ...gesture}))
+    f.send(new wire.TouchUpMessage({seq: 3, contact: 0, ...gesture}))
+    f.send(new wire.GestureStartMessage({seq: 0, ...gesture}))
+    assert.equal(f.requests.length, 0)
+    f.send(new wire.TouchCommitMessage({seq: 2, ...gesture}))
+    await until(() => f.requests.length === 1)
+    assert.equal(f.requests[0]!.path, '/tap')
+  })
+
+  it('ignores a scoped reset and delayed Start from a previous gesture', async function() {
+    const f = await fixture()
+    await f.join()
+    const old = f.gesture(1); const current = f.gesture(2)
+    f.send(new wire.GestureStartMessage({seq: 0, ...old}))
+    f.send(new wire.TouchDownMessage({seq: 1, contact: 0, x: 0.2, y: 0.3, ...old}))
+    f.send(new wire.GestureStartMessage({seq: 2, ...current}))
+    f.send(new wire.TouchDownMessage({seq: 3, contact: 0, x: 0.7, y: 0.8, ...current}))
+    f.send(new wire.TouchResetMessage({seq: 0, ...old, cancel: true}))
+    f.send(new wire.GestureStartMessage({seq: 0, ...old}))
+    f.send(new wire.TouchUpMessage({seq: 4, contact: 0, ...current}))
+    f.send(new wire.GestureStopMessage({seq: 5, ...current}))
+    await until(() => f.requests.length === 1)
+    assert.equal(f.requests[0]!.path, '/tap')
+    assert.equal(f.requests[0]!.body.x, Math.fround(0.7))
+    assert.equal(f.requests[0]!.body.y, Math.fround(0.8))
+  })
+
+  it('fences delayed gesture input across an ownership change', async function() {
+    const f = await fixture()
+    await f.join()
+    const old = f.gesture(1)
+    f.send(new wire.TouchDownMessage({seq: 1, contact: 0, x: 0.2, y: 0.3, ...old}))
+    f.bridge.leave('test')
+    await f.join()
+    const current = f.gesture(2)
+    f.send(new wire.GestureStartMessage({seq: 0, ...old}))
+    f.send(new wire.GestureStartMessage({seq: 0, ...current}))
+    f.send(new wire.TouchDownMessage({seq: 1, contact: 0, x: 0.7, y: 0.8, ...current}))
+    f.send(new wire.TouchResetMessage({seq: 0, ...old, cancel: true}))
+    for (const reservationId of [old.reservationId, null]) {
+      for (const cancel of [true, null]) {
+        f.send(new wire.TouchResetMessage({seq: 0, gestureId: null, reservationId, cancel}))
+      }
+    }
+    f.send(new wire.TouchUpMessage({seq: 2, contact: 0, ...current}))
+    f.send(new wire.GestureStopMessage({seq: 3, ...current}))
+    await until(() => f.requests.length === 1)
+    assert.equal(f.requests[0]!.path, '/tap')
+    assert.equal(f.requests[0]!.body.x, Math.fround(0.7))
+    assert.equal(f.requests[0]!.body.y, Math.fround(0.8))
+  })
+
+  for (const cancel of [true, false]) {
+    it(`cancels iOS touch with a ${cancel ? 'scoped' : 'sequenced'} reset`, async function() {
+      const f = await fixture()
+      await f.join()
+      const gesture = f.gesture(1)
+      f.send(new wire.GestureStartMessage({seq: 0, ...gesture}))
+      f.send(new wire.TouchDownMessage({seq: 1, contact: 0, x: 0.2, y: 0.3, ...gesture}))
+      f.send(new wire.TouchResetMessage({seq: 2, ...gesture, cancel}))
+      f.send(new wire.TouchUpMessage({seq: 3, contact: 0, ...gesture}))
+      f.send(new wire.GestureStopMessage({seq: 4, ...gesture}))
+      f.send(new wire.KeyPressMessage('home'))
+      await until(() => f.requests.length === 1)
+      assert.deepEqual(f.requests.map(item => item.path), ['/home'])
+    })
+  }
+
+  it('retains scoped cleanup after a sequenced reset within a gesture', async function() {
+    const f = await fixture()
+    await f.join()
+    const gesture = f.gesture(1)
+    f.send(new wire.GestureStartMessage({seq: 0, ...gesture}))
+    f.send(new wire.TouchDownMessage({seq: 1, contact: 0, x: 0.2, y: 0.3, ...gesture}))
+    f.send(new wire.TouchResetMessage({seq: 2, ...gesture, cancel: false}))
+    f.send(new wire.TouchDownMessage({seq: 3, contact: 0, x: 0.7, y: 0.8, ...gesture}))
+    f.send(new wire.TouchResetMessage({seq: 0, ...gesture, cancel: true}))
+    f.send(new wire.TouchUpMessage({seq: 4, contact: 0, ...gesture}))
+    f.send(new wire.KeyPressMessage('home'))
+    await until(() => f.requests.length === 1)
+    assert.deepEqual(f.requests.map(item => item.path), ['/home'])
+  })
+
+  it('refuses legacy touch without protected reservation and gesture identities', async function() {
+    const f = await fixture()
+    await f.join()
+    f.send(new wire.GestureStartMessage(0))
+    f.send(new wire.TouchDownMessage(1, 0, 0.3, 0.4))
+    f.send(new wire.TouchUpMessage(2, 0))
+    f.send(new wire.KeyPressMessage('home'))
+    await until(() => f.requests.length === 1)
+    assert.deepEqual(f.requests.map(item => item.path), ['/home'])
+  })
+
   it('invalidates commands on release and WDA recovery', async function() {
     const f = await fixture()
     await f.join()
@@ -300,12 +534,21 @@ describe('Linux iOS integration', function() {
   it('does not turn a multi-finger gesture into an unintended tap', async function() {
     const f = await fixture()
     await f.join()
-    f.send(new wire.TouchDownMessage(0, 0, 0.3, 0.4))
-    f.send(new wire.TouchDownMessage(1, 1, 0.6, 0.4))
-    f.send(new wire.TouchUpMessage(2, 0))
-    f.send(new wire.GestureStopMessage(3))
+    const gesture = f.gesture(1)
+    f.send(new wire.GestureStartMessage({seq: 0, ...gesture}))
+    f.send(new wire.TouchDownMessage({seq: 1, contact: 0, x: 0.3, y: 0.4, ...gesture}))
+    f.send(new wire.TouchDownMessage({seq: 2, contact: 1, x: 0.6, y: 0.4, ...gesture}))
+    f.send(new wire.TouchUpMessage({seq: 3, contact: 0, ...gesture}))
+    f.send(new wire.GestureStopMessage({seq: 4, ...gesture}))
     await new Promise(resolve => setTimeout(resolve, 30))
     assert.equal(f.requests.length, 0)
+    const next = f.gesture(2)
+    f.send(new wire.GestureStartMessage({seq: 5, ...next}))
+    f.send(new wire.TouchDownMessage({seq: 6, contact: 0, x: 0.7, y: 0.8, ...next}))
+    f.send(new wire.TouchUpMessage({seq: 7, contact: 0, ...next}))
+    f.send(new wire.GestureStopMessage({seq: 8, ...next}))
+    await until(() => f.requests.length === 1)
+    assert.equal(f.requests[0]!.path, '/tap')
   })
 
   it('accepts IPA blobs only and binds job status and cancellation to ownership', async function() {
@@ -558,6 +801,10 @@ describe('Linux iOS integration', function() {
       return {serial, platform: 'iOS', channel: 'ios:' + serial, present: true
         , ready: true, owner, group: {id: 'root'}}
     }, () => assert.fail('Owned input must not be rejected'))
+    guard(['input.gestureStart', 'ios:' + serial], error => {
+      assert.ifError(error)
+      delivered.push('start')
+    })
     guard(['input.touchDown', 'ios:' + serial], error => {
       assert.ifError(error)
       delivered.push('down')
@@ -569,8 +816,8 @@ describe('Linux iOS integration', function() {
     await until(() => lookups === 1)
     assert.deepEqual(delivered, [])
     release()
-    await until(() => delivered.length === 2)
-    assert.deepEqual(delivered, ['down', 'up'])
+    await until(() => delivered.length === 3)
+    assert.deepEqual(delivered, ['start', 'down', 'up'])
   })
 
   it('reassembles split MJPEG frames and rejects missing or oversized lengths', function() {

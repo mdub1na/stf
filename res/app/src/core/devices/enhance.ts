@@ -13,7 +13,7 @@ const stateActions: Record<DeviceState, string> = {
   , using: gettext('Stop Using')
   , busy: gettext('Busy')
   , available: gettext('Use')
-  , automation: gettext('Stop Automation')
+  , automation: gettext('Automated')
 }
 
 const statePassives: Record<DeviceState, string> = {
@@ -26,7 +26,7 @@ const statePassives: Record<DeviceState, string> = {
   , using: gettext('Using')
   , busy: gettext('Busy')
   , available: gettext('Available')
-  , automation: gettext('Automating')
+  , automation: gettext('Automated')
 }
 
 export const likelyLeaveReasons: Record<string, string> = {
@@ -107,6 +107,15 @@ function lookup(table: Record<string, string>, key?: string | null): string {
   return key && table[key] ? translate(table[key]) : '-'
 }
 
+export function isAutomated(device: Pick<Device, 'owner' | 'usage'>): boolean {
+  return Boolean(device.owner && device.usage === 'automation')
+}
+
+export function canViewDevice(device: Device): boolean {
+  return Boolean(device.present && device.status === 3 && device.ready &&
+    (device.using || isAutomated(device)))
+}
+
 export function computeState(device: Device): DeviceState {
   if (!device.present) {
     return 'absent'
@@ -120,8 +129,11 @@ export function computeState(device: Device): DeviceState {
       if (!device.ready) {
         return 'preparing'
       }
+      if (isAutomated(device)) {
+        return 'automation'
+      }
       if (device.using) {
-        return device.usage === 'automation' ? 'automation' : 'using'
+        return 'using'
       }
       return device.owner ? 'busy' : 'available'
     default:
@@ -145,6 +157,11 @@ export function userProfileUrl(email?: string): string | undefined {
   return `/#/user/${email}`
 }
 
+export function setDeviceImage(device: Device): void {
+  device.enhancedImage120 = deviceImageUrl(device.image, 'icon/x120', device)
+  device.enhancedImage24 = deviceImageUrl(device.image, 'icon/x24', device)
+}
+
 export function enhanceDevice(device: Device): Device {
   device.usable = Boolean(device.present && device.status === 3 && device.ready &&
     (!device.owner || device.using))
@@ -157,8 +174,7 @@ export function enhanceDevice(device: Device): Device {
   device.enhancedName = device.marketName || device.name || device.model || device.serial ||
     'Unknown'
   device.enhancedModel = device.model || 'Unknown'
-  device.enhancedImage120 = deviceImageUrl(device.image, 'icon/x120')
-  device.enhancedImage24 = deviceImageUrl(device.image, 'icon/x24')
+  setDeviceImage(device)
   device.enhancedStateAction = statusNameAction(device.state)
   device.enhancedStatePassive = statusNamePassive(device.state)
 

@@ -5,6 +5,7 @@ import {WebSocketServer, createWebSocketStream} from 'ws'
 import {CoordinatorAccess, type Principal} from './access.js'
 import {LeaseAdbBridge} from './adb-bridge.js'
 import {CoordinatorError} from './config.js'
+import {validMaintenanceId, validMaintenanceSerial} from './maintenance.js'
 import {Coordinator} from './engine.js'
 import type {AllocationInput, CoordinatorOptions} from './types.js'
 
@@ -87,6 +88,26 @@ export function createCoordinatorApp(engine: Coordinator, credential: string | C
     access.assertProject(principal(res), engine.requestProject(id), 'request')
   app.get('/api/v1/status', (_req, res) => res.json(engine.status(
     principal(res).admin ? undefined : principal(res).projectId)))
+  app.post('/api/v1/maintenance', async(req, res) => {
+    access.assertAdmin(principal(res))
+    const body = req.body
+    if (!body || typeof body !== 'object' || Array.isArray(body) ||
+        Object.keys(body).some(key => !['serial', 'operationId'].includes(key)) ||
+        !validMaintenanceSerial(body.serial) || !validMaintenanceId(body.operationId)) {
+      throw new CoordinatorError(400, 'invalid_maintenance',
+        'Expected a serial and operation UUID')
+    }
+    const maintenance = await engine.startMaintenance(body.serial, body.operationId)
+    res.status(202).json({maintenance})
+  })
+  app.get('/api/v1/maintenance/:id', (req, res) => {
+    access.assertAdmin(principal(res))
+    res.json({maintenance: engine.maintenanceView(req.params.id)})
+  })
+  app.delete('/api/v1/maintenance/:id', async(req, res) => {
+    access.assertAdmin(principal(res))
+    res.json({maintenance: await engine.finishMaintenance(req.params.id)})
+  })
   app.post('/api/v1/requests', async(req, res) => {
     const key = req.header('Idempotency-Key')
     if (!key || !/^[\x21-\x7e]{1,128}$/.test(key)) {

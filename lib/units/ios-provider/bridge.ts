@@ -24,7 +24,6 @@ export class IosBridge {
   readonly channel: string
   readonly solo = wireutil.makePrivateChannel()
   owner: IosOwner | null = null
-  usage: string | null = null
   private state: IosDeviceState | null = null
   private identity: InstanceType<typeof wire.DeviceIdentityMessage> | null = null
   private registered = false
@@ -336,7 +335,6 @@ export class IosBridge {
     if (!this.owner) {
       this.ownerAbort = new AbortController()
       this.owner = {...owner, reservationId: randomUUID()}
-      this.usage = usage || null
       this.gestures.setOwner(this.owner.reservationId!)
       this.lease = randomUUID()
       this.epoch++
@@ -365,7 +363,6 @@ export class IosBridge {
     this.automationLease.clear()
     this.automationLeaseId = null
     this.owner = null
-    this.usage = null
     this.epoch++
     this.gestures.setOwner(null)
     this.disconnect()

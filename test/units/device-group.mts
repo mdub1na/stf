@@ -172,6 +172,30 @@ describe('Device group plugin', function() {
     }, () => undefined)
   })
 
+  it('acknowledges the reservation while preserving the coordinator lease', async function() {
+    const context = setup()
+    const owner = new wire.OwnerMessage('ci@example.test', 'CI', 'ci-channel')
+    const reply = await transaction(context, wire.GroupMessage,
+      new wire.GroupMessage(owner, 10000, [], 'automation', 'lease-a'))
+    expect(reply.success).to.equal(true)
+    const announced = messages(context.push, wire.JoinGroupMessage.$code)
+    expect(announced).to.have.length(1)
+    const joined = wire.JoinGroupMessage.decode(announced[0]!.message)
+    expect(joined.usage).to.equal('automation')
+    expect(joined.leaseId).to.equal('lease-a')
+    expect(joined.owner.reservationId).to.be.a('string').with.length(36)
+    expect(JSON.parse(reply.body!).owner.reservationId).to.equal(joined.owner.reservationId)
+    expect((await context.plugin.get()).reservationId).to.equal(joined.owner.reservationId)
+    expect(owner.reservationId).to.equal(null)
+    const renewal = await transaction(context, wire.AutomationLeaseMessage,
+      new wire.AutomationLeaseMessage('test-device', owner, 'lease-a', 'renew', 10000))
+    expect(renewal.success).to.equal(true)
+    const release = await transaction(context, wire.AutomationLeaseMessage,
+      new wire.AutomationLeaseMessage('test-device', owner, 'lease-a', 'release'))
+    expect(release.success).to.equal(true)
+    expect(messages(context.push, wire.LeaveGroupMessage.$code)).to.have.length(1)
+  })
+
   it('acknowledges the exact acquired reservation, including idempotent joins', async function() {
     const {plugin, handlers, push} = setup()
     const owner = new wire.OwnerMessage('a@example.com', 'a', 'group-channel')
@@ -220,6 +244,47 @@ describe('Device group Maestro cleanup fence', function() {
     expect(joined).to.have.length(1)
     expect(wire.JoinGroupMessage.decode(joined[0]!.message).automationRunner).to.equal('maestro')
     await context.plugin.leave('test_cleanup')
+  })
+
+  it('rejects stale reservation and lease cleanup before touching the replacement Maestro driver',
+    async function() {
+    const adb = maestroAdb()
+    const context = setup(adb)
+    const owner = new wire.OwnerMessage('ci@example.test', 'CI', 'ci-channel')
+    const previous = await context.plugin.join(
+      owner, 10000, 'automation', undefined, 'lease-a', 'maestro')
+    await context.plugin.leave('test_cleanup')
+    const replacement = await context.plugin.join(
+      owner, 10000, 'automation', undefined, 'lease-b', 'maestro')
+    expect(replacement.reservationId).to.not.equal(previous.reservationId)
+    adb.packages.add('dev.mobile.maestro')
+    adb.packages.add('dev.mobile.maestro.test')
+    const commands = [...adb.commands]
+
+    for (const action of ['renew', 'release']) {
+      const reply = await transaction(context, wire.AutomationLeaseMessage,
+        new wire.AutomationLeaseMessage('test-device', owner, 'lease-a', action, 10000))
+      expect(reply.success).to.equal(false)
+      expect(await context.plugin.get()).to.equal(replacement)
+      expect(adb.commands).to.eql(commands)
+    }
+    const staleRelease = await transaction(context, wire.UngroupMessage,
+      new wire.UngroupMessage([], previous.reservationId))
+    expect(staleRelease.success).to.equal(false)
+    expect(await context.plugin.get()).to.equal(replacement)
+    expect(adb.commands).to.eql(commands)
+    expect([...adb.packages]).to.eql(['dev.mobile.maestro', 'dev.mobile.maestro.test'])
+    expect(messages(context.push, wire.LeaveGroupMessage.$code)).to.have.length(1)
+
+    const renewal = await transaction(context, wire.AutomationLeaseMessage,
+      new wire.AutomationLeaseMessage('test-device', owner, 'lease-b', 'renew', 10000))
+    expect(renewal.success).to.equal(true)
+    const release = await transaction(context, wire.AutomationLeaseMessage,
+      new wire.AutomationLeaseMessage('test-device', owner, 'lease-b', 'release'))
+    expect(release.success).to.equal(true)
+    expect([...adb.packages]).to.eql([])
+    expect(adb.commands.slice(commands.length)).to.include('am force-stop dev.mobile.maestro')
+    expect(messages(context.push, wire.LeaveGroupMessage.$code)).to.have.length(2)
   })
 
   it('retains ownership and the epoch when native cleanup fails, then permits an exact retry',

@@ -1,0 +1,10 @@
+{
+  "spec": {
+    "template": {
+      "spec": {
+        "containers": [{"name": "appium", "$patch": "delete"}],
+        "volumes": [{"name": "appium-config", "$patch": "delete"}]
+      }
+    }
+  }
+}

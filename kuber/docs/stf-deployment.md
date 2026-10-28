@@ -31,8 +31,11 @@ if package visibility changes.
 ## Public address
 
 The farm's canonical address is <https://stf.finservice.tech> since 2026-10-05.
-Its DNS A-record targets `46.191.173.144`. Argo CD, LDAP administration and Appium
-Grid keep their existing domains. Cluster-internal service names are unchanged.
+Its DNS A-record targets `46.191.173.144`. Appium Grid uses
+`appium-grid.finservice.tech` since 2026-10-18. The Appium overlay also retains
+the previous `appium-grid.putmyhexon.ru` ingress and TLS Secret; do not prune
+that route when adopting the canonical endpoint. Argo CD and LDAP administration
+keep their existing domains. Cluster-internal service names are unchanged.
 
 `gitops/stf/stf-certificate.yaml` declares Certificate and TLS Secret
 `stf-finservice-tech-tls` using the existing `letsencrypt-http` Issuer. The farm
@@ -284,8 +287,9 @@ neither the MongoDB PVC nor old application data is reused.
 
 Check LDAP login, devices from both ADB pools, screen streaming and touch,
 capture/release, APK install, standard authenticated API, public TLS, and the
-16 Grid nodes. Disconnected devices leave device-specific checks pending;
-an empty device list alone does not show that STF's provider is broken.
+configured Android and per-phone iOS Grid relays. Disconnected devices leave
+device-specific checks pending; an empty device list alone does not show that
+STF's provider is broken.
 
 Old MongoDB may be deleted without a backup. Deleting its Argo Application
 without a resources finalizer does not remove its workloads. Perform the old
@@ -293,9 +297,11 @@ Application's cascading cleanup explicitly after STF validation, including its
 PVC and namespace. Do not delete LDAP or STF storage PVCs. Remove the old iOS
 bridge Services/Endpoints/NodePorts through the application synchronization.
 
-The copied Java tests still depend on the legacy `/api/v1/autotests` API. They
-are historical code pending a separate STF client adaptation, not validation
-of this rollout. iOS support and Mac mini changes are explicitly out of scope.
+The [Kotlin Appium harness](../appium-tests/README.md) uses standard STF
+reservation endpoints. Its hardware tasks are opt-in; the default test task
+runs only device-free regressions. Linux iOS sidecar/relay setup is documented
+in [the node runbook](../appium-tests/ios-node/README.md). The dated rollout
+record below describes the original Android deployment, before those additions.
 
 ## Verified rollout on 2026-10-04
 

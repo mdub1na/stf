@@ -1,0 +1,41 @@
+name: ADB tunnel prototype
+
+on:
+  pull_request:
+    paths:
+      - tools/adb-tunnel/**
+      - bin/stf
+      - lib/cli/utils/**
+      - .github/workflows/adb-tunnel-prototype.yml
+      - .nvmrc
+  push:
+    branches: [develop]
+    paths:
+      - tools/adb-tunnel/**
+      - bin/stf
+      - lib/cli/utils/**
+      - .github/workflows/adb-tunnel-prototype.yml
+      - .nvmrc
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: Isolated HTTPS and ADB checks (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, macos-15]
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+      - name: Install the standalone transport dependency
+        run: npm --prefix tools/adb-tunnel ci --omit=optional --ignore-scripts --no-audit --no-fund
+      - name: Test without a phone or local ADB server
+        run: node --test tools/adb-tunnel/test/*.test.mts

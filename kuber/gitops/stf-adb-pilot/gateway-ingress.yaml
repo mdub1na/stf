@@ -1,0 +1,23 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: stf-adb-gateway
+  annotations:
+    traefik.ingress.kubernetes.io/router.entrypoints: websecure
+spec:
+  ingressClassName: traefik
+  tls:
+    - hosts:
+        - stf.finservice.tech
+      secretName: stf-finservice-tech-tls
+  rules:
+    - host: stf.finservice.tech
+      http:
+        paths:
+          - path: /adb-tunnel/
+            pathType: Prefix
+            backend:
+              service:
+                name: stf-adb-gateway
+                port:
+                  number: 8080

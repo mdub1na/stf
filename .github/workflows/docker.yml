@@ -2,6 +2,16 @@ name: Docker
 
 on:
   workflow_dispatch:
+    inputs:
+      component:
+        description: Image family to build
+        type: choice
+        options: [farm, adb-gateway]
+        default: farm
+      publish_gateway:
+        description: Publish the tested ADB gateway image (develop only)
+        type: boolean
+        default: false
   pull_request:
     paths-ignore: ['**.md', 'doc/**', 'kuber/**']
   push:
@@ -17,6 +27,7 @@ permissions:
 
 jobs:
   standard:
+    if: github.event_name != 'workflow_dispatch' || inputs.component != 'adb-gateway'
     uses: ./.github/workflows/docker-build.yml
     permissions:
       contents: read
@@ -27,7 +38,7 @@ jobs:
 
   debian:
     name: Debian image
-    if: github.event_name == 'pull_request'
+    if: github.event_name == 'pull_request' && inputs.component != 'adb-gateway'
     runs-on: ubuntu-24.04
     timeout-minutes: 60
     steps:
@@ -41,3 +52,13 @@ jobs:
           context: .
           file: Dockerfile-debian-x86_64
           platforms: linux/amd64
+
+  gateway:
+    name: Standalone ADB gateway
+    if: github.event_name == 'workflow_dispatch' && inputs.component == 'adb-gateway'
+    uses: ./.github/workflows/adb-tunnel-image.yml
+    permissions:
+      contents: read
+      packages: write
+    with:
+      publish: ${{ inputs.publish_gateway }}

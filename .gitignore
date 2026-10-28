@@ -14,6 +14,7 @@
 /temp/
 /tmp/
 package-lock.json
+!tools/adb-tunnel/package-lock.json
 yarn.lock
 /test-results/
 /lib/**/*.js

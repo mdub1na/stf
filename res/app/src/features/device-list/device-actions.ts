@@ -2,10 +2,12 @@ import {useMemo, type MouseEvent} from 'react'
 import {useNavigate} from 'react-router'
 import type {Device} from '@/core/devices/types'
 import {isAutomated} from '@/core/devices/enhance'
-import {inviteDevice, kickDevice} from '@/core/group'
+import {inviteDevice, kickDevice, releaseDevice} from '@/core/group'
+import {currentUser} from '@/core/user'
 import {useTranslation} from '@/core/i18n'
 import {useAdminMode} from '@/ui/modes'
 import {notifyFailure} from '@/ui/notify'
+import {confirmReleaseReservation} from '@/ui/release-reservation'
 import {openStandalone} from './standalone'
 
 export interface DeviceActions {
@@ -16,11 +18,16 @@ export interface DeviceActions {
 }
 
 export function controlHref(device: Device): string {
-  return `#/control/${device.serial}`
+  return `#/control/${device.serial}${isAutomated(device) ? '?mode=watch' : ''}`
 }
 
 export function canStartUsing(device: Device): boolean {
   return Boolean(device.usable && !device.using && !isAutomated(device))
+}
+
+export function canStopAutomation(device: Device): boolean {
+  return currentUser.privilege === 'admin' && !device.automationLeaseId &&
+    device.state === 'automation' && isAutomated(device)
 }
 
 export function useDeviceActions(): DeviceActions {
@@ -37,6 +44,21 @@ export function useDeviceActions(): DeviceActions {
       return kickDevice(device, force)
         .then(() => undefined)
         .catch(() => fail(t('Device cannot get kicked from the group')))
+    }
+
+    async function stopAutomation(device: Device): Promise<void> {
+      if (!canStopAutomation(device)) {
+        return
+      }
+      const target = {...device, owner: device.owner ? {...device.owner} : null}
+      try {
+        if (await confirmReleaseReservation()) {
+          await releaseDevice(target)
+        }
+      }
+      catch (error) {
+        fail(error)
+      }
     }
 
     function invite(device: Device): Promise<void> {
@@ -73,9 +95,13 @@ export function useDeviceActions(): DeviceActions {
       adminMode
       , open(event, device) {
         if (isAutomated(device)) {
-          if (!event.metaKey && !event.ctrlKey && event.button === 0) {
+          if (event.shiftKey && !event.metaKey && !event.ctrlKey && event.button === 0) {
             event.preventDefault()
-            navigate(`/control/${device.serial}`)
+            openStandalone(device)
+          }
+          else if (!event.metaKey && !event.ctrlKey && event.button === 0) {
+            event.preventDefault()
+            navigate(controlHref(device).slice(1))
           }
           return undefined
         }
@@ -92,7 +118,15 @@ export function useDeviceActions(): DeviceActions {
       , status(event, device) {
         if (isAutomated(device)) {
           event.preventDefault()
-          navigate(`/control/${device.serial}`)
+          if (event.shiftKey) {
+            openStandalone(device)
+          }
+          else if (canStopAutomation(device)) {
+            return stopAutomation(device)
+          }
+          else {
+            navigate(controlHref(device).slice(1))
+          }
           return undefined
         }
         const handled = modified(event, device)
@@ -110,7 +144,7 @@ export function useDeviceActions(): DeviceActions {
         }
         return undefined
       }
-      , stop: (device) => kick(device)
+      , stop: (device) => canStopAutomation(device) ? stopAutomation(device) : kick(device)
     }
   }, [navigate, t, adminMode])
 }

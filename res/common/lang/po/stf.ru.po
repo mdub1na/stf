@@ -163,7 +163,7 @@ msgstr "С записями"
 
 #: res/app/src/core/install.ts:266
 msgid "Another installation is in progress. Wait for it to finish."
-msgstr ""
+msgstr "Другая установка уже выполняется. Дождитесь её завершения."
 
 #: res/app/src/features/settings/devices/DevicesSettings.tsx:46
 msgid "Any"
@@ -202,13 +202,19 @@ msgstr "Вы уверены, что хотите перезагрузить ус
 msgid "Auto Scroll"
 msgstr "Автопрокрутка"
 
-#: res/app/src/core/devices/enhance.ts:28
-msgid "Automating"
-msgstr "Автоматизация"
+#: res/app/src/core/devices/enhance.ts:16
+#: res/app/src/core/devices/enhance.ts:29
+#: res/app/src/features/control/ControlPage.tsx:315
+msgid "Automated"
+msgstr "Automated"
 
 #: res/app/src/features/control/ControlPage.tsx:73
 msgid "Automation"
 msgstr "Автоматизация"
+
+#: res/app/src/features/control/ControlPage.tsx:315
+msgid "Automation finished"
+msgstr "Автотест завершён"
 
 #: res/app/src/core/devices/enhance.ts:27
 msgid "Available"
@@ -325,11 +331,11 @@ msgstr "Проверьте сообщения об ошибках ниже"
 
 #: res/app/src/features/control/panes/dashboard/install/InstallCard.tsx:241
 msgid "Check installation status"
-msgstr ""
+msgstr "Проверить статус установки"
 
 #: res/app/src/core/install.ts:63
 msgid "Checking IPA..."
-msgstr ""
+msgstr "Проверяем IPA..."
 
 #: res/app/src/features/group-list/columns.tsx:85
 #: res/app/src/features/settings/groups/GroupSchedule.tsx:62
@@ -365,7 +371,7 @@ msgstr "Холодно"
 
 #: res/app/src/features/control/panes/dashboard/ios-controls/IosControlsCard.tsx:111
 msgid "Confirm"
-msgstr ""
+msgstr "Подтвердить"
 
 #: res/app/src/features/settings/devices/DevicesSettings.tsx:194
 #: res/app/src/features/settings/groups/GroupList.tsx:177
@@ -381,7 +387,7 @@ msgstr "Конфликты"
 
 #: res/app/src/ui/IosDeviceHealth.tsx:8
 msgid "Connect the iPhone by USB."
-msgstr ""
+msgstr "Подключите iPhone по USB."
 
 #: res/app/src/core/devices/enhance.ts:20
 #: res/app/src/core/devices/enhance.ts:7
@@ -395,7 +401,7 @@ msgstr "Подключено успешно."
 
 #: res/app/src/ui/IosDeviceHealth.tsx:50
 msgid "Connected to power"
-msgstr ""
+msgstr "Подключён к питанию"
 
 #: res/app/src/features/group-list/GroupListPage.tsx:128
 #: res/app/src/features/settings/groups/GroupList.tsx:165
@@ -437,14 +443,14 @@ msgstr "Ядер"
 #: res/app/src/features/control/panes/dashboard/ios-controls/IosControlsCard.tsx:34
 msgid ""
 "Could not change the screen lock. Check the iPhone connection and try again."
-msgstr ""
+msgstr "Не удалось изменить блокировку экрана. Проверьте подключение iPhone и повторите попытку."
 
 #: res/app/src/features/control/panes/dashboard/ios-controls/IosControlsCard.tsx:48
 msgid ""
 "Could not shake the iPhone. Keep it unlocked and use the standard "
 "AssistiveTouch menu in English or Russian. Release and reconnect the device "
 "if the session ended."
-msgstr ""
+msgstr "Не удалось потрясти iPhone. Оставьте его разблокированным и используйте стандартное меню AssistiveTouch на русском или английском языке. Если сеанс завершён, освободите устройство и подключитесь заново."
 
 #: res/app/src/features/control/panes/info/InfoPane.tsx:283
 msgid "CPU"
@@ -576,11 +582,15 @@ msgstr "Список устройств"
 
 #: res/app/src/ui/IosDeviceHealth.tsx:63
 msgid "Device Name"
-msgstr ""
+msgstr "Имя устройства"
 
 #: res/app/src/features/settings/devices/DevicesSettings.tsx:52
 msgid "Device notes state"
 msgstr "Наличие записей у устройства"
+
+#: res/app/src/features/control/screen/DeviceScreen.tsx:31
+msgid "Device offline"
+msgstr ""
 
 #: res/app/src/features/control/panes/info/InfoPane.tsx:175
 msgid "Device Photo"
@@ -680,7 +690,7 @@ msgstr "Включить Bluetooth"
 
 #: res/app/src/ui/IosDeviceHealth.tsx:11
 msgid "Enable Developer Mode in Settings, Privacy & Security on the iPhone."
-msgstr ""
+msgstr "Включите режим разработчика на iPhone: Настройки → Конфиденциальность и безопасность."
 
 #: res/app/src/features/control/panes/automation/DeviceSettingsCard.tsx:127
 msgid "Enable WiFi"
@@ -774,7 +784,7 @@ msgstr "FPS"
 
 #: res/app/src/ui/IosDeviceHealth.tsx:70
 msgid "Free storage"
-msgstr ""
+msgstr "Свободная память"
 
 #: res/app/src/features/control/panes/info/InfoPane.tsx:289
 msgid "Frequency"
@@ -996,7 +1006,7 @@ msgstr "Информация"
 
 #: res/app/src/ui/IosDeviceHealth.tsx:12
 msgid "Install the signed WebDriverAgent runner."
-msgstr ""
+msgstr "Установите подписанный WebDriverAgent Runner."
 
 #: res/app/src/core/install.ts:159
 msgid "Installation canceled by user."
@@ -1009,7 +1019,7 @@ msgstr "Установка не удалась по неизвестной пр�
 #: res/app/src/core/install.ts:270
 msgid ""
 "Installation status is unavailable. Check the status again before retrying."
-msgstr ""
+msgstr "Статус установки недоступен. Проверьте его ещё раз перед повторной установкой."
 
 #: res/app/src/core/install.ts:156
 #: res/app/src/features/control/device-control/install-file.ts:32
@@ -1022,7 +1032,7 @@ msgstr "Время установки истекло."
 
 #: res/app/src/core/install.ts:271
 msgid "Installation was interrupted by a device or session disconnect."
-msgstr ""
+msgstr "Установка прервана из-за отключения устройства или завершения сеанса."
 
 #: res/app/src/core/install.ts:57
 msgid "Installing app..."
@@ -1030,11 +1040,11 @@ msgstr "Устанавливаем приложение..."
 
 #: res/app/src/features/control/panes/dashboard/ios-controls/IosControlsCard.tsx:71
 msgid "iPhone controls"
-msgstr ""
+msgstr "Управление iPhone"
 
 #: res/app/src/ui/IosDeviceHealth.tsx:58
 msgid "iPhone status"
-msgstr ""
+msgstr "Состояние iPhone"
 
 #: res/app/src/ui/Pager.tsx:61
 msgid "Items per page"
@@ -1068,7 +1078,7 @@ msgstr "Запустить приложение"
 
 #: res/app/src/core/install.ts:62
 msgid "Launching app..."
-msgstr ""
+msgstr "Открываем приложение..."
 
 #: res/app/src/features/auth/SignInForm.tsx:110
 #: res/app/src/features/auth/SignInForm.tsx:111
@@ -1097,7 +1107,7 @@ msgstr "Местоположение"
 
 #: res/app/src/features/control/panes/dashboard/ios-controls/IosControlsCard.tsx:76
 msgid "Lock screen"
-msgstr ""
+msgstr "Заблокировать экран"
 
 #: res/app/src/features/auth/SignInForm.tsx:156
 msgid "Log In"
@@ -1292,7 +1302,7 @@ msgstr "Нет групп"
 
 #: res/app/src/core/install.ts:269
 msgid "No installation was found in the current device session."
-msgstr ""
+msgstr "В текущем сеансе устройства установка не найдена."
 
 #: res/app/src/features/control/panes/logs/LogsPane.tsx:28
 msgid "No log entries match the filters"
@@ -1363,7 +1373,7 @@ msgstr "OK"
 
 #: res/app/src/ui/IosDeviceHealth.tsx:48
 msgid "On battery"
-msgstr ""
+msgstr "От аккумулятора"
 
 #: res/app/src/core/common.ts:20
 msgid "Once"
@@ -1513,13 +1523,13 @@ msgstr "Энергия"
 
 #: res/app/src/features/control/panes/dashboard/ios-controls/IosControlsCard.tsx:101
 msgid "Power off iPhone"
-msgstr ""
+msgstr "Выключить iPhone"
 
 #: res/app/src/features/control/panes/dashboard/ios-controls/IosControlsCard.tsx:107
 msgid ""
 "Power off this iPhone? Control will end. Turning it on again requires "
 "physical access."
-msgstr ""
+msgstr "Выключить этот iPhone? Управление завершится. Для повторного включения нужен физический доступ к телефону."
 
 #: res/app/src/features/control/panes/info/InfoPane.tsx:203
 msgid "Power Source"
@@ -1533,7 +1543,7 @@ msgstr "Подготовка"
 
 #: res/app/src/ui/IosDeviceHealth.tsx:19
 msgid "Preparing the iPhone..."
-msgstr ""
+msgstr "Подготовка iPhone..."
 
 #: res/app/src/features/settings/devices/DevicesSettings.tsx:50
 msgid "Present"
@@ -1565,7 +1575,7 @@ msgstr "Продукт"
 #: res/app/src/features/control/panes/dashboard/install/InstallCard.tsx:82
 #: res/app/src/ui/IosDeviceHealth.tsx:73
 msgid "Profile expires"
-msgstr ""
+msgstr "Профиль действует до"
 
 #: res/app/src/core/install.ts:56
 msgid "Pushing app..."
@@ -1616,6 +1626,10 @@ msgstr "Действительно удалить этого пользоват�
 #: res/app/src/features/control/device-control/DeviceMenuItems.tsx:34
 msgid "Recents"
 msgstr "Недавние"
+
+#: res/app/src/features/control/screen/DeviceScreen.tsx:30
+msgid "Reconnecting…"
+msgstr ""
 
 #: res/app/src/features/settings/groups/GroupDetail.tsx:86
 #: res/app/src/features/settings/users/CreateUserForm.tsx:61
@@ -1681,7 +1695,7 @@ msgstr "Для этого класса количество повторений
 
 #: res/app/src/core/install.ts:265
 msgid "Replacing WebDriverAgent from this panel is not allowed."
-msgstr ""
+msgstr "Заменить WebDriverAgent через эту панель нельзя."
 
 #: res/app/src/features/control/panes/dashboard/navigation/NavigationCard.tsx:65
 #: res/app/src/features/settings/general/GeneralSettings.tsx:104
@@ -1707,13 +1721,13 @@ msgstr "Перезагрузить устройство"
 
 #: res/app/src/features/control/panes/dashboard/ios-controls/IosControlsCard.tsx:97
 msgid "Restart iPhone"
-msgstr ""
+msgstr "Перезагрузить iPhone"
 
 #: res/app/src/features/control/panes/dashboard/ios-controls/IosControlsCard.tsx:108
 msgid ""
 "Restart this iPhone? Control will end. After startup, iOS may require the "
 "first unlock on the phone."
-msgstr ""
+msgstr "Перезагрузить этот iPhone? Управление завершится. После запуска iOS может потребовать первую разблокировку на самом телефоне."
 
 #: res/app/src/features/control/screen/DeviceScreen.tsx:167
 msgid "Retry"
@@ -1800,6 +1814,10 @@ msgstr "Расписание"
 msgid "Screen"
 msgstr "Экран"
 
+#: res/app/src/features/control/screen/DeviceScreen.tsx:32
+msgid "Screen disconnected"
+msgstr ""
+
 #: res/app/src/features/control/panes/screenshots/ScreenshotsPane.tsx:58
 #: res/app/src/features/control/panes/screenshots/ScreenshotsPane.tsx:75
 msgid "Screenshot"
@@ -1829,7 +1847,7 @@ msgstr "Поиск"
 
 #: res/app/src/core/install.ts:258
 msgid "Select a valid IPA for a physical iPhone."
-msgstr ""
+msgstr "Выберите корректный IPA для физического iPhone."
 
 #: res/app/src/features/settings/groups/GroupList.tsx:154
 #: res/app/src/features/settings/groups/shared/ObjectsTable.tsx:137
@@ -1877,11 +1895,11 @@ msgstr "Настройки сброшены"
 msgid ""
 "Several WDA profiles match this device. The earliest expiry is shown; verify"
 " the installed build."
-msgstr ""
+msgstr "Найдено несколько профилей WDA. Показана ближайшая дата окончания; проверьте установленную сборку."
 
 #: res/app/src/features/control/panes/dashboard/ios-controls/IosControlsCard.tsx:91
 msgid "Shake phone"
-msgstr ""
+msgstr "Потрясти телефон"
 
 #: res/app/src/features/control/panes/dashboard/shell/ShellCard.tsx:46
 msgid "Shell"
@@ -1976,10 +1994,6 @@ msgstr "Статус"
 msgid "Stop"
 msgstr "Стоп"
 
-#: res/app/src/core/devices/enhance.ts:15
-msgid "Stop Automation"
-msgstr "Остановить автоматизацию"
-
 #: res/app/src/core/devices/enhance.ts:12
 #: res/app/src/features/control/device-control/DeviceMenuItems.tsx:56
 #: res/app/src/features/control/device-control/DeviceToolbar.tsx:140
@@ -2011,6 +2025,10 @@ msgstr "Тег"
 msgid "Take Screenshot"
 msgstr "Сделать снимок экрана"
 
+#: res/app/src/features/control/ControlPage.tsx:385
+msgid "Take control to view and interact with the device."
+msgstr ""
+
 #: res/app/src/features/control/panes/info/InfoPane.tsx:206
 msgid "Temperature"
 msgstr "Температура"
@@ -2023,17 +2041,17 @@ msgstr "Текст"
 
 #: res/app/src/features/control/panes/dashboard/install/InstallCard.tsx:124
 msgid "The app may already be installed. Check the iPhone before retrying."
-msgstr ""
+msgstr "Приложение уже могло установиться. Проверьте iPhone перед повторной попыткой."
 
 #: res/app/src/features/control/panes/dashboard/install/InstallCard.tsx:84
 msgid ""
 "The app was installed but could not be opened. Open it on the iPhone and "
 "check developer trust."
-msgstr ""
+msgstr "Приложение установлено, но открыть его не удалось. Откройте его на iPhone и проверьте доверие разработчику."
 
 #: res/app/src/core/install.ts:274
 msgid "The app was not found on the iPhone after installation."
-msgstr ""
+msgstr "После установки приложение не найдено на iPhone."
 
 #: res/app/src/features/control/screen/DeviceScreen.tsx:163
 msgid "The current view is marked secure and cannot be viewed remotely."
@@ -2051,61 +2069,61 @@ msgstr "Существующий пакет не может быть удалё�
 
 #: res/app/src/core/install.ts:267
 msgid "The installation request is invalid."
-msgstr ""
+msgstr "Некорректный запрос на установку."
 
 #: res/app/src/ui/IosDeviceHealth.tsx:17
 msgid "The iOS developer image could not be mounted."
-msgstr ""
+msgstr "Не удалось подключить образ разработчика iOS."
 
 #: res/app/src/core/install.ts:259
 msgid "The IPA exceeds the 1 GiB limit."
-msgstr ""
+msgstr "Размер IPA превышает ограничение 1 ГиБ."
 
 #: res/app/src/core/install.ts:262
 msgid ""
 "The IPA signature or provisioning profile is invalid. Upload a signed "
 "development, ad hoc, or enterprise IPA."
-msgstr ""
+msgstr "Некорректная подпись или профиль приложения. Загрузите подписанный IPA для разработки, ad hoc или корпоративного распространения."
 
 #: res/app/src/features/control/panes/dashboard/ios-controls/IosControlsCard.tsx:117
 msgid "The iPhone accepted the power-off command."
-msgstr ""
+msgstr "iPhone принял команду выключения."
 
 #: res/app/src/features/control/panes/dashboard/ios-controls/IosControlsCard.tsx:117
 msgid "The iPhone accepted the restart command."
-msgstr ""
+msgstr "iPhone принял команду перезагрузки."
 
 #: res/app/src/core/install.ts:275
 msgid "The iPhone could not install this IPA."
-msgstr ""
+msgstr "iPhone не смог установить этот IPA."
 
 #: res/app/src/features/control/panes/dashboard/ios-controls/IosControlsCard.tsx:64
 msgid ""
 "The iPhone did not confirm the power command. Check its connection before "
 "trying again."
-msgstr ""
+msgstr "iPhone не подтвердил команду питания. Проверьте подключение перед повторной попыткой."
 
 #: res/app/src/features/control/panes/dashboard/ios-controls/IosControlsCard.tsx:87
 msgid "The iPhone is locked."
-msgstr ""
+msgstr "iPhone заблокирован."
 
 #: res/app/src/ui/IosDeviceHealth.tsx:10
 msgid "The iPhone is locked. Open control and use Unlock screen."
-msgstr ""
+msgstr "iPhone заблокирован. Откройте управление и нажмите «Разблокировать экран»."
 
 #: res/app/src/features/control/panes/dashboard/ios-controls/IosControlsCard.tsx:87
 msgid "The iPhone is unlocked."
-msgstr ""
+msgstr "iPhone разблокирован."
 
 #: res/app/src/ui/IosDeviceHealth.tsx:20
 msgid "The iPhone provider is unavailable."
-msgstr ""
+msgstr "Сервис подключения iPhone недоступен."
 
 #: res/app/src/features/control/panes/dashboard/ios-controls/IosControlsCard.tsx:84
 msgid ""
 "The lock screen remains visible while the display is awake. If a passcode is"
 " required, enter it on the device screen in STF."
-msgstr ""
+msgstr "Экран блокировки виден, пока дисплей активен. Если нужен код-пароль, введите его на экране устройства в STF."
 
 #: res/app/src/core/install.ts:180
 msgid ""
@@ -2278,7 +2296,7 @@ msgstr "Синтаксический анализатор не смог полу
 
 #: res/app/src/core/install.ts:263
 msgid "The provisioning profile has expired. Sign the IPA again."
-msgstr ""
+msgstr "Срок действия профиля истёк. Подпишите IPA заново."
 
 #: res/app/src/core/install.ts:165
 msgid "The requested shared user does not exist."
@@ -2292,7 +2310,7 @@ msgstr "Расписание можно изменить, только пока 
 msgid ""
 "The screen is still locked. Swipe up and enter the passcode on the device "
 "screen."
-msgstr ""
+msgstr "Экран остаётся заблокированным. Проведите вверх и введите код-пароль на экране устройства."
 
 #: res/app/src/core/install.ts:196
 msgid ""
@@ -2314,9 +2332,13 @@ msgstr ""
 "Не удалось установить пакет, так как данному пользователю запрещена "
 "установка приложений."
 
+#: res/app/src/features/control/ControlPage.tsx:318
+msgid "The test has finished. Take control to interact with the device."
+msgstr "Тест завершён. Нажмите «Использовать», чтобы управлять устройством."
+
 #: res/app/src/core/install.ts:268
 msgid "The uploaded file is no longer available. Upload it again."
-msgstr ""
+msgstr "Загруженный файл больше недоступен. Загрузите его снова."
 
 #: res/app/src/core/install.ts:162
 msgid "The URI passed in is invalid."
@@ -2324,27 +2346,27 @@ msgstr "Невалидный URI."
 
 #: res/app/src/ui/IosDeviceHealth.tsx:14
 msgid "The WebDriverAgent profile expires soon. Prepare a newly signed WDA."
-msgstr ""
+msgstr "Срок действия профиля WebDriverAgent скоро закончится. Подготовьте заново подписанный WDA."
 
 #: res/app/src/ui/IosDeviceHealth.tsx:13
 msgid "The WebDriverAgent profile has expired. Rebuild and reinstall WDA."
-msgstr ""
+msgstr "Срок действия профиля WebDriverAgent истёк. Пересоберите и переустановите WDA."
 
 #: res/app/src/ui/IosDeviceHealth.tsx:15
 msgid "The WebDriverAgent signing profile could not be identified."
-msgstr ""
+msgstr "Не удалось определить профиль подписи WebDriverAgent."
 
 #: res/app/src/core/install.ts:273
 msgid "There is not enough free space on the iPhone."
-msgstr ""
+msgstr "На iPhone недостаточно свободного места."
 
 #: res/app/src/core/install.ts:260
 msgid "This app is not compatible with a physical iPhone."
-msgstr ""
+msgstr "Приложение несовместимо с физическим iPhone."
 
 #: res/app/src/core/install.ts:261
 msgid "This app requires a newer iOS version."
-msgstr ""
+msgstr "Приложению требуется более новая версия iOS."
 
 #: res/app/src/features/control/panes/explorer/ExplorerPane.tsx:265
 msgid "This folder is empty"
@@ -2352,7 +2374,7 @@ msgstr "Эта папка пуста"
 
 #: res/app/src/core/install.ts:264
 msgid "This iPhone is not included in the provisioning profile."
-msgstr ""
+msgstr "Этот iPhone не включён в профиль приложения."
 
 #: res/app/src/features/control/panes/logs/LogsPane.tsx:111
 #: res/app/src/features/control/panes/logs/LogTable.tsx:138
@@ -2377,7 +2399,7 @@ msgid ""
 "To renew WDA, rebuild the runner with your Apple Team, reinstall it on this "
 "iPhone and confirm developer trust. The Linux provider reconnects "
 "automatically."
-msgstr ""
+msgstr "Для продления подписи WDA пересоберите Runner со своей Apple Team, переустановите его на этот iPhone и подтвердите доверие разработчику. Сервис на Linux подключится автоматически."
 
 #: res/app/src/features/device-list/DeviceStats.tsx:39
 msgid "Total Devices"
@@ -2393,7 +2415,7 @@ msgstr "Всего групп"
 
 #: res/app/src/features/control/panes/dashboard/ios-controls/IosControlsCard.tsx:93
 msgid "Triggers the shake gesture used by application debug menus."
-msgstr ""
+msgstr "Вызывает жест встряхивания, который открывает отладочное меню приложения."
 
 #: res/app/src/features/settings/devices/DevicesSettings.tsx:44
 msgid "True"
@@ -2432,11 +2454,11 @@ msgstr "Неизвестная причина."
 
 #: res/app/src/features/control/panes/dashboard/ios-controls/IosControlsCard.tsx:80
 msgid "Unlock screen"
-msgstr ""
+msgstr "Разблокировать экран"
 
 #: res/app/src/ui/IosDeviceHealth.tsx:9
 msgid "Unlock the iPhone and confirm Trust This Computer."
-msgstr ""
+msgstr "Разблокируйте iPhone и подтвердите «Доверять этому компьютеру»."
 
 #: res/app/src/core/devices/enhance.ts:45
 msgid "Unspecified Failure"
@@ -2444,11 +2466,11 @@ msgstr "Неизвестная неисправность"
 
 #: res/app/src/ui/IosDeviceHealth.tsx:71
 msgid "Updated"
-msgstr ""
+msgstr "Обновлено"
 
 #: res/app/src/features/control/panes/dashboard/install/InstallCard.tsx:188
 msgid "Upload an IPA signed for this iPhone. STF does not sign apps."
-msgstr ""
+msgstr "Загрузите IPA, подписанный для этого iPhone. STF не подписывает приложения."
 
 #: res/app/src/features/control/panes/dashboard/install/InstallCard.tsx:205
 #: res/app/src/features/control/panes/dashboard/install/InstallCard.tsx:206
@@ -2507,7 +2529,7 @@ msgstr "Используется резервный вариант"
 
 #: res/app/src/core/install.ts:64
 msgid "Verifying installation..."
-msgstr ""
+msgstr "Проверяем установку..."
 
 #: res/app/src/features/control/panes/info/InfoPane.tsx:276
 msgid "Version"
@@ -2520,6 +2542,14 @@ msgstr "Обновление версии"
 #: res/app/src/features/control/panes/automation/DeviceSettingsCard.tsx:33
 msgid "Vibrate Mode"
 msgstr "Режим вибрации"
+
+#: res/app/src/features/control/ControlPage.tsx:382
+msgid "View only"
+msgstr ""
+
+#: res/app/src/features/control/ControlPage.tsx:316
+msgid "View only. Controls are disabled while the test is running."
+msgstr "Идёт автотест. Управление устройством временно отключено."
 
 #: res/app/src/features/control/panes/info/InfoPane.tsx:207
 msgid "Voltage"
@@ -2547,7 +2577,7 @@ msgstr "Ожидание записей журнала"
 
 #: res/app/src/ui/IosDeviceHealth.tsx:16
 msgid "Waiting for the iPhone USB tunnel."
-msgstr ""
+msgstr "Ожидание USB-туннеля iPhone."
 
 #: res/app/src/features/settings/general/AlertMessageSettings.tsx:24
 #: res/app/src/features/settings/groups/actions.ts:33
@@ -2566,7 +2596,7 @@ msgstr "Веб"
 
 #: res/app/src/ui/IosDeviceHealth.tsx:18
 msgid "WebDriverAgent is restarting. Check device unlock and developer trust."
-msgstr ""
+msgstr "WebDriverAgent перезапускается. Проверьте разблокировку устройства и доверие разработчику."
 
 #: res/app/src/core/common.ts:23
 msgid "Weekly"
@@ -2641,218 +2671,20 @@ msgstr "Вы"
 msgid "You (or someone else) kicked the device."
 msgstr "Вы (или кто-то еще) отключили устройство."
 
-msgid "Launching app..."
-msgstr "Открываем приложение..."
-
-msgid "Checking IPA..."
-msgstr "Проверяем IPA..."
-
-msgid "Verifying installation..."
-msgstr "Проверяем установку..."
-
-msgid "Select a valid IPA for a physical iPhone."
-msgstr "Выберите корректный IPA для физического iPhone."
-
-msgid "The IPA exceeds the 1 GiB limit."
-msgstr "Размер IPA превышает ограничение 1 ГиБ."
-
-msgid "This app is not compatible with a physical iPhone."
-msgstr "Приложение несовместимо с физическим iPhone."
-
-msgid "This app requires a newer iOS version."
-msgstr "Приложению требуется более новая версия iOS."
-
-msgid "The IPA signature or provisioning profile is invalid. Upload a signed development, ad hoc, or enterprise IPA."
-msgstr "Некорректная подпись или профиль приложения. Загрузите подписанный IPA для разработки, ad hoc или корпоративного распространения."
-
-msgid "The provisioning profile has expired. Sign the IPA again."
-msgstr "Срок действия профиля истёк. Подпишите IPA заново."
-
-msgid "This iPhone is not included in the provisioning profile."
-msgstr "Этот iPhone не включён в профиль приложения."
-
-msgid "Replacing WebDriverAgent from this panel is not allowed."
-msgstr "Заменить WebDriverAgent через эту панель нельзя."
-
-msgid "Another installation is in progress. Wait for it to finish."
-msgstr "Другая установка уже выполняется. Дождитесь её завершения."
-
-msgid "The installation request is invalid."
-msgstr "Некорректный запрос на установку."
-
-msgid "The uploaded file is no longer available. Upload it again."
-msgstr "Загруженный файл больше недоступен. Загрузите его снова."
-
-msgid "No installation was found in the current device session."
-msgstr "В текущем сеансе устройства установка не найдена."
-
-msgid "Installation status is unavailable. Check the status again before retrying."
-msgstr "Статус установки недоступен. Проверьте его ещё раз перед повторной установкой."
-
-msgid "Installation was interrupted by a device or session disconnect."
-msgstr "Установка прервана из-за отключения устройства или завершения сеанса."
-
-msgid "There is not enough free space on the iPhone."
-msgstr "На iPhone недостаточно свободного места."
-
-msgid "The app was not found on the iPhone after installation."
-msgstr "После установки приложение не найдено на iPhone."
-
-msgid "The iPhone could not install this IPA."
-msgstr "iPhone не смог установить этот IPA."
-
-msgid "Profile expires"
-msgstr "Профиль действует до"
-
-msgid "The app was installed but could not be opened. Open it on the iPhone and check developer trust."
-msgstr "Приложение установлено, но открыть его не удалось. Откройте его на iPhone и проверьте доверие разработчику."
-
-msgid "The app may already be installed. Check the iPhone before retrying."
-msgstr "Приложение уже могло установиться. Проверьте iPhone перед повторной попыткой."
-
-msgid "Upload an IPA signed for this iPhone. STF does not sign apps."
-msgstr "Загрузите IPA, подписанный для этого iPhone. STF не подписывает приложения."
-
-msgid "Check installation status"
-msgstr "Проверить статус установки"
-
-msgid "Connect the iPhone by USB."
-msgstr "Подключите iPhone по USB."
-
-msgid "Connected to power"
-msgstr "Подключён к питанию"
-
-msgid "Device Name"
-msgstr "Имя устройства"
-
-msgid "Free storage"
-msgstr "Свободная память"
-
-msgid "Install the signed WebDriverAgent runner."
-msgstr "Установите подписанный WebDriverAgent Runner."
-
-msgid "iPhone status"
-msgstr "Состояние iPhone"
-
-msgid "On battery"
-msgstr "От аккумулятора"
-
-msgid "Preparing the iPhone..."
-msgstr "Подготовка iPhone..."
-
-msgid "Several WDA profiles match this device. The earliest expiry is shown; verify the installed build."
-msgstr "Найдено несколько профилей WDA. Показана ближайшая дата окончания; проверьте установленную сборку."
-
-msgid "The iOS developer image could not be mounted."
-msgstr "Не удалось подключить образ разработчика iOS."
-
-msgid "The iPhone provider is unavailable."
-msgstr "Сервис подключения iPhone недоступен."
-
-msgid "The WebDriverAgent profile expires soon. Prepare a newly signed WDA."
-msgstr "Срок действия профиля WebDriverAgent скоро закончится. Подготовьте заново подписанный WDA."
-
-msgid "The WebDriverAgent profile has expired. Rebuild and reinstall WDA."
-msgstr "Срок действия профиля WebDriverAgent истёк. Пересоберите и переустановите WDA."
-
-msgid "The WebDriverAgent signing profile could not be identified."
-msgstr "Не удалось определить профиль подписи WebDriverAgent."
-
-msgid "To renew WDA, rebuild the runner with your Apple Team, reinstall it on this iPhone and confirm developer trust. The Linux provider reconnects automatically."
-msgstr "Для продления подписи WDA пересоберите Runner со своей Apple Team, переустановите его на этот iPhone и подтвердите доверие разработчику. Сервис на Linux подключится автоматически."
-
-msgid "Unlock the iPhone and confirm Trust This Computer."
-msgstr "Разблокируйте iPhone и подтвердите «Доверять этому компьютеру»."
-
-msgid "Unlock the iPhone on the device."
-msgstr "Разблокируйте iPhone на самом устройстве."
-
-msgid "Updated"
-msgstr "Обновлено"
-
-msgid "Waiting for the iPhone USB tunnel."
-msgstr "Ожидание USB-туннеля iPhone."
-
-msgid "WebDriverAgent is restarting. Check device unlock and developer trust."
-msgstr "WebDriverAgent перезапускается. Проверьте разблокировку устройства и доверие разработчику."
-
-msgid "iPhone controls"
-msgstr "Управление iPhone"
-
-msgid "Shake phone"
-msgstr "Потрясти телефон"
-
-msgid "Triggers the shake gesture used by application debug menus."
-msgstr "Вызывает жест встряхивания, который открывает отладочное меню приложения."
-
-msgid "Could not shake the iPhone. Keep it unlocked and use the standard AssistiveTouch menu in English or Russian. Release and reconnect the device if the session ended."
-msgstr "Не удалось потрясти iPhone. Оставьте его разблокированным и используйте стандартное меню AssistiveTouch на русском или английском языке. Если сеанс завершён, освободите устройство и подключитесь заново."
-
-msgid "Enable Developer Mode in Settings, Privacy & Security on the iPhone."
-msgstr "Включите режим разработчика на iPhone: Настройки → Конфиденциальность и безопасность."
-
-msgid "Unlock screen"
-msgstr "Разблокировать экран"
-
-msgid "The iPhone is locked. Open control and use Unlock screen."
-msgstr "iPhone заблокирован. Откройте управление и нажмите «Разблокировать экран»."
-
-msgid "If a passcode is required, enter it on the device screen in STF."
-msgstr "Если требуется код-пароль, введите его на экране устройства в STF."
-
-msgid "Could not unlock the iPhone. Check its connection and try again."
-msgstr "Не удалось разблокировать iPhone. Проверьте подключение и повторите попытку."
-
-msgid "The screen is still locked. Swipe up and enter the passcode on the device screen."
-msgstr "Экран остаётся заблокированным. Проведите вверх и введите код-пароль на экране устройства."
-
-msgid "The iPhone is unlocked."
-msgstr "iPhone разблокирован."
-
-msgid "Lock screen"
-msgstr "Заблокировать экран"
-
-msgid "Confirm"
-msgstr "Подтвердить"
-
-msgid "The iPhone is locked."
-msgstr "iPhone заблокирован."
-
-msgid "The lock screen remains visible while the display is awake. If a passcode is required, enter it on the device screen in STF."
-msgstr "Экран блокировки виден, пока дисплей активен. Если нужен код-пароль, введите его на экране устройства в STF."
-
-msgid "Could not change the screen lock. Check the iPhone connection and try again."
-msgstr "Не удалось изменить блокировку экрана. Проверьте подключение iPhone и повторите попытку."
-
-msgid "Restart iPhone"
-msgstr "Перезагрузить iPhone"
-
-msgid "Power off iPhone"
-msgstr "Выключить iPhone"
-
-msgid "Power off this iPhone? Control will end. Turning it on again requires physical access."
-msgstr "Выключить этот iPhone? Управление завершится. Для повторного включения нужен физический доступ к телефону."
-
-msgid "Restart this iPhone? Control will end. After startup, iOS may require the first unlock on the phone."
-msgstr "Перезагрузить этот iPhone? Управление завершится. После запуска iOS может потребовать первую разблокировку на самом телефоне."
-
-msgid "The iPhone did not confirm the power command. Check its connection before trying again."
-msgstr "iPhone не подтвердил команду питания. Проверьте подключение перед повторной попыткой."
-
-msgid "The iPhone accepted the power-off command."
-msgstr "iPhone принял команду выключения."
-
-msgid "The iPhone accepted the restart command."
-msgstr "iPhone принял команду перезагрузки."
-
-msgid "Automated"
-msgstr "Automated"
-
-msgid "Automation finished"
-msgstr "Автотест завершён"
-
-msgid "View only. Controls are disabled while the test is running."
-msgstr "Идёт автотест. Управление устройством временно отключено."
-
-msgid "The test has finished. Take control to interact with the device."
-msgstr "Тест завершён. Нажмите «Использовать», чтобы управлять устройством."
+#: res/app/src/features/control/ControlPage.tsx
+msgid "Release reservation"
+msgstr ""
+
+#: res/app/src/features/control/ControlPage.tsx
+msgid ""
+"Release this STF reservation? The external automation session must be "
+"stopped separately."
+msgstr ""
+
+msgid "Stop Automation"
+msgstr "Остановить автоматизацию"
+
+
+#: res/app/src/features/control/ControlPage.tsx
+msgid "Stop this automation from its test runner."
+msgstr "Остановите эту автоматизацию через программу запуска теста."

@@ -13,18 +13,16 @@ security checks passed, and the user confirmed browser login and logout. The app
 account was explicitly promoted to administrator; its role was verified in the
 database, while administrator UI access awaits confirmation. OpenLDAP and
 phpLDAPadmin are intentionally scaled to zero since 2026-10-15; their data and
-credentials are preserved for a deliberate rollback. The Grid has 16 Android nodes plus one validated Linux iOS relay.
-Android Settings smoke passed on all six connected phones. One Linux iPhone
-also passed Appium Grid smoke with concurrent STF viewing; the other iPhones
-are not yet registered with Grid. See the rollout plan
-for verified results and pending work.
+credentials are preserved for a deliberate rollback. The Appium manifests configure
+seven Android nodes across two ADB pools. Linux iOS relays are installed separately
+for explicitly configured phones; see the Appium setup guide below.
 
 ## Documents
 
 - [Current requirements](./docs/requirements.md)
 - [Current architecture](./docs/architecture.md)
 - [Cluster access and service inventory](./docs/cluster-access.md)
-- [Appium validation and remaining iOS work](./docs/appium-validation-2026-10-18.md)
+- [Appium setup and validation](./appium-tests/README.md)
 - [Cluster upgrade and observability review](./docs/cluster-upgrades-and-observability.md)
 - [Component upgrade rollout](./docs/cluster-upgrade-rollout.md)
 - [STF rollout and server maintenance plan](./docs/stf-rollout-plan.md)
@@ -32,7 +30,10 @@ for verified results and pending work.
 - [Historical STF roadmap](./docs/roadmap.md)
 - [GitOps layout](./docs/gitops-layout.md)
 - [Decision log](./docs/decision-log.md)
-- [Linux iOS prototype](../doc/ios-prototype.md) (standalone; hardware validation pending)
+- [Linux iOS provider](../doc/ios-provider.md)
+- [Local iOS setup and signing](../docker/ios/README.md)
+- [Kubernetes iPhone fleet](./ios-prototype/README.md)
+- [Device lease coordinator](../doc/coordinator.md)
 
 ## Reading order for implementation
 
@@ -84,8 +85,7 @@ For migration, follow the rollout plan and deployment runbook instead.
   confirmed and its database role is `admin`; LDAP stays paused unless explicitly re-enabled
 - keep GitOps documentation aligned with the live manifests
 - verify screen/touch, capture/release and APK installation with connected Android devices
-- extend the validated single-phone iOS Appium setup when needed; Kotlin smoke
-  tests use standard STF APIs, with Android 18/18 and iOS 3/3 final runs
+- validate Android and iOS Appium sessions after changes to the Grid or device runtimes
 - update the three Kubernetes servers after SSH access is provided
 - implement the reserved `mitmproxy` and `observability` slices when we are ready for those layers
 - follow the upgrade and observability review for measured capacity and staged version candidates

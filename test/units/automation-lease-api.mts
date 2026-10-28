@@ -138,6 +138,45 @@ describe('Automation lease API', function() {
     assert.equal(f.push.send.callCount, 0)
   })
 
+  it('fences conditional owner and administrator release of a managed lease', async function() {
+    for (const privilege of ['user', 'admin']) {
+      device.owner.reservationId = 'current-reservation'
+      const manual = fixture()
+      manual.req.user.privilege = privilege
+      if (privilege === 'admin') {
+        manual.req.user.email = 'admin@example.test'
+      }
+      Object.assign(manual.req.swagger.params, {
+        reservationId: {value: device.owner.reservationId}
+        , deviceChannel: {value: device.channel}
+      })
+      deleteUserDeviceBySerial(manual.req, manual.res)
+      await flush()
+      assert.equal(manual.status(), 409)
+      assert.match(manual.result().description, /fenced automation release/)
+      assert.equal(manual.push.send.callCount, 0)
+      assert.equal(device.automationLeaseId, 'lease-a')
+      assert.equal(device.owner.reservationId, 'current-reservation')
+
+      const fenced = fixture({leaseId: 'lease-a'})
+      releaseAutomationLease(fenced.req, fenced.res)
+      await flush()
+      assert.equal(fenced.result(), null, 'Release must wait for the provider')
+      assert.equal(fenced.push.send.callCount, 1)
+      const envelope = wire.Envelope.decode(fenced.push.send.firstCall.args[0][1])
+      const message = wire.AutomationLeaseMessage.decode(envelope.message)
+      assert.equal(message.serial, 'device')
+      assert.equal(message.owner.email, device.owner.email)
+      assert.equal(message.leaseId, device.automationLeaseId)
+      assert.equal(message.action, 'release')
+      fenced.router.emit(envelope.channel!, envelope.channel!, wireutil.reply('device').okay())
+      assert.equal(fenced.status(), 200)
+      assert.deepEqual(fenced.result(), {success: true, leaseId: 'lease-a'})
+      assert.equal(fenced.router.listenerCount(envelope.channel!), 0)
+      assert.equal(fenced.sub.unsubscribe.callCount, 1)
+    }
+  })
+
   it('keeps legacy release available for an unfenced automation reservation', async function() {
     device.automationLeaseId = null
     const f = fixture()

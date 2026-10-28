@@ -213,6 +213,19 @@ describe('auth-oauth2 HTTP flow', function() {
     expect(accountLookups).to.equal(0)
   })
 
+  ;[false, 'false'].forEach(function(verified) {
+    it('should reject an explicitly unverified email with claim checking disabled: ' +
+      String(verified), async function() {
+      options.requireVerifiedEmail = false
+      profile.email_verified = verified
+      var login = await start()
+      var response = await completeLogin(login.cookie, login.location.searchParams.get('state')!)
+      expect(response.status).to.equal(403)
+      expect(response.headers.get('location')).to.equal(null)
+      expect(accountLookups).to.equal(0)
+    })
+  })
+
   it('should reject missing email claims', async function() {
     delete profile.email
     var login = await start()

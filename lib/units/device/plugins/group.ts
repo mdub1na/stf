@@ -1,4 +1,5 @@
 import events from 'events'
+import {randomUUID} from 'node:crypto'
 
 import Promise from 'bluebird'
 import syrup from '@devicefarmer/stf-syrup'
@@ -71,7 +72,7 @@ export default syrup.serial()
           return currentGroup!
         })
         .catch(grouputil.NoGroupError, function() {
-          currentGroup = newGroup
+          currentGroup = new wire.OwnerMessage({...newGroup, reservationId: randomUUID()})
 
           log.important('Now owned by "%s"', currentGroup.email)
           log.info('Subscribing to group channel "%s"', currentGroup.group)
@@ -109,9 +110,12 @@ export default syrup.serial()
       }
     }
 
-    plugin.leave = function(reason) {
+    plugin.leave = function(reason, reservationId) {
       return plugin.get()
         .then(function(group) {
+          if (reservationId && currentGroup?.reservationId !== reservationId) {
+            throw new grouputil.RequirementMismatchError('reservationId')
+          }
           log.important('No longer owned by "%s" (reason: %s)', group.email, reason)
           log.info('Unsubscribing from group channel "%s"', group.group)
 
@@ -160,10 +164,10 @@ export default syrup.serial()
               message.owner, message.timeout, message.usage, undefined, message.leaseId
             )
           })
-          .then(function() {
+          .then(function(owner) {
             push.send([
               channel
-            , reply.okay()
+            , reply.okay(null, {owner})
             ])
           })
           .catch(grouputil.RequirementMismatchError, function(err) {
@@ -223,7 +227,7 @@ export default syrup.serial()
         , message.requirements
         )
           .then(function() {
-            return plugin.leave('ungroup_request')
+            return plugin.leave('ungroup_request', message.reservationId)
           })
           .then(function() {
             push.send([
@@ -231,7 +235,7 @@ export default syrup.serial()
             , reply.okay()
             ])
           })
-          .catch(grouputil.NoGroupError, function(err) {
+          .catch(grouputil.NoGroupError, grouputil.RequirementMismatchError, function(err) {
             push.send([
               channel
             , reply.fail(err.message)

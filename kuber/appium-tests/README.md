@@ -74,8 +74,12 @@ The `localAndroidTest` task now opens Settings rather than Chrome.
 
 A reservation conflict tries another candidate. Authentication/server errors
 fail immediately. These are allocation retries, not retries of failed UI tests.
-Keep direct STF smoke tests within their idle reservation timeout. The optional
-coordinator mode below renews ownership throughout longer runs.
+Each direct capture sends a fresh lease ID and requires the provider acknowledgement
+with its reservation identity and runtime channel. Cleanup uses only the fenced
+automation release endpoint; it refuses to release a replacement reservation.
+This requires the matching lease-capable STF API and providers. Keep direct STF
+smoke tests within their reservation timeout. The optional coordinator mode below
+renews ownership throughout longer runs.
 
 ## Android routing and parallel execution
 
@@ -144,8 +148,10 @@ Gradle writes JUnit XML under `build/test-results/<task>` and HTML under
 are collected independently before Appium quit. Cleanup errors are attached to
 the original failure; they do not hide it. No automatic UI-test retry is used.
 
-The [2026-10-18 validation record](../docs/appium-validation-2026-10-18.md)
-records real-device runs, fleet size, concurrent screen evidence and remaining work.
+Previous hardware checks covered Android and iOS Settings sessions through the
+public Grid, concurrent STF viewing and preservation of the shared WDA session.
+These checks do not establish application-specific or multi-hour stability;
+repeat the relevant smoke task after changing a device runtime or Grid deployment.
 
 ## Coordinator prototype
 

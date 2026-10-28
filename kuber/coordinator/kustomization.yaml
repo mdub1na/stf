@@ -7,3 +7,4 @@ resources:
   - state-pvc.yaml
   - adb-pools-config.yaml
   - network-policy.yaml
+  - adb-network-policy.yaml

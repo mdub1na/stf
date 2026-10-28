@@ -221,7 +221,7 @@ describe('Automation lease API', function() {
       const f = fixture()
       releaseAutomationLease(f.req, f.res)
       await flush()
-      clock.tick(5000)
+      clock.tick(90000)
       assert.equal(f.status(), 504)
       assert.equal(f.sub.unsubscribe.callCount, 1)
     }

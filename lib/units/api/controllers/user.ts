@@ -149,6 +149,11 @@ function addUserDevice(req: ApiRequest<AddUserDeviceBody>, res: Response) {
   var timeout = req.hasOwnProperty('body') ? req.body.timeout ||
                                              null : req.swagger.params.timeout.value || null
   const leaseId = req.body?.leaseId || null
+  const automationRunner = req.body?.automationRunner ?? null
+  if (automationRunner !== null && (automationRunner !== 'maestro' || !leaseId)) {
+    apiutil.respond(res, 400, 'Invalid automation runner')
+    return
+  }
   if (leaseId && (typeof leaseId !== 'string' || !/^[A-Za-z0-9_-]{1,128}$/.test(leaseId) ||
       (timeout !== null && (!Number.isInteger(timeout) || timeout <= 0 || timeout > 2147483647)))) {
     apiutil.respond(res, 400, 'Invalid automation lease ID')
@@ -181,12 +186,13 @@ function addUserDevice(req: ApiRequest<AddUserDeviceBody>, res: Response) {
               success: false
             , description: 'Device is not responding'
           })
-        }, 5000)
+        }, automationRunner ? 15000 : 5000)
 
         messageListener = wirerouter()
           .on(wire.JoinGroupMessage, function(channel, message) {
             if (message.serial === serial && message.owner.email === req.user.email &&
-                (message.leaseId || null) === leaseId) {
+                (message.leaseId || null) === leaseId &&
+                (message.automationRunner || null) === automationRunner) {
               clearTimeout(responseTimer)
               req.options.channelRouter.removeListener(wireutil.global, messageListener)
               lockutil.unlockDevice(lock)
@@ -197,6 +203,7 @@ function addUserDevice(req: ApiRequest<AddUserDeviceBody>, res: Response) {
               , owner: message.owner
               , deviceChannel: device.channel
               , ...(leaseId ? {leaseId} : {})
+              , ...(automationRunner ? {automationRunner} : {})
               })
             }
           })
@@ -223,6 +230,7 @@ function addUserDevice(req: ApiRequest<AddUserDeviceBody>, res: Response) {
             })
             , usage
             , leaseId
+            , automationRunner
             )
           )
         ])
@@ -259,7 +267,7 @@ function automationLeaseOperation(
     const timer = setTimeout(() => {
       cleanup()
       apiutil.respond(res, 504, 'Device is not responding')
-    }, 5000)
+    }, action === 'release' ? 90000 : 5000)
     const listener = wirerouter().on(wire.TransactionDoneMessage, (_channel, message) => {
       if (message.source !== serial) {
         return

@@ -5,7 +5,8 @@ import logger from '../../util/logger.js'
 import {HttpFarmBackend} from './backend.js'
 import {secret, validateOptions} from './config.js'
 import {Coordinator} from './engine.js'
-import {createCoordinatorApp} from './http.js'
+import {createCoordinatorApp, attachCoordinatorAdb} from './http.js'
+import {CoordinatorAccess} from './access.js'
 import {FileStateStore} from './state.js'
 import type {CoordinatorOptions} from './types.js'
 
@@ -15,10 +16,12 @@ export default async function startCoordinator(options: CoordinatorOptions) {
     secret(options.stfTokenFile), secret(options.apiTokenFile)
   ])
   const log = logger.createLogger('coordinator')
+  const access = await CoordinatorAccess.load(apiToken, options.projectTokensFile)
   const engine = new Coordinator(options, pools,
     new HttpFarmBackend(options.stfApiUrl, options.appiumGridUrl, stfToken,
-      options.upstreamTimeoutSeconds * 1000), new FileStateStore(options.stateFile))
-  const server = http.createServer(createCoordinatorApp(engine, apiToken))
+      options.upstreamTimeoutSeconds * 1000, pools), new FileStateStore(options.stateFile))
+  const server = http.createServer(createCoordinatorApp(engine, access))
+  const adb = attachCoordinatorAdb(server, engine, access)
   server.requestTimeout = (options.upstreamTimeoutSeconds + 10) * 1000
   server.listen(options.port, options.host)
   await once(server, 'listening')
@@ -31,6 +34,7 @@ export default async function startCoordinator(options: CoordinatorOptions) {
       clearInterval(timer)
     }
     await engine.stop()
+    adb.close()
     server.closeAllConnections()
     await new Promise<void>(resolve => server.close(() => resolve()))
   })
@@ -38,6 +42,7 @@ export default async function startCoordinator(options: CoordinatorOptions) {
     await engine.start()
   }
   catch {
+    adb.close()
     server.closeAllConnections()
     server.close()
     throw new Error('Coordinator recovery failed; persistent state was preserved')

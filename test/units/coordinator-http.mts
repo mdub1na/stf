@@ -1,9 +1,13 @@
 import assert from 'node:assert/strict'
 import http from 'node:http'
 import {once} from 'node:events'
+import {createHash} from 'node:crypto'
+import WebSocket from 'ws'
 import {Coordinator} from '../../lib/units/coordinator/engine.js'
 import {HttpFarmBackend} from '../../lib/units/coordinator/backend.js'
-import {createCoordinatorApp} from '../../lib/units/coordinator/http.js'
+import {createCoordinatorApp, attachCoordinatorAdb} from '../../lib/units/coordinator/http.js'
+import {CoordinatorAccess} from '../../lib/units/coordinator/access.js'
+import {adbRequest} from '../../lib/units/coordinator/adb-bridge.js'
 import type {StateStore} from '../../lib/units/coordinator/state.js'
 import type {CoordinatorOptions, CoordinatorState, FarmDevice, GridStatus} from
   '../../lib/units/coordinator/types.js'
@@ -13,6 +17,8 @@ const stfToken = 'stf-private-test-token-'.repeat(2)
 const bearer = 'Bearer ' + apiToken
 const basic = 'Basic ' + Buffer.from('coordinator:' + apiToken).toString('base64')
 const owner = 'coordinator@example.test'
+const projectA = 'project-a-private-test-token-'.repeat(2)
+const projectB = 'project-b-private-test-token-'.repeat(2)
 interface UpstreamCall {
   method: string
   route: string
@@ -58,14 +64,18 @@ class MemoryStore implements StateStore {
 
 describe('coordinator HTTP and real upstream adapters', function() {
   const servers: http.Server[] = []
+  const bridges: {close(): void}[] = []
   afterEach(function() {
+    for (const bridge of bridges.splice(0)) {
+ bridge.close()
+}
     for (const server of servers.splice(0)) {
       server.closeAllConnections()
       server.close()
     }
   })
 
-  async function fixture(start = true) {
+  async function fixture(start = true, projects = false) {
     let time = Date.parse('2026-10-18T00:00:00Z')
     const store = new MemoryStore()
     const devices: FarmDevice[] = ['phone-a', 'phone-b'].map(serial => ({
@@ -119,7 +129,8 @@ describe('coordinator HTTP and real upstream adapters', function() {
         device.owner = {email: owner}
         device.usage = 'automation'
         device.automationLeaseId = body.leaseId
-        return reply(res, {success: true})
+        return reply(res, {success: true
+          , ...(body.automationRunner ? {automationRunner: body.automationRunner} : {})})
       }
       const operation =
         /^\/api\/v1\/user\/devices\/([^/]+)\/automation\/(renew|release)$/.exec(route)
@@ -178,12 +189,19 @@ describe('coordinator HTTP and real upstream adapters', function() {
       , maxDurationSeconds: 21600, maxParallel: 2, upstreamTimeoutSeconds: 1
     }
     const backend = new HttpFarmBackend(stfUrl, gridUrl, stfToken, 1000)
+    backend.maestroBaseline = async() => ({packages: [], settings: {}})
+    backend.maestroPrepare = async() => {}
     const engine = new Coordinator(options, [{provider: 'android-pool', host: 'adb.test'
       , port: 5037, systemPorts: [8200, 8201]}], backend, store, () => time)
     if (start) {
       await engine.start()
     }
-    const app = http.createServer(createCoordinatorApp(engine, apiToken))
+    const access = new CoordinatorAccess(apiToken, projects ? [
+      {id: 'a', tokenSha256: createHash('sha256').update(projectA).digest('hex'), maxParallel: 1}
+    , {id: 'b', tokenSha256: createHash('sha256').update(projectB).digest('hex'), maxParallel: 1}
+    ] : [])
+    const app = http.createServer(createCoordinatorApp(engine, access))
+    bridges.push(attachCoordinatorAdb(app, engine, access))
     servers.push(app)
     const url = await listen(app)
     options.publicUrl = url
@@ -306,6 +324,46 @@ describe('coordinator HTTP and real upstream adapters', function() {
       assert.doesNotMatch(JSON.stringify(call), new RegExp(apiToken + '|' + stfToken))
     }
     assert.ok(f.stfCalls.every(call => call.headers.authorization === 'Bearer ' + stfToken))
+  })
+
+  it('omits parsed JSON bodies from upstream GET and HEAD WebDriver commands', async function() {
+    const f = await fixture()
+    const lease = await f.allocate()
+    const gateway = '/api/v1/leases/' + lease.id + '/webdriver'
+    const created = await f.call(gateway + '/session', 'POST', {
+      capabilities: {alwaysMatch: {}, firstMatch: [{}]}
+    })
+    assert.equal(created.status, 200)
+    const route = '/session/' + created.body.value.sessionId + '/source'
+    for (const method of ['GET', 'HEAD']) {
+      // Explicit JSON reproduces a parsed GET body without mocking the upstream adapter.
+      const result = await new Promise<{status: number, body: string}>((resolve, reject) => {
+        const request = http.request(f.url + gateway + route, {
+          method, headers: {Authorization: bearer, 'Content-Type': 'application/json'
+            , 'Content-Length': 2}
+        }, response => {
+          const chunks: Buffer[] = []
+          response.on('data', chunk => chunks.push(Buffer.from(chunk)))
+          response.once('end', () => resolve({status: response.statusCode!
+            , body: Buffer.concat(chunks).toString()}))
+          response.once('error', reject)
+        })
+        request.once('error', reject)
+        request.end('{}')
+      })
+      assert.equal(result.status, 200, result.body)
+      if (method === 'GET') {
+        assert.equal(JSON.parse(result.body).value, '<App/>')
+      }
+      else {
+        assert.equal(result.body, '')
+      }
+      const forwarded = f.gridCalls.find(call => call.method === method && call.route === route)
+      assert.ok(forwarded, 'The command must reach the real upstream HTTP adapter')
+      assert.equal(forwarded.body, null, method + ' must not carry a JSON payload upstream')
+      assert.ok(!forwarded.headers['content-length'] || forwarded.headers['content-length'] === '0')
+      assert.equal(f.engine.leaseView(lease.id).state, 'active')
+    }
   })
 
   for (const phase of ['inventory', 'capture'] as const) {
@@ -446,6 +504,114 @@ describe('coordinator HTTP and real upstream adapters', function() {
     assert.equal(current.expiresAt, lease.expiresAt)
     assert.equal(f.stfCalls.filter(call => call.route.endsWith('/automation/renew')).length, renews)
     assert.equal((await f.call('/api/v1/leases/' + lease.id + '/renew')).status, 404)
+  })
+
+  it('namespaces idempotency and enforces fair project quotas', async function() {
+    const f = await fixture(true, true)
+    const submit = async(token: string, key: string) => {
+      const result = await f.call('/api/v1/requests', 'POST', {runId: key, platform: 'Android'},
+        'Bearer ' + token, {'Idempotency-Key': key})
+      assert.equal(result.status, 202)
+      return result.body.request
+    }
+    const first = await submit(projectA, 'shared-key')
+    const queued = await submit(projectA, 'second-a')
+    const other = await submit(projectB, 'shared-key')
+    assert.notEqual(first.id, other.id)
+    await f.engine.tick()
+    const a = (await f.call('/api/v1/requests/' + first.id, 'GET', undefined,
+      'Bearer ' + projectA)).body.request
+    assert.equal(a.state, 'allocated')
+    assert.equal((await f.call('/api/v1/requests/' + queued.id, 'GET', undefined,
+      'Bearer ' + projectA)).body.request.state, 'queued')
+    assert.equal((await f.call('/api/v1/requests/' + other.id, 'GET', undefined,
+      'Bearer ' + projectB)).body.request.state, 'allocated')
+    assert.equal((await f.call('/api/v1/leases', 'GET', undefined,
+      'Bearer ' + projectA)).body.leases.length, 1)
+    for (const [method, route] of [
+      ['GET', '/api/v1/requests/' + first.id], ['DELETE', '/api/v1/requests/' + first.id]
+    , ['GET', '/api/v1/leases/' + a.leaseId], ['DELETE', '/api/v1/leases/' + a.leaseId]
+    , ['POST', '/api/v1/leases/' + a.leaseId + '/renew']
+    , ['POST', '/api/v1/leases/' + a.leaseId + '/webdriver/session']
+    ]) {
+      assert.equal((await f.call(route!, method!, method === 'GET' ? undefined : {},
+        'Bearer ' + projectB)).status, 404)
+    }
+    assert.equal((await f.call('/api/v1/leases/' + a.leaseId + '/recover', 'POST', {},
+      'Bearer ' + projectA)).status, 403)
+    await f.call('/api/v1/leases/' + a.leaseId, 'DELETE', undefined, 'Bearer ' + projectA)
+    await f.engine.tick()
+    assert.equal((await f.call('/api/v1/requests/' + queued.id, 'GET', undefined,
+      'Bearer ' + projectA)).body.request.state, 'allocated')
+  })
+
+  it('authenticates, pins and revokes ADB WebSockets', async function() {
+    const f = await fixture(true, true)
+    const result = await f.call('/api/v1/requests', 'POST',
+      {runId: 'maestro', runner: 'maestro', platform: 'Android'},
+      'Bearer ' + projectA, {'Idempotency-Key': 'maestro'})
+    assert.equal(result.status, 202)
+    await f.engine.tick()
+    const request = (await f.call('/api/v1/requests/' + result.body.request.id, 'GET',
+      undefined, 'Bearer ' + projectA)).body.request
+    assert.equal(request.state, 'allocated')
+    const lease = (await f.call('/api/v1/leases/' + request.leaseId, 'GET', undefined,
+      'Bearer ' + projectA)).body.lease
+    const url = f.url.replace(/^http/, 'ws') + lease.connection.path
+    const denied = (token: string) => new Promise<number>((resolve, reject) => {
+      const ws = new WebSocket(url, {headers: {Authorization: 'Bearer ' + token}})
+      ws.on('error', () => {})
+      ws.on('open', () => {
+ ws.terminate(); reject(new Error('Unauthorized upgrade succeeded'))
+})
+      ws.on('unexpected-response', (_req, res) => {
+ res.resume(); resolve(res.statusCode!)
+})
+    })
+    assert.equal(await denied('invalid'), 401)
+    assert.equal(await denied(projectB), 404)
+    const ws = new WebSocket(url, {headers: {Authorization: 'Bearer ' + projectA}})
+    ws.on('error', () => {})
+    await once(ws, 'open')
+    const chunks: Buffer[] = []
+    ws.on('message', data => chunks.push(Buffer.from(data as Buffer)))
+    const closed = once(ws, 'close')
+    ws.send(adbRequest('host:devices'), {binary: true})
+    assert.equal((await closed)[0], 1000)
+    const devices = Buffer.concat(chunks).toString()
+    assert.match(devices, new RegExp(lease.device.serial + '\\tdevice'))
+    assert.doesNotMatch(devices,
+      new RegExp(lease.device.serial === 'phone-a' ? 'phone-b' : 'phone-a'))
+    const idle = new WebSocket(url, {headers: {Authorization: 'Bearer ' + projectA}})
+    idle.on('error', () => {})
+    await once(idle, 'open')
+    const revoked = once(idle, 'close')
+    await f.call('/api/v1/leases/' + lease.id, 'DELETE', undefined, 'Bearer ' + projectA)
+    assert.notEqual((await revoked)[0], 1000)
+  })
+
+  it('reclaims normal ADB EOF streams across repeated Dadb metadata connections', async function() {
+    const f = await fixture(true, true)
+    const result = await f.call('/api/v1/requests', 'POST',
+      {runId: 'maestro-many-connections', runner: 'maestro', platform: 'Android'},
+      'Bearer ' + projectA, {'Idempotency-Key': 'maestro-many-connections'})
+    assert.equal(result.status, 202)
+    await f.engine.tick()
+    const request = (await f.call('/api/v1/requests/' + result.body.request.id, 'GET',
+      undefined, 'Bearer ' + projectA)).body.request
+    const lease = f.engine.leaseView(request.leaseId)
+    const url = f.url.replace(/^http/, 'ws') + lease.connection.path
+    for (let count = 0; count < 100; count++) {
+      const ws = new WebSocket(url, {headers: {Authorization: 'Bearer ' + projectA}})
+      ws.on('error', () => {})
+      await once(ws, 'open')
+      const chunks: Buffer[] = []
+      ws.on('message', data => chunks.push(Buffer.from(data as Buffer)))
+      const closed = once(ws, 'close')
+      ws.send(adbRequest('host:devices'), {binary: true})
+      assert.equal((await closed)[0], 1000, 'Normal metadata request ' + count)
+      assert.ok(Buffer.concat(chunks).includes(Buffer.from(lease.device.serial)))
+    }
   })
 
   it('redacts storage and upstream errors from HTTP responses and status', async function() {

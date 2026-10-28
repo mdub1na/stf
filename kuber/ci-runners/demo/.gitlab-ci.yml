@@ -1,0 +1,51 @@
+stages: [test]
+
+variables:
+  FARM_URL: http://stf-coordinator.stf.svc.cluster.local:8080
+  # The image is supplied as a project CI variable, pinned by digest.
+  LANG: C.UTF-8
+  LC_ALL: C.UTF-8
+  DEMO_HOLD_SECONDS: "25"
+
+default:
+  image: $FARM_RUNNER_IMAGE
+  tags: [stf-farm]
+  interruptible: true
+  before_script:
+    - stat -c "Farm token file mode=%a owner=%u" "$FARM_TOKEN_FILE"
+    - chmod 600 "$FARM_TOKEN_FILE"
+    - node tests/verify-farm-isolation.mjs
+  artifacts:
+    when: always
+    expire_in: 14 days
+    paths: [artifacts/]
+    reports:
+      junit: artifacts/junit.xml
+
+appium-android-one:
+  stage: test
+  timeout: 15m
+  variables:
+    DEMO_HOLD_SECONDS: "45"
+  script:
+    - stf utils test run --runner appium --platform Android --run-id "$CI_PIPELINE_ID-$CI_JOB_ID" -- node tests/appium-settings.mjs
+
+maestro-android:
+  stage: test
+  timeout: 15m
+  script:
+    - stf utils test run --runner maestro --platform Android --run-id "$CI_PIPELINE_ID-$CI_JOB_ID" -- bash tests/maestro-settings.sh
+
+appium-android-two:
+  stage: test
+  timeout: 15m
+  script:
+    - stf utils test run --runner appium --platform Android --run-id "$CI_PIPELINE_ID-$CI_JOB_ID" -- node tests/appium-settings.mjs
+
+appium-ios:
+  stage: test
+  timeout: 15m
+  rules:
+    - if: '$FARM_TEST_IOS == "true"'
+  script:
+    - stf utils test run --runner appium --platform iOS --run-id "$CI_PIPELINE_ID-$CI_JOB_ID" -- node tests/appium-settings.mjs

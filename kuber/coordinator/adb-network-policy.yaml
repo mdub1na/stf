@@ -1,0 +1,25 @@
+# Selects only the trusted coordinator in stf. CI jobs in stf-ci-jobs retain
+# their separate default-deny policy and can reach only coordinator:8080.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: stf-coordinator-adb
+  namespace: stf
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: stf-coordinator
+  policyTypes: [Egress]
+  egress:
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: stf
+          podSelector:
+            matchExpressions:
+              - key: app.kubernetes.io/name
+                operator: In
+                values: [adbd, adbd-2]
+      ports:
+        - protocol: TCP
+          port: 5037

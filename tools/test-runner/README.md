@@ -6,15 +6,27 @@ Android. Test source, builds and reports remain in the application's CI project.
 The coordinator owns device allocation, global concurrency and cleanup.
 
 The package installs its own `stf` executable with `stf utils test run`; the STF
-server executable does not provide this namespace. From this package directory,
-run `npm run build` and use `node stf.mjs utils test run --help` to check the local
-client. Node.js 22.18 or newer is required. Dependencies are locked; prepare a
-worker image with `npm ci --ignore-scripts --omit=optional` in this directory.
-`npm run build` converts the TypeScript sources to plain `.mjs` using Node's
-built-in stripper; no STF or TypeScript compiler dependency is required.
-`npm pack` builds and produces the standalone JavaScript client package. No
-TypeScript stripping takes place inside installed `node_modules`. There is no public npm release
-implied by adding this package; CI images should pin their source/image digest.
+server executable does not provide this namespace. Node.js 22.18 or newer is
+required. There is no public npm release; CI images should pin the source and
+image digest.
+
+## Build the client
+
+From this directory in a fresh checkout:
+
+```sh
+npm ci --ignore-scripts --no-audit --no-fund
+npm run build
+node stf.mjs utils test run --help
+```
+
+The last command lists the client options without contacting a farm. The build
+converts TypeScript to plain `.mjs` using Node's built-in stripper; no STF or
+TypeScript compiler dependency is required. `npm pack` builds a standalone
+JavaScript package. Installed packages run plain JavaScript.
+
+To configure a farm, see the [coordinator guide](../../doc/coordinator.md) and
+[worker deployment guide](../../doc/ci-runners.md).
 
 ## CI commands
 
@@ -155,9 +167,11 @@ its normal CI artifact directory. STF's Automated viewer remains independent.
 ```sh
 npm ci --ignore-scripts --no-audit --no-fund
 npm test
-../../node_modules/.bin/tsc -p tsconfig.json --noEmit
 npm pack --dry-run
 ```
+
+For an additional repository type check, install the root development dependencies
+and run `../../node_modules/.bin/tsc -p tsconfig.json --noEmit`.
 
 The installed-package regression uses local dependency archives and an empty
 npm cache, so it does not depend on pre-warmed registry metadata.

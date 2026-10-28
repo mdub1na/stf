@@ -41,6 +41,12 @@ Build `kuber/ci-runners/Dockerfile` after placing the packed standalone `tools/t
 
 Set the demo project's `FARM_RUNNER_IMAGE` CI variable to the immutable built image digest. Kubernetes pulls images through the node; the GitLab Runner passes the short-lived integrated-registry credentials in its per-job pull Secret. A separate read_registry-only project deploy token is used by the coordinator deployment through `stf/stf-farm-registry-pull`, with no write_registry or repository access. Rotate that read-only deploy token and Secret before the configured expiration. GitLab Runner creates no idle worker pods; each build pod exists for a single job and is deleted afterward. ResourceQuota and LimitRange cap worker resource use. The initial resource allocation is for native smoke tests, not application compilation.
 
+The manual `Docker` workflow's `farm-ci` target builds the runtime from the root
+`Dockerfile` and publishes runtime/worker images to GHCR. The example runner
+admits only the private registry repository above. Mirror the worker image into
+your approved registry or update its exact image allowlist and network rules
+before using a GHCR digest in jobs.
+
 ## External repository contract
 
 The reusable external-repository template is `kuber/ci-runners/demo/`. Test source and application-specific pipelines belong in the independent test repository.

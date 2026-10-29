@@ -1,0 +1,52 @@
+# syntax=docker/dockerfile:1
+# Experimental runtime with the same Ubuntu and Node versions as the baseline.
+ARG UBUNTU_IMAGE=ubuntu:22.04@sha256:076e7bf82319619f28dd0aa9c02ab34b055ad37100395b4f49a2ffba04fb5e11
+FROM ${UBUNTU_IMAGE} AS node-base
+ARG TARGETARCH
+ARG NODE_VERSION=22.23.4
+RUN apt-get update && apt-get -y dist-upgrade \
+    && apt-get install -y --no-install-recommends ca-certificates curl xz-utils \
+    && case "$TARGETARCH" in amd64) node_arch=x64;; arm64) node_arch=arm64;; *) exit 1;; esac \
+    && curl -fsSLo /tmp/node.tar.xz "https://nodejs.org/dist/v${NODE_VERSION}/node-v${NODE_VERSION}-linux-${node_arch}.tar.xz" \
+    && curl -fsSLo /tmp/SHASUMS256.txt "https://nodejs.org/dist/v${NODE_VERSION}/SHASUMS256.txt" \
+    && cd /tmp && grep " node-v${NODE_VERSION}-linux-${node_arch}.tar.xz$" SHASUMS256.txt \
+      | sed "s@node-v${NODE_VERSION}-linux-${node_arch}.tar.xz@node.tar.xz@" | sha256sum -c - \
+    && tar -xJf /tmp/node.tar.xz --strip-components=1 -C /usr/local \
+    && rm -rf /tmp/* /var/lib/apt/lists/*
+
+FROM node-base AS build
+RUN apt-get update && apt-get install -y --no-install-recommends \
+      python3 build-essential libzmq3-dev libprotobuf-dev git graphicsmagick yasm cmake \
+    && rm -rf /var/lib/apt/lists/* \
+    && useradd --system --create-home --shell /usr/sbin/nologin stf
+WORKDIR /build
+RUN chown stf:stf /build
+USER stf
+# Keep the current npm install/pack lifecycle; npm ci needs a separate prepare fix.
+COPY --chown=stf:stf package.json package-lock.json ./
+RUN npm install --omit=optional --no-audit --no-fund
+COPY --chown=stf:stf . .
+RUN npm pack --quiet > /tmp/package-name \
+    && mkdir /tmp/app && tar -xzf "$(tail -n 1 /tmp/package-name)" --strip-components=1 -C /tmp/app \
+    && npm prune --omit=dev --no-audit --no-fund \
+    && mv node_modules /tmp/app/ \
+    && cd /tmp/app && rm -rf doc .github .tx .semaphore *.md *.yaml LICENSE Dockerfile* \
+      .eslintrc .nvmrc .tool-versions res/.eslintrc \
+    && mkdir bundletool \
+    && curl -fsSLo bundletool/bundletool.jar \
+      https://github.com/google/bundletool/releases/download/1.2.0/bundletool-all-1.2.0.jar
+
+FROM node-base AS runtime
+ARG TARGETARCH
+RUN apt-get update && apt-get install -y --no-install-recommends \
+      graphicsmagick openjdk-8-jre-headless libzmq5 libprotobuf23 libstdc++6 \
+    && rm -rf /var/lib/apt/lists/* \
+    && if [ "$TARGETARCH" = amd64 ]; then stf_uid=998; else stf_uid=999; fi \
+    && groupadd --system --gid "$stf_uid" stf \
+    && useradd --system --uid "$stf_uid" --gid stf --create-home --shell /usr/sbin/nologin stf
+ENV PATH=/app/bin:$PATH
+WORKDIR /app
+COPY --from=build --chown=stf:stf /tmp/app/ /app/
+EXPOSE 3000
+USER stf
+CMD ["stf", "--help"]

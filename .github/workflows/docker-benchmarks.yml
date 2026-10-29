@@ -1,0 +1,171 @@
+name: Docker image experiments
+
+on:
+  push:
+    branches: [codex/docker-image-benchmarks]
+    paths:
+      - docker/benchmarks/**
+      - .github/workflows/docker-benchmarks.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: docker-benchmarks-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  snapshot:
+    if: github.repository == 'mdub1na/stf'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+      - name: Freeze dependency resolution
+        run: |
+          python3 docker/benchmarks/benchmark.py prepare \
+            --directory "$RUNNER_TEMP/stf-benchmark" --ref "$GITHUB_SHA"
+          tar -czf "$RUNNER_TEMP/context.tgz" -C "$RUNNER_TEMP/stf-benchmark" \
+            context environment.json docker-version.txt docker-resources.txt dependency-resolution.log
+      - uses: actions/upload-artifact@v7
+        with:
+          name: benchmark-context
+          path: ${{ runner.temp }}/context.tgz
+          retention-days: 1
+
+  measure:
+    needs: snapshot
+    name: ${{ matrix.variant }} (${{ matrix.arch }})
+    runs-on: ${{ matrix.arch == 'arm64' && 'ubuntu-24.04-arm' || 'ubuntu-24.04' }}
+    timeout-minutes: 40
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - {variant: baseline, arch: amd64}
+          - {variant: ubuntu, arch: amd64}
+          - {variant: node-slim, arch: amd64}
+          - {variant: node-slim, arch: arm64}
+    env:
+      VARIANT: ${{ matrix.variant }}
+      ARCH: ${{ matrix.arch }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/download-artifact@v8
+        with:
+          name: benchmark-context
+          path: ${{ runner.temp }}
+      - name: Prepare shared source and fixture
+        run: |
+          mkdir -p "$RUNNER_TEMP/stf-benchmark"
+          tar -xzf "$RUNNER_TEMP/context.tgz" -C "$RUNNER_TEMP/stf-benchmark"
+          python3 - <<'PY'
+          import hashlib, json, os, pathlib, urllib.request
+          directory = pathlib.Path(os.environ['RUNNER_TEMP']) / 'stf-benchmark'
+          metadata = directory / 'environment.json'
+          environment = json.loads(metadata.read_text())
+          environment['platform'] = 'linux/' + os.environ['ARCH']
+          metadata.write_text(json.dumps(environment, indent=2) + '\n')
+          fixture = directory / 'fixtures/install-time-permanent-modules.aab'
+          fixture.parent.mkdir()
+          data = urllib.request.urlopen('https://raw.githubusercontent.com/google/bundletool/24df0e8b56580cef68ba904b3a80e881f4fc641a/src/test/resources/com/android/tools/build/bundletool/testdata/bundle/install-time-permanent-modules.aab', timeout=30).read()
+          assert hashlib.sha256(data).hexdigest() == '83d7d10b6036da2f94ad34483a5c3d5a32891b08e4fd1a658165c55258bdaff2'
+          fixture.write_bytes(data)
+          PY
+          docker info --format '{{json .}}' > "$RUNNER_TEMP/stf-benchmark/measurement-host.json"
+      - name: Cold build and final image checks
+        run: |
+          set -euo pipefail
+          directory="$RUNNER_TEMP/stf-benchmark"
+          python3 docker/benchmarks/benchmark.py build --directory "$directory" --variant "$VARIANT" --phase cold
+          docker run --rm --network none --platform "linux/$ARCH" \
+            --mount "type=bind,src=$PWD/docker/benchmarks/smoke.mjs,dst=/tmp/smoke.mjs,readonly" \
+            --mount "type=bind,src=$directory/fixtures,dst=/tmp/fixtures,readonly" \
+            "stf-docker-bench:$VARIANT-$ARCH-cold" \
+            node /tmp/smoke.mjs --aab /tmp/fixtures/install-time-permanent-modules.aab --require-aab \
+            > "$directory/runtime-smoke.json"
+          rm "$directory/$VARIANT-cold.oci.tar"
+      - name: Cached build and three source changes
+        run: |
+          set -euo pipefail
+          directory="$RUNNER_TEMP/stf-benchmark"
+          for phase in warm source-1 source-2 source-3; do
+            python3 docker/benchmarks/benchmark.py build --directory "$directory" \
+              --variant "$VARIANT" --phase "$phase" --skip-load
+            rm "$directory/$VARIANT-$phase.oci.tar"
+          done
+      - name: Check isolated Compose core
+        if: matrix.arch == 'amd64'
+        run: |
+          python3 docker/benchmarks/compose-check.py \
+            --image "stf-docker-bench:$VARIANT-$ARCH-cold" \
+            --directory "$RUNNER_TEMP/stf-benchmark/compose" \
+            --project "stf-benchmark-$VARIANT" --port 17100
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: measurements-${{ matrix.variant }}-${{ matrix.arch }}
+          path: |
+            ${{ runner.temp }}/stf-benchmark/*.json
+            ${{ runner.temp }}/stf-benchmark/*.log
+            ${{ runner.temp }}/stf-benchmark/*.txt
+            ${{ runner.temp }}/stf-benchmark/recipes/
+            ${{ runner.temp }}/stf-benchmark/compose/
+          retention-days: 7
+
+  compare:
+    if: always() && github.repository == 'mdub1na/stf'
+    needs: measure
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          pattern: measurements-*
+          path: ${{ runner.temp }}/measurements
+      - name: Compare amd64 payloads and measurements
+        run: |
+          python3 - <<'PY'
+          import json, os, pathlib, statistics
+          root = pathlib.Path(os.environ['RUNNER_TEMP']) / 'measurements'
+          results = []
+          reference = None
+          for variant in ('baseline', 'ubuntu', 'node-slim'):
+              directory = root / ('measurements-' + variant + '-amd64')
+              cold = json.loads((directory / (variant + '-cold.result.json')).read_text())
+              warm = json.loads((directory / (variant + '-warm.result.json')).read_text())
+              source = [json.loads((directory / (variant + '-source-' + str(n) + '.result.json')).read_text())
+                        for n in (1, 2, 3)]
+              assert len({item['dockerfileSha256'] for item in [cold, warm] + source}) == 1
+              smoke = json.loads((directory / 'runtime-smoke.json').read_text())
+              assert smoke['status'] == 'passed', variant
+              checks = {item['name']: item for item in smoke['checks']}
+              comparable = {name: checks[name]['details'] for name in
+                            ('nonroot', 'production-dependencies', 'android-all-abi-resources')}
+              if reference is None:
+                  reference = comparable
+              assert comparable == reference, 'Runtime identity or payload differs: ' + variant
+              compose = json.loads((directory / 'compose/compose-result.json').read_text())
+              assert compose['status'] == 'passed' and compose['cleanup'] == 'passed', variant
+              samples = [item['buildSeconds'] for item in source]
+              results.append({'variant': variant, 'compressedMB': round(cold['compressedLayerBytes'] / 1e6, 1),
+                              'coldSeconds': cold['buildSeconds'], 'warmSeconds': warm['buildSeconds'],
+                              'sourceMedianSeconds': statistics.median(samples),
+                              'sourceRangeSeconds': [min(samples), max(samples)],
+                              'startToReadySeconds': compose['startToReadySeconds']})
+          (root / 'summary.json').write_text(json.dumps(results, indent=2) + '\n')
+          with open(os.environ['GITHUB_STEP_SUMMARY'], 'a') as output:
+              output.write('| Variant | Compressed MB | Cold s | Warm s | Source median s | Source range s | Ready s |\n')
+              output.write('| --- | ---: | ---: | ---: | ---: | --- | ---: |\n')
+              for item in results:
+                  output.write('| {variant} | {compressedMB} | {coldSeconds} | {warmSeconds} | {sourceMedianSeconds} | {sourceRangeSeconds} | {startToReadySeconds} |\n'.format(**item))
+          print(json.dumps(results, indent=2))
+          PY
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: comparison-summary
+          path: ${{ runner.temp }}/measurements/summary.json
+          if-no-files-found: ignore
+          retention-days: 7

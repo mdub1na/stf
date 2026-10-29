@@ -76,6 +76,13 @@ async function runAabWorker(aabPath) {
     const fs = require('node:fs')
     const path = require('node:path')
     const {createRequire} = require('node:module')
+    const cp = require('node:child_process')
+    const spawn = cp.spawn
+    cp.spawn = function(file, ...args) {
+      const child = spawn.call(this, file, ...args)
+      if (file === 'java') child.stderr.on('data', data => process.stderr.write(data))
+      return child
+    }
     const req = createRequire(path.join(process.argv[1], 'package.json'))
     const convert = req('./lib/util/bundletool.js').default
     const ApkReader = req('@devicefarmer/adbkit-apkreader')

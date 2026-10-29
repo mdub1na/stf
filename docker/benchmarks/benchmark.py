@@ -149,9 +149,20 @@ def build(directory, variant, phase, load=True):
               "dockerfileSha256": recipe_sha,
               "buildSeconds": elapsed, "basePrewarmSeconds": prewarm_time,
               **image_size(archive)}
-    result["loadSeconds"] = execute(["docker", "load", "--input", str(archive)], prefix.with_suffix(".load.log")) if load else None
     result["cachedLogEntries"] = prefix.with_suffix(".build.log").read_text().count(" CACHED")
+    result["loadSeconds"] = None
+    result["loadMethod"] = "cached-buildx-docker-export" if load else None
+    # Save measurements even if the separate runtime import fails. Classic
+    # Docker stores cannot load an OCI-layout archive directly, unlike the
+    # containerd store in Docker Desktop; use the portable Docker exporter.
     prefix.with_suffix(".result.json").write_text(json.dumps(result, indent=2) + "\n")
+    if load:
+        result["loadSeconds"] = execute([
+            "docker", "buildx", "build", "--builder", builder, "--platform", platform,
+            "--file", str(recipe), "--tag", image, "--provenance=false", "--sbom=false",
+            "--progress", "plain", "--load", str(context),
+        ], prefix.with_suffix(".load.log"))
+        prefix.with_suffix(".result.json").write_text(json.dumps(result, indent=2) + "\n")
     print(json.dumps(result), flush=True)
 
 

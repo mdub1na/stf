@@ -1,0 +1,10 @@
+*
+!Dockerfile
+!package.json
+!package-lock.json
+!server.mts
+!gateway.mts
+!access.mts
+!adb-guard.mts
+!types.mts
+!config.example.json

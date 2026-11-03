@@ -1,0 +1,40 @@
+class StfUtils < Formula
+  desc "Connect farm devices to a local Android development environment"
+  homepage __HOMEPAGE__
+  url __DOWNLOAD_URL__
+  version __VERSION__
+  sha256 __SHA256__
+  license "Apache-2.0"
+
+  depends_on "node@24"
+
+  def install
+    # All application dependencies are in the checksummed release, including ws.
+    # No npm install, dependency downloads, lifecycle scripts, or SDK installation.
+    libexec.install Dir["*"]
+    bin.mkpath
+    (bin/"stf").write <<~SH
+      #!/bin/sh
+      exec "#{Formula["node@24"].opt_bin}/node" "#{libexec}/stf.mts" "$@"
+    SH
+    chmod 0755, bin/"stf"
+  end
+
+  def caveats
+    <<~EOS
+      This formula provides the stf command for `stf utils`.
+      If another STF server command already owns stf, preserve it. Do not use
+      `brew link --overwrite`; invoke #{opt_bin}/stf explicitly or choose a
+      deliberate PATH/alias arrangement. The existing server is not replaced.
+
+      Android Studio's SDK adb is required separately. No SDK is bundled.
+    EOS
+  end
+
+  test do
+    assert_match "utils", shell_output("#{bin}/stf --help")
+    # Validate installed argument handling without credentials, network, or adb.
+    output = shell_output("#{bin}/stf utils adb connect 2>&1", 1)
+    assert_match(/serial|required|provide|usage/i, output)
+  end
+end

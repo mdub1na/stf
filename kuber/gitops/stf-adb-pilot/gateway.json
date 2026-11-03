@@ -1,0 +1,14 @@
+{
+  "stfUrl": "https://stf.finservice.tech",
+  "publicUrl": "https://stf.finservice.tech",
+  "providers": {
+    "stf-provider": {
+      "host": "stf-provider.stf.svc.cluster.local",
+      "adbPorts": [12011, 12015, 12019, 12023, 12027, 12031, 12035]
+    },
+    "stf-provider-2": {
+      "host": "stf-provider-2.stf.svc.cluster.local",
+      "adbPorts": [12042, 12046, 12050, 12054, 12058, 12062, 12066]
+    }
+  }
+}

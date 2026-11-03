@@ -1,0 +1,183 @@
+name: STF utilities release
+
+on:
+  pull_request:
+    paths:
+      - tools/adb-tunnel/**
+      - .github/workflows/stf-utils-release.yml
+  push:
+    tags: ['stf-utils-v*']
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Existing utilities tag, for example stf-utils-v0.1.0; this workflow never creates tags'
+        required: true
+        type: string
+      publish:
+        description: 'Publish the verified assets to a new GitHub Release after environment approval'
+        required: true
+        default: false
+        type: boolean
+
+permissions:
+  contents: read
+
+jobs:
+  prepare:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    outputs:
+      tag: ${{ steps.ref.outputs.tag }}
+      ref: ${{ steps.ref.outputs.ref }}
+      version: ${{ steps.package.outputs.version }}
+    steps:
+      - name: Validate the explicitly selected tag
+        id: ref
+        env:
+          TAG: ${{ github.event_name == 'push' && github.ref_name || inputs.tag }}
+          EVENT_NAME: ${{ github.event_name }}
+        run: |
+          set -euo pipefail
+          if [ "$EVENT_NAME" = pull_request ]; then
+            echo "ref=$GITHUB_SHA" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          if ! [[ "$TAG" =~ ^stf-utils-v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]]; then
+            echo '::error::Select an existing stf-utils-vMAJOR.MINOR.PATCH tag'
+            exit 1
+          fi
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "ref=refs/tags/$TAG" >> "$GITHUB_OUTPUT"
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ steps.ref.outputs.ref }}
+          persist-credentials: false
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '24.22.0'
+      - name: Verify package version and install only the locked portable dependency
+        id: package
+        env:
+          RELEASE_TAG: ${{ steps.ref.outputs.tag }}
+        run: |
+          set -euo pipefail
+          node --input-type=module -e '
+            import {readFileSync,appendFileSync} from "node:fs";
+            const p=JSON.parse(readFileSync("tools/adb-tunnel/package.json"));
+            if(p.name!=="@finservice/stf-utils" || p.private!==true || !/^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$/.test(p.version)) process.exit(1);
+            if(process.env.RELEASE_TAG && process.env.RELEASE_TAG!==`stf-utils-v${p.version}`) process.exit(1);
+            appendFileSync(process.env.GITHUB_OUTPUT,`version=${p.version}\n`);
+          '
+          npm --prefix tools/adb-tunnel ci --omit=dev --omit=optional --ignore-scripts --no-audit --no-fund
+      - name: Test isolated transport and packaged installation
+        run: node --test tools/adb-tunnel/test/*.test.mts tools/adb-tunnel/packaging/test/*.test.mts
+      - name: Build immutable archive and derive the Homebrew formula
+        env:
+          RELEASE_VERSION: ${{ steps.package.outputs.version }}
+          RELEASE_TAG: ${{ steps.ref.outputs.tag }}
+        run: |
+          set -euo pipefail
+          node tools/adb-tunnel/packaging/build-release.mts --out dist/stf-utils --offline
+          URL_OPTION=()
+          if [ -n "$RELEASE_TAG" ]; then
+            URL_OPTION=(--url "https://github.com/$GITHUB_REPOSITORY/releases/download/$RELEASE_TAG/stf-utils-$RELEASE_VERSION.tar.gz")
+          fi
+          node tools/adb-tunnel/packaging/generate-formula.mts \
+            --artifact "dist/stf-utils/stf-utils-$RELEASE_VERSION.tar.gz" \
+            --out dist/stf-utils/Formula/stf-utils.rb \
+            "${URL_OPTION[@]}" \
+            --homepage "https://github.com/$GITHUB_REPOSITORY"
+          ruby -c dist/stf-utils/Formula/stf-utils.rb
+          git rev-parse HEAD > dist/stf-utils/source-commit.txt
+          {
+            echo "Utilities release assets prepared for $RELEASE_TAG."
+            echo 'The formula includes bundled dependencies and the actual archive SHA-256.'
+            echo 'A dedicated Homebrew tap still needs a separate authorized publication.'
+          } >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@v7
+        with:
+          name: stf-utils-${{ steps.package.outputs.version }}
+          path: dist/stf-utils/
+          if-no-files-found: error
+
+  homebrew:
+    name: Install and test the generated formula on a disposable Mac
+    needs: prepare
+    runs-on: macos-15
+    timeout-minutes: 20
+    env:
+      HOMEBREW_NO_AUTO_UPDATE: '1'
+      HOMEBREW_NO_INSTALL_CLEANUP: '1'
+      HOMEBREW_NO_ANALYTICS: '1'
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ needs.prepare.outputs.ref }}
+          persist-credentials: false
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '24.22.0'
+      - uses: actions/download-artifact@v8
+        with:
+          name: stf-utils-${{ needs.prepare.outputs.version }}
+          path: release
+      - name: Generate a fresh local tap pointing at the verified downloaded artifact
+        env:
+          RELEASE_VERSION: ${{ needs.prepare.outputs.version }}
+        run: |
+          set -euo pipefail
+          brew tap-new --no-git local/stf-utils
+          TAP_PATH="$(brew --repository local/stf-utils)"
+          node tools/adb-tunnel/packaging/generate-formula.mts \
+            --artifact "$PWD/release/stf-utils-$RELEASE_VERSION.tar.gz" \
+            --out "$TAP_PATH/Formula/stf-utils.rb"
+      - name: Exercise the real Homebrew install, wrapper runtime and formula test
+        run: |
+          set -euo pipefail
+          brew install --build-from-source local/stf-utils/stf-utils
+          brew test local/stf-utils/stf-utils
+          "$(brew --prefix local/stf-utils/stf-utils)/bin/stf" --version
+          "$(brew --prefix local/stf-utils/stf-utils)/bin/stf" utils adb connect --help
+      - name: Remove only this disposable runner's trial formula and tap
+        if: always()
+        run: |
+          brew uninstall --force stf-utils || true
+          brew untap --force local/stf-utils || true
+
+  publish:
+    if: ${{ github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && inputs.publish) }}
+    needs: [prepare, homebrew]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    environment: stf-utils-release
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          name: stf-utils-${{ needs.prepare.outputs.version }}
+          path: release
+      - name: Publish to the existing tag without replacing release assets
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          RELEASE_TAG: ${{ needs.prepare.outputs.tag }}
+          RELEASE_VERSION: ${{ needs.prepare.outputs.version }}
+        run: |
+          set -euo pipefail
+          cd release
+          sha256sum --check "stf-utils-$RELEASE_VERSION.tar.gz.sha256"
+          if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
+            echo '::error::Release already exists; existing versioned assets will not be overwritten'
+            exit 1
+          fi
+          cat > release-notes.txt <<'NOTES'
+          Standalone STF utilities client for stf utils adb connect.
+          The archive bundles its pinned pure JavaScript WebSocket dependency. Node.js
+          and Android Studio's SDK are supplied separately; no phone agents are installed.
+          The attached Homebrew formula must be published to an approved dedicated tap.
+          NOTES
+          gh release create "$RELEASE_TAG" --verify-tag \
+            --title "STF utilities $RELEASE_VERSION" --notes-file release-notes.txt \
+            "stf-utils-$RELEASE_VERSION.tar.gz" "stf-utils-$RELEASE_VERSION.tar.gz.sha256" \
+            "stf-utils-$RELEASE_VERSION.manifest.json" Formula/stf-utils.rb source-commit.txt

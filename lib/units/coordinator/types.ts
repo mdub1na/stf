@@ -86,6 +86,24 @@ export interface FarmDevice {
   ios?: {wda: WdaProfile}
 }
 
+export interface CaptureReconciliationInput {
+  serial: string
+  captureTransportRetired: true
+  reason: string
+  actor: 'operator'
+  projectId: string
+}
+
+export interface CaptureReconciliationAudit {
+  at: number
+  previousError: string
+  mode: 'unowned-capture'
+  captureTransportRetired: true
+  reason: string
+  actor: 'operator'
+  projectId: string
+}
+
 export interface Lease {
   id: string
   projectId?: string
@@ -105,6 +123,7 @@ export interface Lease {
   commandInFlight?: boolean
   captureUncertain?: boolean
   captureConfirmed?: boolean
+  captureReconciliation?: CaptureReconciliationAudit
   finishState?: 'released' | 'expired'
   error?: string
 }

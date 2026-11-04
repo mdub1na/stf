@@ -200,6 +200,52 @@ rejected after 10000 saved requests; automatic history retention/compaction is
 future work. Reusing an existing idempotency key still reads its original
 request. Do not remove history or replace the state file during live leases.
 
+### Reconciling an unconfirmed capture
+
+A timed-out STF capture can leave `captureUncertain` in quarantine even when the
+phone appears free. The normal recover request with `{}` deliberately keeps that
+lease held: a delayed capture message can still reach the provider. Lease age,
+an empty Grid and restarting only the provider do not prove that the message is
+gone. Device channels are stable across provider restarts.
+
+An operator can reconcile this specific Appium capture failure only after
+retiring every process that could still send, queue or receive the old capture.
+Stop new submissions and the coordinator after active work has drained. Stop
+all STF API replicas, the APP and DEV triproxies, processors and affected
+providers together, and confirm their old processes have exited before
+restarting them. Keep the coordinator PVC and full state history. Record the
+process identities and the maintenance result in private operator evidence.
+A normal rolling restart without this barrier is insufficient.
+
+Once the rebuilt transport and devices are ready, use the operator credential:
+
+```http
+POST /api/v1/leases/LEASE_ID/recover
+Content-Type: application/json
+
+{
+  "reconcileUnowned": true,
+  "serial": "EXACT_DEVICE_SERIAL",
+  "captureTransportRetired": true,
+  "reason": "Transport retired in maintenance; private evidence: OPERATION_ID"
+}
+```
+
+`captureTransportRetired` is an explicit operator acknowledgement of that
+external maintenance, not a check the coordinator can perform itself. Do not
+acknowledge it merely because the phone is free or the lease is old. This mode
+also requires an expired capture safety window, no local operation or uncertain
+Appium command, a uniquely identified free STF device and fresh Grid evidence
+with no matching or ambiguous session. The serial and lease ID fence the
+operation; it never releases another STF owner or deletes an Appium session.
+
+The existing lease becomes terminal only after the updated state is saved.
+Request and lease history remain, with an audit of the original quarantine
+cause, the operator acknowledgement, reason and time. Retrying the same
+successful reconciliation returns the existing result without replacing its
+audit. Other quarantine causes, including uncertain session creation and
+Maestro cleanup, still use normal investigation and cleanup.
+
 ## API
 
 All `/api/v1` routes require authentication. They accept
@@ -228,7 +274,7 @@ operator credential to CI jobs. Project credentials cannot call recovery (403).
 | GET | `/api/v1/leases/:id` | `{ "lease": ... }` |
 | POST | `/api/v1/leases/:id/renew` | Renew with `{}`; returns lease |
 | DELETE | `/api/v1/leases/:id` | 202 and lease cleanup state |
-| POST | `/api/v1/leases/:id/recover` | Retry cleanup of a quarantined lease with `{}` |
+| POST | `/api/v1/leases/:id/recover` | Operator cleanup retry with `{}`, or explicit unowned-capture reconciliation after transport retirement |
 | POST | `/api/v1/maintenance` | Operator-only durable iOS drain with `{serial, operationId}` |
 | GET | `/api/v1/maintenance/:id` | Operator-only drain status |
 | DELETE | `/api/v1/maintenance/:id` | Operator-only completion after fresh device/signing/Grid checks |

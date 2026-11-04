@@ -73,6 +73,45 @@ describe('coordinator persistent state', () => {
     }
   })
 
+  it('retains the operator reconciliation audit and rejects malformed proof', async() => {
+    const store = new FileStateStore(filename)
+    const audit = {at: 900000, mode: 'unowned-capture' as const
+      , captureTransportRetired: true as const, reason: 'Capture transport retired in maintenance'
+      , actor: 'operator' as const, projectId: 'legacy', previousError: 'cleanup_unconfirmed'}
+    const reconciled: CoordinatorState = {version: 2, maintenance: [], requests: [{
+      id: 'request', key: 'key', fingerprint: 'fingerprint', state: 'allocated'
+    , input: {runId: 'run', platform: 'Android', queueTimeoutSeconds: 60, maxDurationSeconds: 60}
+    , createdAt: 0, queueDeadlineAt: 60000, leaseId: 'lease'
+    }], leases: [{
+      id: 'lease', requestId: 'request', runId: 'run', state: 'released', runner: 'appium'
+    , createdAt: 0, expiresAt: 10000, deadlineAt: 60000
+    , device: {serial: '2a3e120', platform: 'Android', model: 'Phone', version: '16'
+        , provider: 'provider', present: true, ready: true}
+    , capabilities: {'appium:udid': '2a3e120'}, captureReconciliation: audit
+    }]}
+    await store.save(reconciled)
+    assert.deepEqual(await new FileStateStore(filename).load(), reconciled)
+    for (const invalidAudit of [
+      null, {}, {...audit, at: '900000'}, {...audit, at: -1}, {...audit, mode: 'automatic'}
+    , {...audit, previousError: ''}, {...audit, previousError: null}
+    , {...audit, captureTransportRetired: undefined}, {...audit, captureTransportRetired: false}
+    , {...audit, reason: ''}, {...audit, reason: '  '}, {...audit, reason: 'x'.repeat(1025)}
+    , {...audit, actor: 'project'}, {...audit, projectId: ''}, {...audit, projectId: undefined}
+    ]) {
+      const invalid = structuredClone(reconciled)
+      Object.assign(invalid.leases[0]!, {captureReconciliation: invalidAudit})
+      await writeFile(filename, JSON.stringify(invalid), {mode: 0o600})
+      await assert.rejects(store.load(), /Invalid coordinator state/)
+    }
+    for (const invalidLease of [{state: 'quarantined'}, {captureUncertain: true}
+      , {sessionId: 'session'}, {creatingSession: true}, {commandInFlight: true}]) {
+      const invalid = structuredClone(reconciled)
+      Object.assign(invalid.leases[0]!, invalidLease)
+      await writeFile(filename, JSON.stringify(invalid), {mode: 0o600})
+      await assert.rejects(store.load(), /Invalid coordinator state/)
+    }
+  })
+
   it('retains the previous durable file if replacement serialization fails', async() => {
     const store = new FileStateStore(filename)
     await store.save(empty())

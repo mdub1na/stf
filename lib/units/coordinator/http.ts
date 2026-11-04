@@ -7,7 +7,7 @@ import {LeaseAdbBridge} from './adb-bridge.js'
 import {CoordinatorError} from './config.js'
 import {validMaintenanceId, validMaintenanceSerial} from './maintenance.js'
 import {Coordinator} from './engine.js'
-import type {AllocationInput, CoordinatorOptions} from './types.js'
+import type {AllocationInput, CoordinatorOptions, CaptureReconciliationInput} from './types.js'
 
 function allocation(body: unknown, options: CoordinatorOptions): AllocationInput {
   if (!body || typeof body !== 'object' || Array.isArray(body)) {
@@ -56,6 +56,33 @@ function allocation(body: unknown, options: CoordinatorOptions): AllocationInput
     }
   }
   return input
+}
+
+function recovery(body: unknown, operator: Principal): CaptureReconciliationInput | undefined {
+  if (body === undefined) {
+    return undefined
+  }
+  if (!body || typeof body !== 'object' || Array.isArray(body)) {
+    throw new CoordinatorError(400, 'invalid_reconciliation', 'Expected a recovery object')
+  }
+  const value = body as Record<string, unknown>
+  if (Object.keys(value).length === 0) {
+    return undefined
+  }
+  const keys = ['reconcileUnowned', 'serial', 'captureTransportRetired', 'reason']
+  if (Object.keys(value).length !== keys.length ||
+      Object.keys(value).some(key => !keys.includes(key)) ||
+      value.reconcileUnowned !== true || value.captureTransportRetired !== true ||
+      typeof value.serial !== 'string' || !/^[A-Za-z0-9._:-]{1,256}$/.test(value.serial) ||
+      typeof value.reason !== 'string' || !value.reason.trim() ||
+      value.reason.length > 1024 || value.reason !== value.reason.trim() ||
+      value.reason.split('').some(character =>
+        character.charCodeAt(0) < 32 || character.charCodeAt(0) === 127)) {
+    throw new CoordinatorError(400, 'invalid_reconciliation',
+      'Reconciliation requires the exact serial, retired capture transport and an operator reason')
+  }
+  return {serial: value.serial, captureTransportRetired: true, reason: value.reason
+    , actor: 'operator', projectId: operator.projectId}
 }
 
 export function createCoordinatorApp(engine: Coordinator, credential: string | CoordinatorAccess) {
@@ -142,7 +169,8 @@ export function createCoordinatorApp(engine: Coordinator, credential: string | C
   app.post('/api/v1/leases/:id/recover', async(req, res) => {
     access.assertAdmin(principal(res))
     scopeLease(req.params.id, res)
-    res.status(202).json({lease: await engine.recover(req.params.id)})
+    const input = recovery(req.body, principal(res))
+    res.status(202).json({lease: await engine.recover(req.params.id, input)})
   })
   app.use('/api/v1/leases/:id/webdriver', async(req, res) => {
     scopeLease(String(req.params.id), res)

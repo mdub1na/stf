@@ -48,6 +48,24 @@ export class FileStateStore implements StateStore {
           validProject(lease.projectId) &&
           (lease.maestroCleanupConfirmed === undefined ||
             typeof lease.maestroCleanupConfirmed === 'boolean') &&
+          (lease.captureReconciliation === undefined ||
+            lease.captureReconciliation !== null &&
+            typeof lease.captureReconciliation === 'object' &&
+            !Array.isArray(lease.captureReconciliation) &&
+            validTime(lease.captureReconciliation.at) &&
+            lease.captureReconciliation.mode === 'unowned-capture' &&
+            typeof lease.captureReconciliation.previousError === 'string' &&
+            !!lease.captureReconciliation.previousError &&
+            lease.captureReconciliation.captureTransportRetired === true &&
+            typeof lease.captureReconciliation.reason === 'string' &&
+            !!lease.captureReconciliation.reason.trim() &&
+            lease.captureReconciliation.reason.length <= 1024 &&
+            lease.captureReconciliation.actor === 'operator' &&
+            typeof lease.captureReconciliation.projectId === 'string' &&
+            validProject(lease.captureReconciliation.projectId) &&
+            ['released', 'expired'].includes(lease.state) &&
+            lease.captureUncertain !== true && !lease.sessionId && !lease.creatingSession &&
+            !lease.commandInFlight && lease.runner !== 'maestro') &&
           typeof lease.requestId === 'string' && lease.requestId &&
           typeof lease.runId === 'string' && lease.runId && leaseStates.has(lease.state) &&
           validTime(lease.createdAt) && validTime(lease.expiresAt) && validTime(lease.deadlineAt) &&

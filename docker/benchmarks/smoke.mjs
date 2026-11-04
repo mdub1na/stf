@@ -13,8 +13,11 @@ import {parseArgs, promisify} from 'node:util'
 const {values} = parseArgs({options: {
   'app-root': {type: 'string', default: '/app'},
   aab: {type: 'string'},
-  'require-aab': {type: 'boolean', default: false}
+  'require-aab': {type: 'boolean', default: false},
+  'baseline-arm64': {type: 'boolean', default: false}
 }})
+if (values['baseline-arm64'] && process.arch !== 'arm64') throw new Error('--baseline-arm64 requires native ARM64')
+class KnownBaselineSkip extends Error {}
 const root = path.resolve(values['app-root'])
 const require = createRequire(path.join(root, 'package.json'))
 const execute = promisify(execFile)
@@ -32,8 +35,10 @@ async function check(name, action) {
     checks.push({name, status: 'passed', milliseconds: Math.round(performance.now() - started), details})
   }
   catch (error) {
-    checks.push({name, status: 'failed', milliseconds: Math.round(performance.now() - started),
-      error: error.stack || String(error)})
+    checks.push(error instanceof KnownBaselineSkip ?
+      {name, status: 'skipped', reason: error.message} :
+      {name, status: 'failed', milliseconds: Math.round(performance.now() - started),
+        error: error.stack || String(error)})
   }
   console.error(name + ': ' + checks.at(-1).status)
 }
@@ -68,6 +73,32 @@ async function inventory(directory) {
   await visit('')
   return {files: records.length, bytes: records.reduce((sum, record) => sum + record.bytes, 0),
     sha256: createHash('sha256').update(JSON.stringify(records)).digest('hex')}
+}
+
+// Record every installed package, including nested production dependencies.
+async function installedPackages() {
+  const records = []
+  async function modules(directory) {
+    let entries
+    try {entries = await fs.readdir(directory, {withFileTypes: true})}
+    catch (error) {if (error.code === 'ENOENT') return; throw error}
+    for (const entry of entries.sort((a, b) => a.name.localeCompare(b.name))) {
+      if (entry.name.startsWith('.')) continue
+      const file = path.join(directory, entry.name)
+      if (entry.name.startsWith('@') && entry.isDirectory()) {await modules(file); continue}
+      if (!entry.isDirectory() && !entry.isSymbolicLink()) continue
+      let manifest
+      try {manifest = JSON.parse(await fs.readFile(path.join(file, 'package.json'), 'utf8'))}
+      catch (error) {if (error.code === 'ENOENT') continue; throw error}
+      assert(manifest.name && manifest.version, 'Invalid installed package: ' + file)
+      records.push({path: path.relative(root, file), name: manifest.name, version: manifest.version})
+      await modules(path.join(file, 'node_modules'))
+    }
+  }
+  await modules(path.join(root, 'node_modules'))
+  assert(records.length > 0)
+  records.sort((a, b) => a.path.localeCompare(b.path))
+  return {count: records.length, sha256: createHash('sha256').update(JSON.stringify(records)).digest('hex'), records}
 }
 
 // Kill the entire isolated child process group on timeout, including Java started by STF.
@@ -146,6 +177,8 @@ try {
     }
     return {count: Object.keys(versions).length, versions}
   })
+
+  await check('installed-production-packages', installedPackages)
 
   await check('cli', async () => {
     const version = await command(path.join(root, 'bin/stf'), ['--version'])
@@ -251,7 +284,14 @@ try {
   })
 
   await check('java-keytool-bundletool', async () => {
-    const java = await command('java', ['-version'])
+    let java
+    try {java = await command('java', ['-version'])}
+    catch (error) {
+      if (values['baseline-arm64'] && error.code === 'ENOENT') {
+        throw new KnownBaselineSkip('The original ARM64 Dockerfile does not install Java; candidate Java is checked normally.')
+      }
+      throw error
+    }
     await command('keytool', ['-help'])
     const bundletool = await command('java', ['-jar', path.join(root, 'bundletool/bundletool.jar'), 'version'])
     assert.match(java.stderr + java.stdout, /version/)
@@ -278,7 +318,8 @@ try {
     await check('stf-aab-to-apk', () => {throw new Error('--require-aab requires --aab PATH')})
   }
   else {
-    checks.push({name: 'stf-aab-to-apk', status: 'skipped', reason: 'No --aab fixture supplied'})
+    checks.push({name: 'stf-aab-to-apk', status: 'skipped', reason: process.arch === 'arm64' ?
+      'Bundletool 1.2.0 embeds x86_64 aapt2; native ARM64 AAB conversion is unsupported.' : 'No --aab fixture supplied'})
   }
 
   // Keep native messaging threads after subprocess probes. This also avoids
@@ -306,5 +347,6 @@ finally {
 const failed = checks.filter(check => check.status === 'failed')
 console.log(JSON.stringify({schema: 1, node: process.version, arch: process.arch,
   platform: process.platform, packageVersion: packageJson.version,
-  status: failed.length ? 'failed' : 'passed', checks}, null, 2))
+  status: failed.length ? 'failed' : 'passed',
+  checkerSha256: createHash('sha256').update(await fs.readFile(new URL(import.meta.url))).digest('hex'), checks}, null, 2))
 process.exitCode = failed.length ? 1 : 0

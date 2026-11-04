@@ -244,6 +244,110 @@ describe('coordinator HTTP and real upstream adapters', function() {
       }}
   }
 
+  async function uncertainCapture() {
+    const f = await fixture(false, true)
+    const createdAt = Date.parse('2026-10-17T23:00:00Z')
+    const id = '7c8b73f0-f012-49a7-9ce4-5b9ec8048afb'
+    f.store.state.requests.push({id: 'failed-capture', projectId: 'a', key: 'uncertain'
+      , fingerprint: 'failed-capture', input: {runId: 'uncertain', platform: 'Android'
+        , queueTimeoutSeconds: 60, maxDurationSeconds: 1800}, state: 'failed'
+      , createdAt, queueDeadlineAt: createdAt + 60000, leaseId: id, error: 'allocation_failed'})
+    f.store.state.leases.push({id, projectId: 'a', requestId: 'failed-capture'
+      , runId: 'uncertain', runner: 'appium', state: 'quarantined'
+      , device: structuredClone(f.devices[0]!), capabilities: {'appium:udid': 'phone-a'
+        , 'appium:remoteAdbHost': 'adb.test', platformName: 'Android'}
+      , createdAt, expiresAt: createdAt + 180000, deadlineAt: createdAt + 1800000
+      , captureUncertain: true, finishState: 'released', error: 'cleanup_unconfirmed'})
+    await f.engine.start()
+    const body = {reconcileUnowned: true, serial: 'phone-a', captureTransportRetired: true
+      , reason: 'Capture producer, all bus queues and consumer were retired under maintenance.'}
+    return {...f, id, route: '/api/v1/leases/' + id + '/recover', body}
+  }
+
+  it('requires a complete operator acknowledgement before reconciling uncertain capture',
+    async function() {
+      const f = await uncertainCapture()
+      const original = structuredClone(f.store.state)
+      for (const body of [null, [], {force: true}, {...f.body, extra: true}
+        , {...f.body, actor: 'operator'}, {...f.body, projectId: 'a'}
+        , {...f.body, reconcileUnowned: false}, {...f.body, captureTransportRetired: false}
+        , {...f.body, captureTransportRetired: 'true'}, {...f.body, serial: ''}
+        , {...f.body, serial: 'phone-a\n'}, {...f.body, reason: ''}
+        , {...f.body, reason: ' '}, {...f.body, reason: 'not\nretired'}
+        , {...f.body, reason: 'x'.repeat(1025)}
+        , {reconcileUnowned: true, serial: 'phone-a'}]) {
+        const before = f.stfCalls.length
+        const response = await f.call(f.route, 'POST', body)
+        assert.equal(response.status, 400)
+        assert.equal(f.stfCalls.length, before)
+        assert.deepEqual(f.store.state, original)
+      }
+      assert.equal((await f.call(f.route, 'POST', f.body, null)).status, 401)
+      for (const token of [projectA, projectB]) {
+        assert.equal((await f.call(f.route, 'POST', f.body, 'Bearer ' + token)).status, 403)
+      }
+      assert.equal((await f.call(f.route, 'POST', {...f.body, serial: 'phone-b'})).status, 409)
+      assert.deepEqual(f.store.state, original)
+    })
+
+  it('keeps ordinary cleanup conservative and explicitly audits operator reconciliation',
+    async function() {
+      const f = await uncertainCapture()
+      const history = structuredClone(f.store.state.requests)
+      assert.equal((await f.call(f.route, 'POST', {})).status, 202)
+      assert.equal(f.store.state.leases[0]!.state, 'quarantined')
+      const response = await f.call(f.route, 'POST', f.body)
+      assert.equal(response.status, 202)
+      assert.equal(response.body.lease.state, 'expired')
+      const lease = f.store.state.leases[0]!
+      assert.equal(lease.captureUncertain, undefined)
+      assert.equal(lease.error, undefined)
+      assert.deepEqual(lease.captureReconciliation, {at: Date.parse('2026-10-18T00:00:00Z')
+        , previousError: 'cleanup_unconfirmed', mode: 'unowned-capture'
+        , captureTransportRetired: true, reason: f.body.reason, actor: 'operator'
+        , projectId: 'legacy'})
+      assert.deepEqual(f.store.state.requests, history)
+      assert.equal(f.store.state.leases.length, 1)
+      assert.ok(f.stfCalls.every(call => call.method === 'GET'))
+      assert.ok(f.gridCalls.every(call => call.method === 'GET' && call.route === '/status'))
+      const saved = structuredClone(f.store.state)
+      f.advance(1000)
+      assert.equal((await f.call(f.route, 'POST', f.body)).status, 202)
+      assert.deepEqual(f.store.state, saved)
+      assert.equal((await f.call(f.route, 'POST', {...f.body, serial: 'phone-b'})).status, 409)
+      assert.deepEqual(f.store.state, saved)
+    })
+
+  it('can retry reconciliation when the HTTP connection closes after its durable save',
+    async function() {
+      const f = await uncertainCapture()
+      const entered = deferred()
+      const release = deferred()
+      const originalSave = f.store.save.bind(f.store)
+      let commits = 0
+      f.store.save = async state => {
+        await originalSave(state)
+        commits++
+        entered.resolve()
+        await release.promise
+      }
+      const abort = new AbortController()
+      const pending = fetch(f.url + f.route, {method: 'POST', signal: abort.signal
+        , headers: {Authorization: bearer, 'Content-Type': 'application/json'}
+        , body: JSON.stringify(f.body)})
+      const rejected = assert.rejects(pending, error => (error as Error).name === 'AbortError')
+      await entered.promise
+      abort.abort()
+      release.resolve()
+      await rejected
+      const response = await f.call(f.route, 'POST', f.body)
+      assert.equal(response.status, 202)
+      assert.equal(response.body.lease.state, 'expired')
+      assert.equal(commits, 1)
+      assert.equal(f.store.state.leases[0]!.captureReconciliation!.previousError,
+        'cleanup_unconfirmed')
+    })
+
   it('exposes readiness before recovery and refuses allocation before startup', async function() {
     const f = await fixture(false)
     assert.deepEqual((await f.call('/healthz', 'GET', undefined, null)).body, {healthy: true})

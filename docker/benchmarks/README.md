@@ -8,7 +8,22 @@ Start the **Docker image experiments** workflow from the `codex/docker-image-ben
 - `candidate_ref`: the same commit, providing the candidate `Dockerfile`.
 - `baseline_ref`: the upstream commit providing the original `Dockerfile`.
 
-Mutable branch names are rejected. For the first updated PR #1070 comparison, the intended source/candidate is `c6f7d4e053521789ad40e4b7cef02dc7684e74e2` and baseline is `7585c9b04d806a75dced9da3ae16520043b6331b`. Use the reviewed current commit if the candidate changes before dispatch.
+Mutable branch names are rejected. Verified [run 41902076195](https://github.com/mdub1na/stf/actions/runs/41902076195) used source/candidate `c6f7d4e053521789ad40e4b7cef02dc7684e74e2`, baseline `7585c9b04d806a75dced9da3ae16520043b6331b` and harness `04d4f89e84085723a88a9cb00bca8d4dae2cdd00`. All measurements and comparisons passed on the first workflow attempt.
+
+## Verified PR #1070 results
+
+Each architecture used its own native runner (4 CPUs, about 16.7 GB RAM); both variants ran sequentially on that runner.
+
+| Native arch | Variant | Compressed MB | Cold s | Warm s | Source median s | Source range s |
+| --- | --- | ---: | ---: | ---: | ---: | --- |
+| amd64 | baseline | 607.941 | 175.343 | 2.414 | 170.739 | 169.766–173.787 |
+| amd64 | ubuntu | 250.898 | 100.408 | 1.397 | 25.460 | 24.976–26.678 |
+| arm64 | baseline | 305.582 | 134.019 | 1.440 | 138.301 | 135.747–139.737 |
+| arm64 | ubuntu | 241.084 | 85.562 | 1.442 | 24.728 | 24.416–24.833 |
+
+Cold and warm timings are single observations. Source rebuild figures are the median and range of three edits; timed builds include OCI export, with base prewarming and Docker loading outside that time. Production package versions, Android resources and numeric user IDs matched within both pairs. Both experiment builders on each runner were removed.
+
+The exact initial npm lock is retained as [dependencies.lock.json](dependencies.lock.json) for audit (SHA-256 `fef157decf0988062b4285b40df01abbfd7004b998fd946e2424aa1545e17df6`). `prepare` resolves a fresh snapshot by default; this retained file does not change that behavior. The previous snapshot remains available in commit `5fde2a2468696f1edd54918146e42380008bebf0`.
 
 ## Controls and measurements
 

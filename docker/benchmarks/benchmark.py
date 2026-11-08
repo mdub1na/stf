@@ -26,6 +26,7 @@ VARIANTS = ("baseline", "ubuntu")
 PHASES = ("cold", "warm", "source-1", "source-2", "source-3")
 LOGGER = "lib/util/logger.ts"
 EXPORT = "compression=gzip,compression-level=6,force-compression=true"
+LOCK_INCLUDE = b"\n# Include the shared benchmark-only dependency snapshot.\n!package-lock.json\n"
 
 
 def sha(data):
@@ -122,8 +123,12 @@ def prepare(directory, source_ref, baseline_ref, candidate_ref):
     (directory / "logger.original").write_bytes(original_logger)
     # A controlled, experiment-only lock is shared by both variants/architectures.
     (context / "package-lock.json").unlink(missing_ok=True)
-    with (context / ".dockerignore").open("a") as output:
-        output.write("\n# Include the shared benchmark-only dependency snapshot.\n!package-lock.json\n")
+    with (context / ".dockerignore").open("ab") as output:
+        output.write(LOCK_INCLUDE)
+    candidate_ignore = context / "Dockerfile.dockerignore"
+    if candidate_ignore.is_file():
+        # BuildKit looks for the ignore file beside the renamed recipe.
+        (recipe_dir / "ubuntu.Dockerfile.dockerignore").write_bytes(candidate_ignore.read_bytes() + LOCK_INCLUDE)
     resolution = execute([
         "docker", "run", "--rm", "--platform", "linux/amd64", "--mount",
         f"type=bind,src={context},dst=/work", "-w", "/work", NODE,
@@ -146,7 +151,7 @@ def prepare(directory, source_ref, baseline_ref, candidate_ref):
         "recipeSha256": {"baseline": sha(effective_baseline), "ubuntu": sha(candidate)},
         "baselineOriginalSha256": sha(recipes["baseline"]),
         "baselineNormalization": "Exactly one FROM ubuntu:22.04 replaced with the candidate's pinned Ubuntu digest",
-        "contextNormalization": "One fresh experiment-only package-lock.json; appended .dockerignore inclusion",
+        "contextNormalization": "One fresh experiment-only package-lock.json included by both recipes; candidate-specific ignore retained",
         "exportOptions": EXPORT,
         "timingNotes": "Native serial pairs; separate variant builders; no external cache/cache mounts; base prewarm and Docker import separate; OCI export included.",
     }
@@ -199,6 +204,14 @@ def verify_inputs(directory):
     for variant in VARIANTS:
         if sha((directory / "recipes" / (variant + ".Dockerfile")).read_bytes()) != metadata["recipeSha256"][variant]:
             raise ValueError("Frozen recipe changed")
+    candidate_ignore = directory / "context/Dockerfile.dockerignore"
+    scoped_ignore = directory / "recipes/ubuntu.Dockerfile.dockerignore"
+    if (directory / "recipes/baseline.Dockerfile.dockerignore").exists():
+        raise ValueError("Unexpected baseline recipe ignore file")
+    if scoped_ignore.is_file() != candidate_ignore.is_file() or (
+        scoped_ignore.is_file() and scoped_ignore.read_bytes() != candidate_ignore.read_bytes() + LOCK_INCLUDE
+    ):
+        raise ValueError("Frozen candidate recipe ignore file changed")
     return metadata
 
 
@@ -395,6 +408,7 @@ def summarize(directory):
             "refs": metadata["refs"], "measurementHost": metadata["measurementHost"], "lockSha256": metadata["lockSha256"],
             "frozenContextSha256": metadata["frozenContextSha256"], "recipeSha256": metadata["recipeSha256"], "rows": rows,
             "limitations": ["Cold build: one observation per variant; base prewarm and Docker load excluded.",
+                "The candidate uses its default security refresh argument throughout the measurement.",
                 "Native ARM64 baseline lacks Java and modifies its dev manifest with pnpm; no byte-identical ARM app claim.",
                 "This measures compressed OCI layers/build-export times, not startup, CPU, RAM or network transfer speed."]}
     except Exception as error:

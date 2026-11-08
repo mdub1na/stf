@@ -14,7 +14,8 @@ const {values} = parseArgs({options: {
   'app-root': {type: 'string', default: '/app'},
   aab: {type: 'string'},
   'require-aab': {type: 'boolean', default: false},
-  'baseline-arm64': {type: 'boolean', default: false}
+  'baseline-arm64': {type: 'boolean', default: false},
+  'allow-missing-npm': {type: 'boolean', default: false}
 }})
 if (values['baseline-arm64'] && process.arch !== 'arm64') throw new Error('--baseline-arm64 requires native ARM64')
 class KnownBaselineSkip extends Error {}
@@ -300,9 +301,14 @@ try {
   })
 
   await check('runtime-inventory', async () => {
-    const npm = await command('npm', ['--version'])
+    let npm
+    try {npm = (await command('npm', ['--version'])).stdout.trim()}
+    catch (error) {
+      if (!values['allow-missing-npm'] || error.code !== 'ENOENT') throw error
+      npm = null
+    }
     const packages = await command('dpkg-query', ['-W', '-f=${Package}\t${Version}\n'])
-    return {npm: npm.stdout.trim(), os: await fs.readFile('/etc/os-release', 'utf8'),
+    return {npm, os: await fs.readFile('/etc/os-release', 'utf8'),
       packages: packages.stdout.trim().split('\n')}
   })
 

@@ -27,13 +27,15 @@ The exact initial npm lock is retained as [dependencies.lock.json](dependencies.
 
 ## Controls and measurements
 
-The snapshot job archives the original baseline recipe and its effective recipe. Its only recipe normalization replaces `FROM ubuntu:22.04` with the candidate's pinned Ubuntu digest. Both variants retain Node 22.23.4. A benchmark-only `package-lock.json` is freshly resolved once with a pinned Node image and included in the common exported context; the repository's lockfile policy is unchanged.
+The snapshot job archives the original baseline recipe and its effective recipe. Its only recipe normalization replaces `FROM ubuntu:22.04` with the candidate's pinned Ubuntu digest. Both variants retain Node 22.23.4. A benchmark-only `package-lock.json` is freshly resolved once with a pinned Node image and included by both recipes. The candidate's Dockerfile-specific ignore rules, when present, follow the renamed recipe and receive the same lockfile inclusion.
 
 Each native amd64/arm64 job binds a Docker engine identity and architecture before measuring. It uses a separate BuildKit builder per variant, without external caches, npm/apt cache mounts or global pruning. Base prewarming and image loading are recorded separately. Timed builds include gzip OCI export. Compressed layer bytes and uncompressed layer-tar bytes are recorded; neither is exclusive Docker disk usage.
 
 The phases are cold, unchanged warm, then three successive source-only edits. Every phase reconstructs the probe file from a frozen original. In particular, the candidate cold build does not inherit the baseline's third source edit. Results include the original source/lock/context hashes and recipe hash. Summaries reject mismatched host, source, lock, base layer, recipe, source edit or export settings. Cold timings are single observations; report the median and range of the three source rebuilds. No startup, CPU, RAM or measured network-speed benefit is claimed.
 
-Runtime checks run as the image's default user, with no network or device access. They compare numeric runtime identity, direct and nested installed production package versions, and hashes of Android resources. Native JPEG/WebSocket/ZeroMQ modules, graphics conversion, APK handling and amd64 AAB conversion are exercised. The imported runtime's root filesystem must match the measured OCI image.
+The benchmark keeps the security refresh argument at its Dockerfile default throughout all phases. Publish CI sets a fresh value per run attempt to rebuild the OS layer.
+
+Runtime checks run as the image's default user, with no network or device access. They compare numeric runtime identity, direct and nested installed production package versions, and hashes of Android resources. Native JPEG/WebSocket/ZeroMQ modules, graphics conversion, APK handling and amd64 AAB conversion are exercised. The imported runtime's root filesystem must match the measured OCI image. The candidate inventory records a missing npm executable as `null`.
 
 The original ARM64 Dockerfile lacks Java and adds `pnpm` to its dev manifest. Its missing Java is an explicit, narrowly scoped known skip; the candidate's Java is checked normally. Bundletool 1.2.0 embeds an x86_64 `aapt2`, so native ARM64 AAB conversion remains an explicit skip. Package/resource differences fail the payload comparison and are archived rather than silently treated as equivalent. There is no claim that the ARM64 app directory is byte-identical. The main Docker CI separately validates the candidate and its amd64 Compose deployment.
 

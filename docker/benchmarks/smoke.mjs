@@ -308,8 +308,10 @@ try {
       npm = null
     }
     const packages = await command('dpkg-query', ['-W', '-f=${Package}\t${Version}\n'])
+    const bundletool = await fs.readFile(path.join(root, 'bundletool/bundletool.jar'))
     return {npm, os: await fs.readFile('/etc/os-release', 'utf8'),
-      packages: packages.stdout.trim().split('\n')}
+      packages: packages.stdout.trim().split('\n'),
+      bundletoolSha256: createHash('sha256').update(bundletool).digest('hex')}
   })
 
   if (values.aab) {

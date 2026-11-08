@@ -27,6 +27,15 @@ PHASES = ("cold", "warm", "source-1", "source-2", "source-3")
 LOGGER = "lib/util/logger.ts"
 EXPORT = "compression=gzip,compression-level=6,force-compression=true"
 LOCK_INCLUDE = b"\n# Include the shared benchmark-only dependency snapshot.\n!package-lock.json\n"
+BUNDLETOOL = {
+    "assetId": 24422831,
+    "url": "https://api.github.com/repos/google/bundletool/releases/assets/24422831",
+    "size": 24035480,
+    "sha256": "25ef168c6f9a14acd3113d4cffb3efde7ed8c94eeac50e4203be7a71cf1ca837",
+}
+BUNDLETOOL_CONTEXT = "stf-benchmark-bundletool"
+BUNDLETOOL_TARGET = "/run/stf-benchmark-bundletool.jar"
+BUNDLETOOL_MOUNT = f"--mount=type=bind,from={BUNDLETOOL_CONTEXT},source=bundletool.jar,target={BUNDLETOOL_TARGET},ro"
 
 
 def sha(data):
@@ -86,6 +95,52 @@ def normalized_recipes(baseline, candidate):
     return effective.encode(), candidate
 
 
+def replace_exact(text, old, new, count=1):
+    if text.count(old) != count:
+        raise ValueError("Bundletool prefetch requires the known benchmark recipe")
+    return text.replace(old, new)
+
+
+def bundletool_recipes(baseline, candidate):
+    baseline = baseline.decode()
+    baseline_download = (
+        "    wget --progress=dot:mega \\\n"
+        "      https://github.com/google/bundletool/releases/download/1.2.0/bundletool-all-1.2.0.jar && \\\n"
+    )
+    baseline = replace_exact(
+        baseline, baseline_download, f"    cp {BUNDLETOOL_TARGET} bundletool-all-1.2.0.jar && \\\n", count=2
+    )
+    for arch in ("amd64", "arm64"):
+        condition = f'if [ "$TARGETARCH" = "{arch}" ]; then'
+        baseline = replace_exact(baseline, "RUN " + condition, f"RUN {BUNDLETOOL_MOUNT} " + condition)
+
+    candidate = candidate.decode()
+    if (
+        re.findall(r"(?m)^ARG BUNDLETOOL_VERSION=(.+)$", candidate) != ["1.2.0"]
+        or re.findall(r"(?m)^ARG BUNDLETOOL_SHA256=(.+)$", candidate) != [BUNDLETOOL["sha256"]]
+    ):
+        raise ValueError("Candidate expects a different Bundletool asset")
+    candidate_download = (
+        "RUN mkdir -p /opt/bundletool \\\n"
+        "    && curl -fsSL --retry 3 \\\n"
+        '      "https://github.com/google/bundletool/releases/download/$' '{BUNDLETOOL_VERSION}/bundletool-all-$' '{BUNDLETOOL_VERSION}.jar" \\\n'
+        "      -o /opt/bundletool/bundletool.jar \\\n"
+    )
+    candidate = replace_exact(
+        candidate, candidate_download,
+        f"RUN {BUNDLETOOL_MOUNT} mkdir -p /opt/bundletool \\\n"
+        f"    && cp {BUNDLETOOL_TARGET} /opt/bundletool/bundletool.jar \\\n",
+    )
+    return baseline.encode(), candidate.encode()
+
+
+def verified_bundletool(path):
+    contents = path.read_bytes()
+    if len(contents) != BUNDLETOOL["size"] or sha(contents) != BUNDLETOOL["sha256"]:
+        raise ValueError("Prefetched Bundletool does not match the pinned official asset")
+    return contents
+
+
 def context_hash(context):
     records = []
     for file in sorted(context.rglob("*")):
@@ -98,13 +153,20 @@ def context_hash(context):
     return sha(json.dumps(records, separators=(",", ":")).encode())
 
 
-def prepare(directory, source_ref, baseline_ref, candidate_ref):
+def prepare(directory, source_ref, baseline_ref, candidate_ref, bundletool_jar=None):
     refs = {"source": commit(source_ref), "baseline": commit(baseline_ref), "candidate": commit(candidate_ref)}
     if refs["source"] != refs["candidate"]:
         raise ValueError("Export the same source commit as the candidate recipe")
     recipes = {"baseline": git_file(refs["baseline"], "Dockerfile"), "ubuntu": git_file(refs["candidate"], "Dockerfile")}
     effective_baseline, candidate = normalized_recipes(recipes["baseline"], recipes["ubuntu"])
+    bundletool = None
+    if bundletool_jar is not None:
+        bundletool = verified_bundletool(bundletool_jar)
+        effective_baseline, candidate = bundletool_recipes(effective_baseline, candidate)
     directory.mkdir(parents=True, exist_ok=False)
+    if bundletool is not None:
+        (directory / "bundletool").mkdir()
+        (directory / "bundletool/bundletool.jar").write_bytes(bundletool)
     context = directory / "context"
     context.mkdir()
     archive = subprocess.check_output(["git", "archive", refs["source"]], cwd=ROOT)
@@ -116,7 +178,8 @@ def prepare(directory, source_ref, baseline_ref, candidate_ref):
         source.extractall(context)
     recipe_dir = directory / "recipes"
     recipe_dir.mkdir()
-    (recipe_dir / "baseline.original.Dockerfile").write_bytes(recipes["baseline"])
+    for variant, recipe in recipes.items():
+        (recipe_dir / (variant + ".original.Dockerfile")).write_bytes(recipe)
     (recipe_dir / "baseline.Dockerfile").write_bytes(effective_baseline)
     (recipe_dir / "ubuntu.Dockerfile").write_bytes(candidate)
     original_logger = (context / LOGGER).read_bytes()
@@ -149,7 +212,9 @@ def prepare(directory, source_ref, baseline_ref, candidate_ref):
         "harnessCommit": run(["git", "rev-parse", "HEAD"], cwd=ROOT),
         "smokeSha256": sha((ROOT / "docker/benchmarks/smoke.mjs").read_bytes()),
         "recipeSha256": {"baseline": sha(effective_baseline), "ubuntu": sha(candidate)},
+        "recipeOriginalSha256": {variant: sha(recipe) for variant, recipe in recipes.items()},
         "baselineOriginalSha256": sha(recipes["baseline"]),
+        "bundletoolInput": BUNDLETOOL if bundletool is not None else None,
         "baselineNormalization": "Exactly one FROM ubuntu:22.04 replaced with the candidate's pinned Ubuntu digest",
         "contextNormalization": "One fresh experiment-only package-lock.json included by both recipes; candidate-specific ignore retained",
         "exportOptions": EXPORT,
@@ -201,9 +266,17 @@ def verify_inputs(directory):
         raise ValueError("Application context changed outside the planned source edit")
     if sha((directory / "logger.original").read_bytes()) != metadata["loggerOriginalSha256"]:
         raise ValueError("Original source edit fixture changed")
+    original = metadata.get("recipeOriginalSha256")
     for variant in VARIANTS:
         if sha((directory / "recipes" / (variant + ".Dockerfile")).read_bytes()) != metadata["recipeSha256"][variant]:
             raise ValueError("Frozen recipe changed")
+        if original and sha((directory / "recipes" / (variant + ".original.Dockerfile")).read_bytes()) != original[variant]:
+            raise ValueError("Original recipe changed")
+    if metadata.get("bundletoolInput"):
+        bundletool = directory / "bundletool/bundletool.jar"
+        if metadata["bundletoolInput"] != BUNDLETOOL or list(bundletool.parent.iterdir()) != [bundletool] or bundletool.is_symlink():
+            raise ValueError("Unexpected prefetched Bundletool context")
+        verified_bundletool(bundletool)
     candidate_ignore = directory / "context/Dockerfile.dockerignore"
     scoped_ignore = directory / "recipes/ubuntu.Dockerfile.dockerignore"
     if (directory / "recipes/baseline.Dockerfile.dockerignore").exists():
@@ -322,12 +395,15 @@ def build(directory, variant, phase):
         "--metadata-file", str(prefix.with_suffix(".metadata.json"))]
     if variant == "ubuntu":
         command += ["--build-arg", "UBUNTU_IMAGE=" + UBUNTU, "--build-arg", "NODE_VERSION=" + NODE_VERSION]
+    if metadata.get("bundletoolInput"):
+        command += ["--build-context", f"{BUNDLETOOL_CONTEXT}={directory / 'bundletool'}"]
     archive = prefix.with_suffix(".oci.tar")
     elapsed = execute(command + ["--output", f"type=oci,dest={archive},{EXPORT}", str(directory / "context")], prefix.with_suffix(".build.log"))
     result = {"variant": variant, "phase": phase, "platform": platform, "image": image,
         "experimentId": metadata["experimentId"], "measurementHost": metadata["measurementHost"], "refs": metadata["refs"],
         "frozenContextSha256": metadata["frozenContextSha256"], "sourceEditSha256": sha(source_bytes),
         "lockSha256": metadata["lockSha256"], "dockerfileSha256": metadata["recipeSha256"][variant],
+        "bundletoolInput": metadata.get("bundletoolInput"),
         "ubuntuImage": UBUNTU, "exportOptions": EXPORT, "buildSeconds": elapsed,
         "builderSetupSeconds": builder_seconds, "basePrewarmSeconds": prewarm, "loadSeconds": None,
         "cachedLogEntries": prefix.with_suffix(".build.log").read_text().count(" CACHED"), **image_size(archive, platform)}
@@ -355,6 +431,7 @@ def validate_results(directory):
             expected = {"variant": variant, "phase": phase, "platform": metadata["platform"],
                 "experimentId": metadata["experimentId"], "measurementHost": host_binding, "refs": metadata["refs"],
                 "lockSha256": metadata["lockSha256"], "frozenContextSha256": metadata["frozenContextSha256"],
+                "bundletoolInput": metadata.get("bundletoolInput"),
                 "dockerfileSha256": metadata["recipeSha256"][variant], "ubuntuImage": UBUNTU, "exportOptions": EXPORT}
             if any(result.get(key) != value for key, value in expected.items()):
                 raise ValueError("Results differ in host, app, lock, recipe or build settings")
@@ -382,6 +459,9 @@ def validate_results(directory):
         required = ("nonroot", "production-dependencies", "installed-production-packages", "android-all-abi-resources", "zeromq-message")
         if any(checks.get(key, {}).get("status") != "passed" for key in required):
             raise ValueError("Missing runtime payload comparison")
+        bundletool = metadata.get("bundletoolInput")
+        if bundletool and checks["runtime-inventory"]["details"]["bundletoolSha256"] != bundletool["sha256"]:
+            raise ValueError("Runtime did not contain the shared official Bundletool asset")
     if any(a["sourceEditSha256"] != b["sourceEditSha256"] or a["baseLayerDigest"] != b["baseLayerDigest"]
            for a, b in zip(records["baseline"], records["ubuntu"])):
         raise ValueError("Source edit or actual Ubuntu base layer differs")
@@ -407,10 +487,13 @@ def summarize(directory):
         result = {"status": "passed", "platform": metadata["platform"], "experimentId": metadata["experimentId"],
             "refs": metadata["refs"], "measurementHost": metadata["measurementHost"], "lockSha256": metadata["lockSha256"],
             "frozenContextSha256": metadata["frozenContextSha256"], "recipeSha256": metadata["recipeSha256"], "rows": rows,
+            "recipeOriginalSha256": metadata.get("recipeOriginalSha256"), "bundletoolInput": metadata.get("bundletoolInput"),
             "limitations": ["Cold build: one observation per variant; base prewarm and Docker load excluded.",
                 "The candidate uses its default security refresh argument throughout the measurement.",
                 "Native ARM64 baseline lacks Java and modifies its dev manifest with pnpm; no byte-identical ARM app claim.",
                 "This measures compressed OCI layers/build-export times, not startup, CPU, RAM or network transfer speed."]}
+        if result["bundletoolInput"]:
+            result["limitations"].append("The official Bundletool asset was fetched before timing and bind-mounted into both recipes.")
     except Exception as error:
         write_json(directory / "summary.json", {"status": "failed", "error": str(error)})
         raise
@@ -422,8 +505,8 @@ def compare(directory):
     summaries = [read_json(directory / ("same-host-" + arch) / "summary.json") for arch in ("amd64", "arm64")]
     if any(item["status"] != "passed" for item in summaries):
         raise ValueError("Both native pairs must pass")
-    for key in ("experimentId", "refs", "lockSha256", "frozenContextSha256", "recipeSha256"):
-        if summaries[0][key] != summaries[1][key]:
+    for key in ("experimentId", "refs", "lockSha256", "frozenContextSha256", "recipeSha256", "recipeOriginalSha256", "bundletoolInput"):
+        if summaries[0].get(key) != summaries[1].get(key):
             raise ValueError("Cross-architecture source, lock or recipe mismatch: " + key)
     for arch, item in zip(("amd64", "arm64"), summaries):
         if item["platform"] != "linux/" + arch:
@@ -482,13 +565,14 @@ def main():
     parser.add_argument("--source-ref")
     parser.add_argument("--baseline-ref")
     parser.add_argument("--candidate-ref")
+    parser.add_argument("--bundletool-jar", type=pathlib.Path)
     parser.add_argument("--platform", choices=("linux/amd64", "linux/arm64"))
     parser.add_argument("--variant", choices=VARIANTS)
     parser.add_argument("--phase", choices=PHASES)
     args = parser.parse_args()
     directory = args.directory.resolve()
     if args.action == "prepare":
-        prepare(directory, args.source_ref or "", args.baseline_ref or "", args.candidate_ref or "")
+        prepare(directory, args.source_ref or "", args.baseline_ref or "", args.candidate_ref or "", args.bundletool_jar)
     elif args.action == "host":
         host(directory, args.platform)
     elif args.action == "build":

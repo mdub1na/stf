@@ -15,6 +15,10 @@ on:
         description: Full PR SHA providing the candidate Dockerfile (same as source_ref)
         type: string
         required: true
+      prefetch_bundletool:
+        description: Use the same verified GitHub release asset outside both timed builds
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -37,13 +41,28 @@ jobs:
         with:
           fetch-depth: 0
           persist-credentials: false
-      - name: Freeze one source, recipe pair and fresh dependency snapshot
+      - name: Prefetch the official Bundletool release asset
+        if: inputs.prefetch_bundletool
         run: |
+          curl --fail --silent --show-error --location --retry 3 --max-time 60 \
+            --header 'Accept: application/octet-stream' \
+            https://api.github.com/repos/google/bundletool/releases/assets/24422831 \
+            --output "$RUNNER_TEMP/bundletool.jar"
+      - name: Freeze one source, recipe pair and fresh dependency snapshot
+        env:
+          PREFETCH_BUNDLETOOL: ${{ inputs.prefetch_bundletool }}
+        run: |
+          arguments=()
+          files=(context environment.json recipes logger.original dependency-resolution.log)
+          if [ "$PREFETCH_BUNDLETOOL" = true ]; then
+            arguments+=(--bundletool-jar "$RUNNER_TEMP/bundletool.jar")
+            files+=(bundletool)
+          fi
           python3 docker/benchmarks/benchmark.py prepare \
             --directory "$RUNNER_TEMP/stf-benchmark" \
-            --source-ref "$SOURCE_REF" --baseline-ref "$BASELINE_REF" --candidate-ref "$CANDIDATE_REF"
-          tar -czf "$RUNNER_TEMP/context.tgz" -C "$RUNNER_TEMP/stf-benchmark" \
-            context environment.json recipes logger.original dependency-resolution.log
+            --source-ref "$SOURCE_REF" --baseline-ref "$BASELINE_REF" --candidate-ref "$CANDIDATE_REF" \
+            "${arguments[@]}"
+          tar -czf "$RUNNER_TEMP/context.tgz" -C "$RUNNER_TEMP/stf-benchmark" "${files[@]}"
       - uses: actions/upload-artifact@v7
         with:
           name: benchmark-context

@@ -27,7 +27,9 @@ The exact initial npm lock is retained as [dependencies.lock.json](dependencies.
 
 ## Controls and measurements
 
-The snapshot job archives the original baseline recipe and its effective recipe. Its only recipe normalization replaces `FROM ubuntu:22.04` with the candidate's pinned Ubuntu digest. Both variants retain Node 22.23.4. A benchmark-only `package-lock.json` is freshly resolved once with a pinned Node image and included by both recipes. The candidate's Dockerfile-specific ignore rules, when present, follow the renamed recipe and receive the same lockfile inclusion.
+The snapshot job archives the original and effective recipes. By default, its only recipe normalization replaces `FROM ubuntu:22.04` with the candidate's pinned Ubuntu digest. Both variants retain Node 22.23.4. A benchmark-only `package-lock.json` is freshly resolved once with a pinned Node image and included by both recipes. The candidate's Dockerfile-specific ignore rules, when present, follow the renamed recipe and receive the same lockfile inclusion.
+
+If the GitHub release download fails, set `prefetch_bundletool` to fetch the official Bundletool 1.2.0 asset through the GitHub API. The harness verifies its pinned SHA-256 and substitutes the same read-only bind mount for the download in both effective recipes. Release fetch time is outside the measurement. The results record the asset identity and both recipe hashes, and the runtime checks confirm the asset digest in both images.
 
 Each native amd64/arm64 job binds a Docker engine identity and architecture before measuring. It uses a separate BuildKit builder per variant, without external caches, npm/apt cache mounts or global pruning. Base prewarming and image loading are recorded separately. Timed builds include gzip OCI export. Compressed layer bytes and uncompressed layer-tar bytes are recorded; neither is exclusive Docker disk usage.
 

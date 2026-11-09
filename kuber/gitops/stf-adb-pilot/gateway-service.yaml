@@ -1,0 +1,15 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: stf-adb-gateway
+  labels:
+    app.kubernetes.io/name: stf-adb-gateway
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: stf-adb-gateway
+  ports:
+    - name: http
+      port: 8080
+      targetPort: http
+      protocol: TCP

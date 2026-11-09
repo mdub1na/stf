@@ -1,2 +1,12 @@
 #!/usr/bin/env -S node --no-deprecation
-require('../lib/cli/please')
+if (process.argv[2] === 'utils') {
+  import('../tools/adb-tunnel/cli.mts')
+    .then(({main}) => main(process.argv.slice(2)))
+    .catch(error => {
+      process.stderr.write((error instanceof Error ? error.message : 'STF user tools failed') + '\n')
+      process.exitCode = 1
+    })
+}
+else {
+  require('../lib/cli/please')
+}

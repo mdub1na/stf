@@ -1,4 +1,5 @@
 import type {UserIdentity} from '../../../types/stf.js'
+import {isEmailAllowed} from './email.js'
 
 interface ProfileOptions {
   domain?: string
@@ -19,6 +20,11 @@ export default function(
   }
 
   var email = claims.email.trim()
+  var verifiedClaim = typeof claims.email_verified === 'boolean' ||
+    typeof claims.email_verified === 'string' ? {email_verified: claims.email_verified} : {}
+  if (!isEmailAllowed({email: email, ...verifiedClaim}, options.domain)) {
+    return null
+  }
   var parts = email.split('@')
   if (parts.length !== 2 || !parts[0] || !parts[1] || /\s/.test(email)) {
     return null

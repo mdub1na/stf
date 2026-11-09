@@ -51,11 +51,17 @@ function withUnit(value: unknown, unit: string): string {
 }
 
 function plain(value: unknown): string {
-  return present(value) ? String(value) : '-'
+  if (!present(value)) {
+    return '-'
+  }
+  if (typeof value === 'number' && !Number.isFinite(value)) {
+    return '-'
+  }
+  return String(value)
 }
 
 function rounded(value?: number): string {
-  return present(value) ? String(Math.round(Number(value) * 100) / 100) : '-'
+  return present(value) && Number.isFinite(Number(value)) ? String(Math.round(Number(value) * 100) / 100) : '-'
 }
 
 function translatedLookup(table: Record<string, string>, key?: string | null): string {
@@ -67,7 +73,7 @@ function translatedLookup(table: Record<string, string>, key?: string | null): s
 }
 
 function density(value?: number): string {
-  if (!present(value)) {
+  if (!present(value) || !Number.isFinite(Number(value))) {
     return '-'
   }
   return displayDensities[String(value)] || String(value)
@@ -117,7 +123,7 @@ function openDevicePhoto(device: Device) {
     , size: 'xl'
     , centered: true
     , classNames: {content: 'stf-lightbox-image'}
-    , children: <DevicePhoto url={deviceImageUrl(device.image, 'photo/x800')} />
+    , children: <DevicePhoto url={deviceImageUrl(device.image, 'photo/x800', device)} />
   })
 }
 
@@ -155,10 +161,21 @@ function useSdCardMounted(control: PaneProps['control']): boolean | undefined {
   return mounted
 }
 
+function resolveDisplayInches(display?: Device['display']): number | undefined {
+  if (typeof display?.inches === 'number' && Number.isFinite(display.inches) && display.inches > 0) {
+    return display.inches
+  }
+  if (typeof display?.size === 'number' && Number.isFinite(display.size) && display.size > 0) {
+    return display.size
+  }
+  return undefined
+}
+
 export default function InfoPane({device, control}: PaneProps) {
   const {t, language} = useTranslation()
   const sdCardMounted = useSdCardMounted(control)
   const {battery, display, network, phone, cpu, memory} = device
+  const displayInches = resolveDisplayInches(display)
   const photoRows: InfoRow[] = device.name && device.image ? [{
     label: ''
     , value: (
@@ -209,7 +226,7 @@ export default function InfoPane({device, control}: PaneProps) {
       , icon: IconDeviceTablet
       , color: 'blue'
       , rows: [
-        {label: gettext('Size'), value: display?.inches ? `${display.inches}″` : '-'}
+        {label: gettext('Size'), value: displayInches ? `${Math.round(displayInches * 10) / 10}″` : '-'}
         , {label: gettext('Density'), value: density(display?.density)}
         , {label: gettext('FPS'), value: rounded(display?.fps)}
         , {label: gettext('Width'), value: withUnit(display?.width, ' px')}
@@ -292,7 +309,7 @@ export default function InfoPane({device, control}: PaneProps) {
       , color: 'orange'
       , rows: [
         {label: gettext('RAM'), value: memory?.ram ? `${memory.ram} MB` : '-'}
-        , {label: gettext('ROM'), value: memory?.rom ? `${memory.rom} MB` : '-'}
+        , {label: gettext('ROM'), value: memory?.rom ? `${memory.rom} GB` : '-'}
         , {label: gettext('SD Card Mounted'), value: humanizedBool(sdCardMounted)}
       ]
     }

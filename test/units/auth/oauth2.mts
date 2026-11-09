@@ -136,8 +136,8 @@ describe('auth-oauth2 HTTP flow', function() {
     return {response: response, location: location, cookie: cookies(response)}
   }
 
-  async function completeLogin(cookie: string, state: string, code = 'test-code') {
-    return fetch(address(auth) + '/auth/oauth/callback?' + new URLSearchParams({
+  async function completeLogin(cookie: string, state: string, code = 'test-code', server = auth) {
+    return fetch(address(server) + '/auth/oauth/callback?' + new URLSearchParams({
       code: code, state: state
     }), {redirect: 'manual', headers: {cookie: cookie}})
   }
@@ -195,6 +195,25 @@ describe('auth-oauth2 HTTP flow', function() {
     expect(response.headers.getSetCookie()[0]).to.include('expires=Thu, 01 Jan 1970')
   })
 
+  it('should verify state and PKCE on a replica with the same secret', async function() {
+    var replica = authOAuth2(options)
+    await once(replica, 'listening')
+    try {
+      var login = await start()
+      var response = await completeLogin(login.cookie, login.location.searchParams.get('state')!,
+        'test-code', replica)
+      expect(response.status).to.equal(302)
+      expect(verifierMatched).to.equal(true)
+    }
+    finally {
+      await new Promise<void>(function(resolve) {
+        replica.close(function() {
+          resolve()
+        })
+      })
+    }
+  })
+
   it('should preserve the existing STF name for the same email', async function() {
     existing = {name: 'Existing LDAP Name'}
     var login = await start()
@@ -211,6 +230,19 @@ describe('auth-oauth2 HTTP flow', function() {
     expect(response.status).to.equal(403)
     expect(response.headers.get('location')).to.equal(null)
     expect(accountLookups).to.equal(0)
+  })
+
+  ;[false, 'false'].forEach(function(verified) {
+    it('should reject an explicitly unverified email with claim checking disabled: ' +
+      String(verified), async function() {
+      options.requireVerifiedEmail = false
+      profile.email_verified = verified
+      var login = await start()
+      var response = await completeLogin(login.cookie, login.location.searchParams.get('state')!)
+      expect(response.status).to.equal(403)
+      expect(response.headers.get('location')).to.equal(null)
+      expect(accountLookups).to.equal(0)
+    })
   })
 
   it('should reject missing email claims', async function() {

@@ -1,0 +1,16 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: stf-coordinator-adb-pools
+data:
+  # Replace this synthetic example with the actual provider-to-ADB mapping.
+  # Keep each allowed port exposed on the corresponding ADB Service.
+  adb-pools.json: |
+    [
+      {
+        "provider": "provider-one",
+        "host": "adb-one.stf.svc.cluster.local",
+        "port": 5037,
+        "systemPorts": [8200, 8201, 8202, 8203]
+      }
+    ]

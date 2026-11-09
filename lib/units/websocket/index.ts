@@ -23,7 +23,9 @@ import zmqutil from '../../util/zmqutil.js'
 import cookieSession from './middleware/cookie-session.js'
 import ip from './middleware/remote-ip.js'
 import auth from './middleware/auth.js'
-import {createIosPacketGuard} from './ios-access.js'
+import {createDevicePacketGuard} from './ios-access.js'
+import type {AuthorizedInput} from './ios-access.js'
+import {DevicePacketAccess, isDeviceCommand} from './device-access.js'
 import {readIosProperties} from '../../util/ios-device-status.js'
 import jwtutil from '../../util/jwtutil.js'
 
@@ -178,7 +180,8 @@ export default function(options: WebsocketOptions) {
         serveClient: false
       , transports: ['websocket']
       })
-  var channelRouter = new events.EventEmitter()
+  var channelRouter = options.channelRouter || new events.EventEmitter()
+  channelRouter.setMaxListeners(0)
 
   // Output
   var push = zmqutil.socket('push')
@@ -238,27 +241,90 @@ export default function(options: WebsocketOptions) {
   io.on('connection', function(socket) {
     var req = socket.request as WebsocketRequest
     var user = req.user
-    var channels: string[] = []
+    const channels = new Set<string>()
     var messageListener: MessageListener
 
-    socket.use(createIosPacketGuard(user, dbapi.loadDeviceBySerial, (channel, failure) => {
+    const cleanupFences = new Map<string, {channel: string, identity: AuthorizedInput}>()
+    const authorizedInput = new WeakMap<object, AuthorizedInput>()
+    const inputIdentity = (data: object): AuthorizedInput =>
+      authorizedInput.get(data) || {gestureId: null, reservationId: null}
+    const fenceKey = (channel: string, identity: AuthorizedInput) =>
+      JSON.stringify([channel, identity.reservationId, identity.gestureId?.split(':')[0]])
+    const cancelGesture = (channel: string, identity: AuthorizedInput) => {
+      push.send([channel, wireutil.envelope(new wire.TouchResetMessage({
+        seq: 0, ...identity, cancel: true, cancelThrough: true
+      }))])
+    }
+    const resetGesture = (channel: string, identity?: AuthorizedInput) => {
+      if (identity) {
+        const key = fenceKey(channel, identity)
+        const latest = cleanupFences.get(key)
+        if (!latest || Number(latest.identity.gestureId?.split(':')[1]) <=
+            Number(identity.gestureId?.split(':')[1])) {
+          cleanupFences.delete(key)
+        }
+        cancelGesture(channel, identity)
+      }
+      else {
+        for (const [key, fence] of [...cleanupFences]) {
+          if (fence.channel === channel) {
+            cleanupFences.delete(key)
+            cancelGesture(channel, fence.identity)
+          }
+        }
+      }
+    }
+    const deviceAccess = new DevicePacketAccess(dbapi.loadDeviceByChannel, dbapi.loadDeviceBySerial)
+    socket.use(createDevicePacketGuard(user, dbapi.loadDeviceBySerial, (channel, failure) => {
       socket.emit('tx.cancel', channel, failure)
-    }))
+    }, {
+      matches: isDeviceCommand
+    , allows: (channel, groups, load) => deviceAccess.allows(channel, groups, load)
+    , source: channel => deviceAccess.source(channel)
+    , snapshot: device => deviceAccess.snapshot(device)
+    , session: channel => deviceAccess.session(channel)
+    , checkpoint: () => deviceAccess.checkpoint()
+    , current: (channel, checkpoint) => deviceAccess.current(channel, checkpoint)
+    }, {resetGesture, onAuthorizedInput(packet, identity) {
+      const data = packet[2]
+      if (data && typeof data === 'object') {
+        authorizedInput.set(data, identity)
+      }
+      if (packet[0] === 'input.gestureStart' && typeof packet[1] === 'string' &&
+          identity.gestureId) {
+        const key = fenceKey(packet[1], identity)
+        cleanupFences.delete(key)
+        cleanupFences.set(key, {channel: packet[1], identity})
+        if (cleanupFences.size > 128) {
+          const oldest = cleanupFences.values().next().value!
+          cleanupFences.delete(fenceKey(oldest.channel, oldest.identity))
+          cancelGesture(oldest.channel, oldest.identity)
+        }
+      }
+    }}))
     socket.on('error', error => log.warn('Socket request rejected: %s', error.message))
 
     user.ip = socket.handshake.query.uip as string | undefined || req.ip
     socket.emit('socket.ip', user.ip)
 
     function joinChannel(channel: string) {
-      channels.push(channel)
-      channelRouter.on(channel, messageListener)
-      sub.subscribe(channel)
+      if (channel && channel !== wireutil.global && !channels.has(channel)) {
+        channels.add(channel)
+        if (channelRouter.listenerCount(channel) === 0) {
+          sub.subscribe(channel)
+        }
+        channelRouter.on(channel, messageListener)
+      }
     }
 
     function leaveChannel(channel: string) {
-      _.pull(channels, channel)
-      channelRouter.removeListener(channel, messageListener)
-      sub.unsubscribe(channel)
+      if (channel && channels.has(channel)) {
+        channels.delete(channel)
+        channelRouter.removeListener(channel, messageListener)
+        if (channel !== wireutil.global && channelRouter.listenerCount(channel) === 0) {
+          sub.unsubscribe(channel)
+        }
+      }
     }
 
     function createKeyHandler(Klass: new(key: string) => WireEnvelopeMessage) {
@@ -281,6 +347,7 @@ export default function(options: WebsocketOptions) {
         disconnectSocket(true)
       })
       .on(wire.DeviceChangeMessage, function(channel, message) {
+        deviceAccess.update(message.device.serial, {group: message.device.group!})
         if (user.groups.subscribed.indexOf(message.device.group!.id!) > -1) {
           socket.emit('device.change', {
             important: true
@@ -314,6 +381,7 @@ export default function(options: WebsocketOptions) {
         }
       })
       .on(wire.DeviceGroupChangeMessage, function(channel, message) {
+        deviceAccess.update(message.serial, {group: message.group})
         if (user.groups.subscribed.indexOf(message.id) > -1) {
           if (user.groups.subscribed.indexOf(message.group.id) > -1) {
             socket.emit('device.updateGroupDevice', {
@@ -334,6 +402,7 @@ export default function(options: WebsocketOptions) {
       })
       .on(wire.GroupUserChangeMessage, function(channel, message) {
         if (message.users.indexOf(user.email) > -1) {
+          deviceAccess.invalidate()
           if (message.isAdded) {
             user.groups.subscribed = _.union(user.groups.subscribed, [message.id])
             if (message.devices.length) {
@@ -346,6 +415,7 @@ export default function(options: WebsocketOptions) {
             }
             if (message.isDeletedLater) {
               setTimeout(function() {
+                deviceAccess.invalidate()
                 user.groups.subscribed = _.without(user.groups.subscribed, message.id)
               }, 5000)
             }
@@ -359,6 +429,8 @@ export default function(options: WebsocketOptions) {
         socket.emit('device.log', message)
       })
       .on(wire.DeviceIntroductionMessage, function(channel, message) {
+        deviceAccess.update(message.serial, {present: true, ready: false, owner: null
+          , usage: null, group: message.group!})
         if (user.groups.subscribed.indexOf(message.group!.id) > -1) {
           socket.emit('device.add', {
             important: true
@@ -367,6 +439,7 @@ export default function(options: WebsocketOptions) {
             , present: true
             , provider: message.provider
             , owner: null
+            , automationLeaseId: null
             , status: message.status
             , ready: false
             , reverseForwards: []
@@ -377,18 +450,22 @@ export default function(options: WebsocketOptions) {
         }
       })
       .on(wire.DeviceReadyMessage, function(channel, message) {
+        deviceAccess.released(message.serial)
+        deviceAccess.update(message.serial, {ready: true, channel: message.channel})
         socket.emit('device.change', {
           important: true
         , data: {
             serial: message.serial
           , channel: message.channel
           , owner: null // @todo Get rid of need to reset this here.
+          , automationLeaseId: null
           , ready: true
           , reverseForwards: [] // @todo Get rid of need to reset this here.
           }
         })
       })
       .on(wire.DevicePresentMessage, function(channel, message) {
+        deviceAccess.update(message.serial, {present: true})
         socket.emit('device.change', {
           important: true
         , data: {
@@ -398,6 +475,8 @@ export default function(options: WebsocketOptions) {
         })
       })
       .on(wire.DeviceAbsentMessage, function(channel, message) {
+        deviceAccess.released(message.serial)
+        deviceAccess.update(message.serial, {present: false})
         socket.emit('device.remove', {
           important: true
         , data: {
@@ -408,6 +487,7 @@ export default function(options: WebsocketOptions) {
         })
       })
       .on(wire.JoinGroupMessage, function(channel, message) {
+        deviceAccess.joined(message.serial, message.usage, message.owner)
         socket.emit('device.change', {
           important: true
         , data: datautil.applyOwner({
@@ -415,6 +495,7 @@ export default function(options: WebsocketOptions) {
             , owner: message.owner
             , likelyLeaveReason: 'owner_change'
             , usage: message.usage
+            , automationLeaseId: message.leaseId || null
             }
           , user
           )
@@ -427,11 +508,14 @@ export default function(options: WebsocketOptions) {
         })
       })
       .on(wire.LeaveGroupMessage, function(channel, message) {
+        deviceAccess.released(message.serial)
         socket.emit('device.change', {
           important: true
         , data: datautil.applyOwner({
               serial: message.serial
             , owner: null
+            , usage: null
+            , automationLeaseId: null
             , likelyLeaveReason: message.reason
             }
           , user
@@ -439,6 +523,7 @@ export default function(options: WebsocketOptions) {
         })
       })
       .on(wire.DeviceStatusMessage, function(channel, message: LabelledStatusMessage) {
+        deviceAccess.invalidate(message.serial)
         message.likelyLeaveReason = 'status_change'
         socket.emit('device.change', {
           important: true
@@ -619,7 +704,7 @@ export default function(options: WebsocketOptions) {
             })
         })
         .on('user.keys.adb.add', function(data) {
-          return adb.util.parsePublicKey(data.key)
+          return Promise.resolve(adb.util.parsePublicKey(data.key))
             .then(function(key) {
               return dbapi.lookupUsersByAdbKey(key.fingerprint)
                 .then(function(cursor) {
@@ -703,26 +788,20 @@ export default function(options: WebsocketOptions) {
         .on('input.touchDown', function(channel, data) {
           push.send([
             channel
-          , wireutil.envelope(new wire.TouchDownMessage(
-              data.seq
-            , data.contact
-            , data.x
-            , data.y
-            , data.pressure
-            ))
+          , wireutil.envelope(new wire.TouchDownMessage({
+              seq: data.seq, contact: data.contact, x: data.x, y: data.y
+            , pressure: data.pressure, ...inputIdentity(data)
+            }))
           ])
         })
         .on('input.touchMove', function(channel, data) {
           try {
             push.send([
               channel
-            , wireutil.envelope(new wire.TouchMoveMessage(
-                data.seq
-              , data.contact
-              , data.x
-              , data.y
-              , data.pressure
-              ))
+            , wireutil.envelope(new wire.TouchMoveMessage({
+                seq: data.seq, contact: data.contact, x: data.x, y: data.y
+              , pressure: data.pressure, ...inputIdentity(data)
+              }))
             ])
           }
           catch(err) {
@@ -733,42 +812,39 @@ export default function(options: WebsocketOptions) {
         .on('input.touchUp', function(channel, data) {
           push.send([
             channel
-          , wireutil.envelope(new wire.TouchUpMessage(
-              data.seq
-            , data.contact
-            ))
+          , wireutil.envelope(new wire.TouchUpMessage({
+              seq: data.seq, contact: data.contact, ...inputIdentity(data)
+            }))
           ])
         })
         .on('input.touchCommit', function(channel, data) {
           push.send([
             channel
-          , wireutil.envelope(new wire.TouchCommitMessage(
-              data.seq
-            ))
+          , wireutil.envelope(new wire.TouchCommitMessage({seq: data.seq, ...inputIdentity(data)}))
           ])
         })
         .on('input.touchReset', function(channel, data) {
           push.send([
             channel
-          , wireutil.envelope(new wire.TouchResetMessage(
-              data.seq
-            ))
+          , wireutil.envelope(new wire.TouchResetMessage({
+              seq: data.seq, ...inputIdentity(data), cancel: false
+            }))
           ])
         })
         .on('input.gestureStart', function(channel, data) {
+          const identity = inputIdentity(data)
           push.send([
             channel
-          , wireutil.envelope(new wire.GestureStartMessage(
-              data.seq
-            ))
+          , wireutil.envelope(new wire.GestureStartMessage({seq: data.seq, ...identity}))
           ])
         })
         .on('input.gestureStop', function(channel, data) {
+          const identity = inputIdentity(data)
+          // Dispatch does not acknowledge completion at the provider. Keep the
+          // source fence so disconnect also cancels buffered, already sent gestures.
           push.send([
             channel
-          , wireutil.envelope(new wire.GestureStopMessage(
-              data.seq
-            ))
+          , wireutil.envelope(new wire.GestureStopMessage({seq: data.seq, ...identity}))
           ])
         })
         // Key events
@@ -1252,13 +1328,23 @@ export default function(options: WebsocketOptions) {
         })
     })
     .finally(function() {
+      const cleanupChannels = new Set([...cleanupFences.values()].map(fence => fence.channel))
+      for (const channel of cleanupChannels) {
+        resetGesture(channel)
+      }
       // Clean up all listeners and subscriptions
       channelRouter.removeListener(wireutil.global, messageListener)
       channels.forEach(function(channel) {
         channelRouter.removeListener(channel, messageListener)
-        sub.unsubscribe(channel)
+        if (channel !== wireutil.global && channelRouter.listenerCount(channel) === 0) {
+          sub.unsubscribe(channel)
+        }
       })
+      channels.clear()
       socket.disconnect(true)
+      if (typeof socket.removeAllListeners === 'function') {
+        socket.removeAllListeners()
+      }
     })
     .catch(function(err) {
       // Cannot guarantee integrity of client
@@ -1283,4 +1369,10 @@ export default function(options: WebsocketOptions) {
 
   server.listen(options.port)
   log.info('Listening on port %d', options.port)
+
+  return {
+    server
+  , io
+  , channelRouter
+  }
 }

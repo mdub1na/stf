@@ -221,6 +221,7 @@ export default [
     , 'test/playwright/**/*.ts'
     , '.github/scripts/**/*.mts'
     , 'tools/ios-prototype/**/*.mts'
+    , 'kuber/ios-prototype/*.mts'
     ]
   , languageOptions: {
       parser: tseslint.parser

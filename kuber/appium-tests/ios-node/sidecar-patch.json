@@ -1,0 +1,83 @@
+{
+  "spec": {
+    "template": {
+      "spec": {
+        "containers": [
+          {
+            "name": "appium",
+            "image": "appium/appium:v3.8.0-p1@sha256:aa0af4543b763c69da31388251bbea2347ae8e01f8d0516cf6b35c35a2c9fe3e",
+            "command": [
+              "sh",
+              "-ec"
+            ],
+            "args": [
+              "mkdir -p \"$APPIUM_HOME\"; appium driver install xcuitest@12.18.1; exec node /opt/stf-appium/start-appium.mjs"
+            ],
+            "env": [
+              {
+                "name": "APPIUM_HOME",
+                "value": "/tmp/stf-ios-appium"
+              }
+            ],
+            "ports": [
+              {
+                "name": "appium",
+                "containerPort": 4723
+              }
+            ],
+            "resources": {
+              "requests": {
+                "cpu": "100m",
+                "memory": "512Mi"
+              },
+              "limits": {
+                "cpu": "2",
+                "memory": "2Gi"
+              }
+            },
+            "readinessProbe": {
+              "exec": {
+                "command": [
+                  "node",
+                  "-e",
+                  "Promise.all([fetch('http://127.0.0.1:4723/status').then(r=>r.json()),fetch('http://127.0.0.1:18101/status').then(r=>r.json())]).then(([a,w])=>process.exit(a.value?.ready&&w.value?.ready&&w.sessionId?0:1)).catch(()=>process.exit(1))"
+                ]
+              },
+              "periodSeconds": 10,
+              "timeoutSeconds": 5,
+              "httpGet": null
+            },
+            "volumeMounts": [
+              {
+                "name": "appium-config",
+                "mountPath": "/opt/stf-appium",
+                "readOnly": true
+              }
+            ],
+            "livenessProbe": {
+              "exec": {
+                "command": [
+                  "node",
+                  "-e",
+                  "Promise.all([fetch('http://127.0.0.1:4723/status'),fetch('http://127.0.0.1:18101/healthz')]).then(rs=>process.exit(rs.every(r=>r.ok)?0:1)).catch(()=>process.exit(1))"
+                ]
+              },
+              "initialDelaySeconds": 60,
+              "periodSeconds": 10,
+              "timeoutSeconds": 5,
+              "failureThreshold": 3
+            }
+          }
+        ],
+        "volumes": [
+          {
+            "name": "appium-config",
+            "configMap": {
+              "name": "ios-appium-config"
+            }
+          }
+        ]
+      }
+    }
+  }
+}

@@ -1,12 +1,12 @@
 import {memo, useState} from 'react'
 import {ActionIcon, Anchor, Button, Group, TextInput} from '@mantine/core'
-import {IconCheck, IconPencil, IconX} from '@tabler/icons-react'
+import {IconCheck, IconPencil, IconWorld, IconX} from '@tabler/icons-react'
 import {statusNameAction} from '@/core/devices/enhance'
 import {updateDeviceNote} from '@/core/devices/store'
 import type {Device, DeviceBrowserApp} from '@/core/devices/types'
 import {useTranslation} from '@/core/i18n'
 import {stateClass, stateColor} from '@/ui/device-state'
-import {canStartUsing, controlHref, type DeviceActions} from './device-actions'
+import {canStartUsing, canStopAutomation, controlHref, type DeviceActions} from './device-actions'
 import classes from './DeviceList.module.css'
 import {DeviceImage} from '@/ui/DeviceImage'
 
@@ -19,13 +19,15 @@ export const StatusButton = memo(function StatusButton({device, actions}: {
   actions: DeviceActions
 }) {
   const [pending, setPending] = useState(false)
-  const actionable = Boolean(device.usable) || (actions.adminMode && device.state === 'busy')
+  const {t} = useTranslation()
+  const stopAutomation = canStopAutomation(device)
+  const actionable = Boolean(device.usable || device.state === 'automation') || (actions.adminMode && device.state === 'busy')
 
   return (
     <Button
       size='compact-xs'
       radius='xl'
-      color={stateColor(device.state)}
+      color={stopAutomation ? 'red' : stateColor(device.state)}
       variant={device.using ? 'filled' : 'light'}
       className={`device-status ${stateClass(device.state)} ${actionable ? '' : classes.inert}`}
       loading={pending}
@@ -37,7 +39,7 @@ export const StatusButton = memo(function StatusButton({device, actions}: {
         }
       }}
     >
-      {statusNameAction(device.state)}
+      {stopAutomation ? t('Stop Automation') : statusNameAction(device.state)}
     </Button>
   )
 })
@@ -49,7 +51,7 @@ export function NameLink({device, label, actions, userEmail}: {
   userEmail: string
 }) {
   const mine = Boolean(device.using && device.owner?.email === userEmail)
-  if (!mine && !canStartUsing(device)) {
+  if (!mine && device.state !== 'automation' && !canStartUsing(device)) {
     return <span className='device-product-name-unusable'>{label}</span>
   }
   return (
@@ -88,17 +90,41 @@ export function ModelCell({device, label, onImage}: {
   )
 }
 
+const BUNDLED_BROWSER_ICONS = new Set([
+  'chrome'
+, 'chromium'
+, 'firefox'
+, 'edge'
+, 'opera'
+, 'brave'
+, 'vivaldi'
+, 'samsung'
+, 'duckduckgo'
+, 'yandex'
+])
+
 export function BrowserIcons({apps}: {apps: DeviceBrowserApp[]}) {
   const sorted = apps.slice().sort((a, b) => a.name.toLowerCase().localeCompare(b.name.toLowerCase()))
   return (
     <span className={`device-browser-list ${classes.browsers}`}>
       {sorted.map((app) => (
-        <img
-          key={app.id}
-          src={`/static/app/browsers/icon/36x36/${app.type || '_default'}.png`}
-          title={`${app.name} (${app.developer})`}
-          alt={app.name}
-        />
+        app.type && BUNDLED_BROWSER_ICONS.has(app.type) ? (
+          <img
+            key={app.id}
+            src={`/static/app/browsers/icon/${app.type}.svg`}
+            width={18}
+            height={18}
+            title={app.developer ? `${app.name} (${app.developer})` : app.name}
+            alt={app.name}
+          />
+        ) : (
+          <IconWorld
+            key={app.id}
+            size={18}
+            title={app.developer ? `${app.name} (${app.developer})` : app.name}
+            aria-label={app.name}
+          />
+        )
       ))}
     </span>
   )

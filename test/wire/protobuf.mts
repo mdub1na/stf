@@ -499,6 +499,8 @@ var pbjs5Decodings: Sample[] = [
     , x: 0.12345600128173828
     , y: 0.9876539707183838
     , pressure: null
+    , gestureId: null
+    , reservationId: null
     }
   }
 , {
@@ -587,6 +589,9 @@ var pbjs5Decodings: Sample[] = [
     , cpuPlatform: null
     , openGLESVersion: null
     , marketName: null
+    , cpu: null
+    , memory: null
+    , releasedAt: null
     }
   }
 ]
@@ -609,6 +614,8 @@ describe('wire protobuf', function() {
       , x: 1.5
       , y: 2.5
       , pressure: null
+      , gestureId: null
+      , reservationId: null
       })
     })
 
@@ -720,12 +727,48 @@ describe('wire protobuf', function() {
     })
   })
 
+  describe('automation lease messages', function() {
+    it('should preserve the coordinator fence through capture and join', function() {
+      const owner = new wire.OwnerMessage('runner@example.test', 'Runner', 'runner-group')
+      const capture = wire.GroupMessage.decode(new wire.GroupMessage(
+        owner, 420000, [], 'automation', 'lease-test'
+      ).encodeNB())
+      expect(capture.leaseId).to.equal('lease-test')
+      expect(capture.timeout).to.equal(420000)
+      expect(capture.owner.email).to.equal(owner.email)
+      const join = wire.JoinGroupMessage.decode(new wire.JoinGroupMessage(
+        'test-device', owner, 'automation', capture.leaseId
+      ).encodeNB())
+      expect(join.leaseId).to.equal('lease-test')
+      expect(join.serial).to.equal('test-device')
+      expect(join.usage).to.equal('automation')
+    })
+
+    it('should round-trip lease operations without changing existing message codes', function() {
+      const owner = new wire.OwnerMessage('runner@example.test', 'Runner', 'runner-group')
+      for (const action of ['renew', 'release']) {
+        const original = new wire.AutomationLeaseMessage(
+          'test-device', owner, 'lease-test', action, 420000
+        )
+        const envelope = wire.Envelope.decode(wireutil.transaction('reply', original))
+        expect(envelope.type).to.equal(1300)
+        expect(wire.ReverseMessageType[envelope.type]).to.equal('AutomationLeaseMessage')
+        const decoded = wire.AutomationLeaseMessage.decode(envelope.message)
+        expect(decoded.serial).to.equal('test-device')
+        expect(decoded.owner.email).to.equal(owner.email)
+        expect(decoded.leaseId).to.equal('lease-test')
+        expect(decoded.action).to.equal(action)
+        expect(decoded.timeout).to.equal(420000)
+      }
+    })
+  })
+
   describe('enum values', function() {
-    it('should preserve legacy MessageType values and add iOS job messages', function() {
+    it('should preserve legacy MessageType values and add iOS and lease messages', function() {
       expect(wire.MessageType).to.eql({...pbjs5MessageType
         , IosInstallStatusMessage: 97, IosInstallCancelMessage: 98
         , IosShakeMessage: 99, IosUnlockMessage: 100
-        , IosLockMessage: 101, IosPowerMessage: 102})
+        , IosLockMessage: 101, IosPowerMessage: 102, AutomationLeaseMessage: 1300})
     })
 
     it('should keep the DeviceStatus values protobufjs 5 exposed', function() {
@@ -770,6 +813,52 @@ describe('wire protobuf', function() {
       })
     })
 
+    it('round-trips provider gesture identity without changing legacy message codes', function() {
+      const scope = {gestureId: 'source:1', reservationId: 'reservation'}
+      const messages = [
+        new wire.GestureStartMessage({seq: 0, ...scope})
+      , new wire.TouchDownMessage({seq: 1, contact: 0, x: 0.5, y: 0.5, ...scope})
+      , new wire.TouchMoveMessage({seq: 2, contact: 0, x: 0.5, y: 0.4, ...scope})
+      , new wire.TouchCommitMessage({seq: 3, ...scope})
+      , new wire.TouchResetMessage({seq: 4, ...scope, cancel: false})
+      , new wire.TouchUpMessage({seq: 5, contact: 0, ...scope})
+      , new wire.GestureStopMessage({seq: 6, ...scope})
+      ]
+      const types = [wire.GestureStartMessage, wire.TouchDownMessage, wire.TouchMoveMessage
+        , wire.TouchCommitMessage, wire.TouchResetMessage, wire.TouchUpMessage
+        , wire.GestureStopMessage]
+      for (const [index, message] of messages.entries()) {
+        const decoded = types[index]!.decode(message.encodeNB())
+        expect(decoded.gestureId).to.equal(scope.gestureId)
+        expect(decoded.reservationId).to.equal(scope.reservationId)
+      }
+      expect(wire.TouchResetMessage.decode(messages[4]!.encodeNB()).cancel).to.equal(false)
+    })
+
+    it('preserves legacy reset bytes and the cancellation field wire types', function() {
+      const legacy = Buffer.from('080212036f6c64', 'hex')
+      expect(new wire.TouchResetMessage(2, 'old').encodeNB()).to.eql(legacy)
+      expect(fields(wire.TouchResetMessage.decode(legacy))).to.eql({
+        seq: 2, gestureId: 'old', cancel: null, reservationId: null, cancelThrough: null
+      })
+
+      const sequenced = Buffer.from('08021201671800220172', 'hex')
+      expect(new wire.TouchResetMessage({
+        seq: 2, gestureId: 'g', cancel: false, reservationId: 'r'
+      }).encodeNB()).to.eql(sequenced)
+      expect(fields(wire.TouchResetMessage.decode(sequenced))).to.eql({
+        seq: 2, gestureId: 'g', cancel: false, reservationId: 'r', cancelThrough: null
+      })
+
+      const range = Buffer.from('080212016718012201722801', 'hex')
+      expect(new wire.TouchResetMessage({
+        seq: 2, gestureId: 'g', cancel: true, reservationId: 'r', cancelThrough: true
+      }).encodeNB()).to.eql(range)
+      expect(fields(wire.TouchResetMessage.decode(range))).to.eql({
+        seq: 2, gestureId: 'g', cancel: true, reservationId: 'r', cancelThrough: true
+      })
+    })
+
     it('should decode an unset optional message field as null', function() {
       var encoded = new wire.DeviceIntroductionMessage(
         'serial', wire.DeviceStatus.ONLINE, new wire.ProviderMessage('chan', 'name'), 1
@@ -800,6 +889,47 @@ describe('wire protobuf', function() {
         ))
       }
     )
+
+    it('should round-trip DeviceIdentityMessage with cpu, memory, and releasedAt fields',
+      function() {
+        var display = new wire.DeviceDisplayMessage(
+          0, 1080, 2400, 0, 420, 420, 60, 2.625, true, 'url', 6.6
+        )
+      var phone = new wire.DevicePhoneMessage('123', '456', '789', '012', 'LTE')
+      var cpu = new wire.DeviceCpuMessage('Snapdragon 8 Gen 3', 8, 3.3)
+      var memory = new wire.DeviceMemoryMessage(12288, 256.5)
+      var original = new wire.DeviceIdentityMessage(
+        'serial123'
+      , 'Android'
+      , 'Samsung'
+      , 'Carrier'
+      , 'SM-S928B'
+      , '14'
+      , 'arm64-v8a'
+      , '34'
+      , display
+      , phone
+      , 'e3qxxx'
+      , 'qcom'
+      , '3.2'
+      , 'Galaxy S24 Ultra'
+      , cpu
+      , memory
+      , '2024-01-24'
+      )
+
+      var encoded = original.encodeNB()
+      var decoded = wire.DeviceIdentityMessage.decode(encoded)
+
+      expect(decoded.serial).to.equal('serial123')
+      expect(decoded.platform).to.equal('Android')
+      expect(decoded.manufacturer).to.equal('Samsung')
+      expect(decoded.model).to.equal('SM-S928B')
+      expect(decoded.marketName).to.equal('Galaxy S24 Ultra')
+      expect(decoded.releasedAt).to.equal('2024-01-24')
+      expect(fields(decoded.cpu!)).to.eql({name: 'Snapdragon 8 Gen 3', cores: 8, freq: 3.3})
+      expect(fields(decoded.memory!)).to.eql({ram: 12288, rom: 256.5})
+    })
   })
 
   describe('routing', function() {

@@ -1,6 +1,6 @@
 import syrup from '@devicefarmer/stf-syrup'
 
-import browsers from '@devicefarmer/stf-browser-db'
+import browsers from '../../../util/browsers.js'
 
 import logger from '../../../util/logger.js'
 import wire from '../../../wire/index.js'
@@ -18,17 +18,6 @@ import routerSyrup from '../support/router.js'
 import pushSyrup from '../support/push.js'
 import adbSyrup from '../support/adb.js'
 import serviceSyrup from './service.js'
-
-var mapping = (function() {
-  var list: Record<string, string> = Object.create(null)
-  Object.keys(browsers).forEach(function(id) {
-    var browser = browsers[id]!
-    if (browser.platforms.android) {
-      list[browser.platforms.android.package] = id
-    }
-  })
-  return list
-})()
 
 export default syrup.serial()
   .dependency(routerSyrup)
@@ -50,17 +39,16 @@ export default syrup.serial()
 
     function appReducer(acc: DeviceBrowserAppMessageFields[], app: BrowserApp) {
       var packageName = pkg(app.component)
-      var browserId = mapping[packageName]
+      var browser = browsers[packageName]
 
-      if (!browserId) {
+      if (!browser) {
         log.warn('Unmapped browser "%s"', packageName)
-        return acc
       }
 
       acc.push({
         id: app.component
-      , type: browserId
-      , name: browsers[browserId]!.name
+      , type: browser?.icon || 'default'
+      , name: browser?.name || app.name || packageName
       , selected: app.selected
       , system: app.system
       })

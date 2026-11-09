@@ -1,0 +1,24 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: appium-grid
+  annotations:
+    cert-manager.io/issuer: letsencrypt-http
+    traefik.ingress.kubernetes.io/router.entrypoints: web,websecure
+spec:
+  ingressClassName: traefik
+  tls:
+    - hosts:
+        - appium-grid.putmyhexon.ru
+      secretName: appium-grid-putmyhexon-ru-tls
+  rules:
+    - host: appium-grid.putmyhexon.ru
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: appium-grid-router
+                port:
+                  number: 4444

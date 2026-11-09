@@ -1,0 +1,14 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: stf-coordinator
+  labels:
+    app.kubernetes.io/name: stf-coordinator
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: stf-coordinator
+  ports:
+    - name: http
+      port: 8080
+      targetPort: http

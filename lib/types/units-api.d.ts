@@ -21,6 +21,8 @@ export type ApiParams = {
   bookable: SwaggerParam<boolean | undefined>
   groupOwner: SwaggerParam<boolean | undefined>
   keepOwnership: SwaggerParam<boolean | undefined>
+  reservationId?: SwaggerParam<string | undefined>
+  deviceChannel?: SwaggerParam<string | undefined>
   present: SwaggerParam<boolean | undefined>
   booked: SwaggerParam<boolean | undefined>
   annotated: SwaggerParam<boolean | undefined>
@@ -74,6 +76,12 @@ export type AlertMessageBody = Partial<AlertMessage>
 
 export type AddUserDeviceBody = {
   serial: string
+  timeout?: number
+  leaseId?: string
+}
+
+export type AutomationLeaseBody = {
+  leaseId: string
   timeout?: number
 }
 

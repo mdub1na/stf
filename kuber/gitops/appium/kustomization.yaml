@@ -11,3 +11,4 @@ resources:
   - android-appium-nodes-deployment.yaml
   - appium-grid-issuer.yaml
   - appium-grid-ingress.yaml
+  - ingress-putmyhexon.yaml

@@ -93,9 +93,8 @@ Notes that matter when changing the matrix:
   root before STF is watching matters too: `adb root` restarts adbd, and a
   transport flap while the provider is tracking leaves a stale device record.
 - `@devicefarmer/minicap-prebuilt` only ships a native `minicap.so` up to
-  `android-30`. Above that, `.github/scripts/android-leg.sh` sets
-  `SCREEN_GRABBER=minicap-apk` so STF goes straight to the `app_process`
-  grabber instead of failing the native attempt first.
+  `android-30`. Above that, STF's default `auto` screen grabber goes straight
+  to the `app_process` apk grabber.
 - A leg whose system image is not published self-skips instead of failing, and
   the report says so. The probe fails open: if `sdkmanager` cannot be read at
   all the leg still runs, because a probe that fails closed would let the whole
@@ -263,13 +262,13 @@ still runs it as its own job so the report shows it as a separate line.
 There is no committed `package-lock.json`: `.gitignore` excludes it, so CI uses
 `npm install` and keys its dependency cache on `package.json`.
 
-Every job reads its Node version from `.nvmrc` (22.23.2), which is also what the
+Every job reads its Node version from `.nvmrc` (22.23.4), which is also what the
 `Dockerfile` and `.semaphore/semaphore.yml` use, so CI tests the runtime the
 project actually ships rather than a second version pinned in the workflow.
 
 The npm publish job in `release.yml` is the exception: it pins Node 24, because
 npm trusted publishing needs Node 22.14.0 or later and npm 11.5.1 or later, and
-22.23.2 ships npm 10.x. The tarball's bundle is therefore built on a runtime no
+22.23.4 ships npm 10.x. The tarball's bundle is therefore built on a runtime no
 test tier exercises. Nothing else in the release path needs it, so the rest
 reads `.nvmrc` like every other job.
 
@@ -310,16 +309,22 @@ which one applies depends on whether the emulator was ever reached.
 packages that are already on the image, caps `apt-get update` at
 `APT_UPDATE_TIMEOUT` seconds (120 by default) because a stalling mirror will
 otherwise spend the whole step budget inside apt's own retries, and then retries
-the install three times, refreshing the indexes between the tries. The Playwright
-install is wrapped in `retry.sh`, since `playwright install --with-deps` shells
-out to apt as well and reports a failure there as a bare
-`Installation process exited with code: 100`. The Android SDK packages the
+the install three times, refreshing the indexes between the tries. `build`
+caches `test/playwright/node_modules` and `~/.cache/ms-playwright` for the
+browser jobs, and `.github/scripts/install-playwright.sh` installs only the
+Chromium binary under `retry.sh` and smoke-tests `chromium.launch()` before
+touching apt at all (routing any missing library packages from
+`playwright install-deps --dry-run` through `apt-install.sh`), because
+`playwright install --with-deps` otherwise runs a bare `apt-get` across every
+leg even when `ubuntu-24.04` already has every shared library Chromium links
+against. The Android SDK packages the
 emulator action needs (platform, emulator, system image) are installed ahead of
 it by `install-android-sdk.sh` under `retry.sh`, because the action downloads
 them once with no retry and a truncated archive from `dl.google.com` would
 otherwise fail the leg before the emulator starts.
 
-**From the emulator on**, the leg itself is retried once. The verdict is derived,
+**From the emulator on**, each Android matrix leg (and the `compose` AVD leg)
+is retried once. The verdict is derived,
 and if it failed the leg runs a second time from a fresh AVD and the second
 verdict is the one recorded. The gate is the verdict rather than the emulator
 step's exit status on purpose: `android-leg.sh` never exits non-zero for a test

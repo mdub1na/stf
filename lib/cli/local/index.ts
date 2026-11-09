@@ -6,6 +6,7 @@ import {createRequire} from 'module'
 import type {Argv} from 'yargs'
 import type {CommandArgv} from '../../types/cli.js'
 import {prepareLocalIos} from '../../units/ios-provider/local.js'
+import cookieutil from '../../util/cookieutil.js'
 
 var require = createRequire(import.meta.url)
 
@@ -16,7 +17,7 @@ var describe = 'Start a complete local development environment.'
 var builder = function(yargs: Argv) {
   var os = require('os')
 
-  return yargs
+  var y = yargs
     .env('STF_LOCAL')
     .strict()
     .positional('serial', {
@@ -279,9 +280,76 @@ var builder = function(yargs: Argv) {
       'by converting the option to uppercase, replacing dashes with ' +
       'underscores and prefixing it with `STF_LOCAL_` (e.g. ' +
       '`STF_LOCAL_ALLOW_REMOTE`).')
+
+  return cookieutil.addCookieOptions(y)
 }
 
 type CliArg = string | number
+
+// The serials go right after the command name. Placed last they would be
+// swallowed by an array option such as --cleanup-folder, and the provider
+// would then handle every device.
+var providerArgs = function(argv: CommandArgv<typeof builder>) {
+  var util = require('util')
+
+  return ([
+      'provider'
+    ] as CliArg[])
+    .concat(argv.serial as CliArg[])
+    .concat([
+      '--name', argv.provider
+    , '--min-port', argv.providerMinPort
+    , '--max-port', argv.providerMaxPort
+    , '--connect-sub', argv.bindDevPub
+    , '--connect-push', argv.bindDevPull
+    , '--group-timeout', argv.groupTimeout
+    , '--public-ip', argv.publicIp
+    , '--storage-url'
+    , util.format('http://localhost:%d/', argv.port)
+    , '--adb-host', argv.adbHost
+    , '--adb-port', argv.adbPort
+    , '--vnc-initial-size', argv.vncInitialSize.join('x')
+    , '--mute-master', argv.muteMaster
+    , '--screen-ws-url-pattern', argv.screenWsUrlPattern
+    ])
+    .concat(argv.allowRemote ? ['--allow-remote'] : [])
+    .concat(argv.lockRotation ? ['--lock-rotation'] : [])
+    .concat(!argv.cleanup ? ['--no-cleanup'] : [])
+    .concat(argv.cleanupDisableBluetooth ? ['--cleanup-disable-bluetooth'] : [])
+    .concat(argv.cleanupBluetoothBonds ? ['--cleanup-bluetooth-bonds'] : [])
+    .concat(argv.cleanupFolder.length ?
+      ['--cleanup-folder' as CliArg].concat(argv.cleanupFolder) : [])
+    .concat(!argv.screenReset ? ['--no-screen-reset'] : [])
+}
+
+var authArgs = function(
+  argv: {
+    authType: string
+    authPort: number
+    authSecret: string
+    appUrl?: string | undefined
+    publicIp: string
+    port: number
+    authOptions: string
+  }
+, cookieArgs: CliArg[] = []
+): CliArg[] {
+  var util = require('util')
+  var args: CliArg[] = [
+    util.format('auth-%s', argv.authType)
+  , '--port', argv.authPort
+  , '--secret', argv.authSecret
+  , '--app-url', argv.appUrl || util.format(
+      'http://%s:%d/'
+    , argv.publicIp
+    , argv.port
+    )
+  ]
+  if (argv.authType === 'mock' || argv.authType === 'ldap') {
+    args = args.concat(cookieArgs)
+  }
+  return args.concat(JSON.parse(argv.authOptions))
+}
 
 var handler = async function(argv: CommandArgv<typeof builder>) {
   var util = require('util')
@@ -318,6 +386,17 @@ var handler = async function(argv: CommandArgv<typeof builder>) {
   }
 
   function run() {
+    var cookieArgs: CliArg[] = argv.cookieSameSite ?
+      ['--cookie-same-site', argv.cookieSameSite] :
+      []
+    var cookieSecure = cookieutil.resolveCookieSecure(argv.cookieSecure)
+    if (cookieSecure === true) {
+      cookieArgs.push('--cookie-secure')
+    }
+    else if (cookieSecure === false) {
+      cookieArgs.push('--no-cookie-secure')
+    }
+
     var procs = [
       // app triproxy
       procutil.fork(path.resolve(import.meta.dirname, '..'), [
@@ -359,16 +438,7 @@ var handler = async function(argv: CommandArgv<typeof builder>) {
         ])
 
       // auth
-    , procutil.fork(path.resolve(import.meta.dirname, '..'), [
-          util.format('auth-%s', argv.authType)
-        , '--port', argv.authPort
-        , '--secret', argv.authSecret
-        , '--app-url', argv.appUrl || util.format(
-            'http://%s:%d/'
-          , argv.publicIp
-          , argv.port
-          )
-        ].concat(JSON.parse(argv.authOptions)))
+    , procutil.fork(path.resolve(import.meta.dirname, '..'), authArgs(argv, cookieArgs))
 
       // app
     , procutil.fork(path.resolve(import.meta.dirname, '..'), [
@@ -389,8 +459,10 @@ var handler = async function(argv: CommandArgv<typeof builder>) {
           , argv.publicIp
           , argv.websocketPort
           )
-        ].concat((function() {
-          var extra: string[] = []
+        ]
+        .concat(cookieArgs)
+        .concat((function() {
+          var extra: CliArg[] = []
           if (argv.userProfileUrl) {
             extra.push('--user-profile-url', argv.userProfileUrl)
           }
@@ -473,31 +545,8 @@ var handler = async function(argv: CommandArgv<typeof builder>) {
     ]
 
     if ((argv.provider as string | false) !== false) {
-      procs.push(procutil.fork(path.resolve(import.meta.dirname, '..'), [
-          'provider'
-        , '--name', argv.provider
-        , '--min-port', argv.providerMinPort
-        , '--max-port', argv.providerMaxPort
-        , '--connect-sub', argv.bindDevPub
-        , '--connect-push', argv.bindDevPull
-        , '--group-timeout', argv.groupTimeout
-        , '--public-ip', argv.publicIp
-        , '--storage-url'
-        , util.format('http://localhost:%d/', argv.port)
-        , '--adb-host', argv.adbHost
-        , '--adb-port', argv.adbPort
-        , '--vnc-initial-size', argv.vncInitialSize.join('x')
-        , '--mute-master', argv.muteMaster
-        , '--screen-ws-url-pattern', argv.screenWsUrlPattern
-        ]
-        .concat(argv.allowRemote ? ['--allow-remote'] : [])
-        .concat(argv.lockRotation ? ['--lock-rotation'] : [])
-        .concat(!argv.cleanup ? ['--no-cleanup'] : [])
-        .concat(argv.cleanupDisableBluetooth ? ['--cleanup-disable-bluetooth'] : [])
-        .concat(argv.cleanupBluetoothBonds ? ['--cleanup-bluetooth-bonds'] : [])
-        .concat(argv.cleanupFolder ? ['--cleanup-folder' as CliArg].concat(argv.cleanupFolder) : [])
-        .concat(!argv.screenReset ? ['--no-screen-reset'] : [])
-        .concat(argv.serial)))
+      procs.push(procutil.fork(path.resolve(import.meta.dirname, '..')
+        , providerArgs(argv)))
     }
 
     ios?.start().catch(error => {
@@ -544,4 +593,4 @@ var handler = async function(argv: CommandArgv<typeof builder>) {
   }
 }
 
-export {command, describe, builder, handler}
+export {command, describe, builder, handler, providerArgs, authArgs}

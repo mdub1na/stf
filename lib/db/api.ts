@@ -16,6 +16,7 @@ import apiutil from '../util/apiutil.js'
 import Promise from 'bluebird'
 import _ from 'lodash'
 import logger from '../util/logger.js'
+import {cleanDisplay} from '../util/displayutil.js'
 import deviceutil from '../util/deviceutil.js'
 import type {
   AccessTokenDocument
@@ -172,7 +173,9 @@ interface DbApi {
   unsetDeviceConnectUrl(serial: string): Promise<r.WriteResult>
   saveDeviceStatus(serial: string, status: number, statusTimeStamp: number): Promise<r.WriteResult>
   setDeviceIosStatus(serial: string, status: IosDeviceStatus): Promise<r.WriteResult>
-  setDeviceOwner(serial: string, owner: DeviceOwner): Promise<r.WriteResult>
+  setDeviceOwner(
+    serial: string, owner: DeviceOwner, automationLeaseId?: string | null
+  ): Promise<r.WriteResult>
   unsetDeviceOwner(serial: string): Promise<r.WriteResult>
   reserveDeviceOwner(serial: string): Promise<r.WriteResult>
   clearDeviceRestoreOwner(serial: string): Promise<r.WriteResult>
@@ -197,6 +200,7 @@ interface DbApi {
   loadStandardDevices(groups: string[]): Promise<DeviceDocument[]>
   loadPresentDevices(): Promise<r.Cursor>
   loadDeviceBySerial(serial: string): Promise<DeviceDocument | null>
+  loadDeviceByChannel(channel: string, groups: string[]): Promise<DeviceDocument | null>
   loadDevice(groups: string[], serial: string): Promise<r.Cursor>
   loadBookableDevice(groups: string[], serial: string): Promise<DeviceDocument[]>
   loadDeviceByCurrent(groups: string[], serial: string): Promise<DeviceDocument[]>
@@ -1626,9 +1630,10 @@ dbapi.saveDeviceStatus = function(serial, status, statusTimeStamp) {
   }))
 }
 
-dbapi.setDeviceOwner = function(serial, owner) {
+dbapi.setDeviceOwner = function(serial, owner, automationLeaseId) {
   return db.run(r.table('devices').get<DeviceDocument>(serial).update({
     owner: owner
+  , automationLeaseId: automationLeaseId || null
     // Taking a device supersedes any claim on it, so a reboot that never happened cannot hand it
     // back to an earlier user later
   , restoreOwner: null
@@ -1638,6 +1643,7 @@ dbapi.setDeviceOwner = function(serial, owner) {
 dbapi.unsetDeviceOwner = function(serial) {
   return db.run(r.table('devices').get<DeviceDocument>(serial).update({
     owner: null
+  , automationLeaseId: null
   }))
 }
 
@@ -1776,6 +1782,7 @@ dbapi.setDeviceReady = function(serial, channel) {
     channel: channel
   , ready: true
   , owner: null
+  , automationLeaseId: null
   , reverseForwards: []
   }, {returnChanges: 'always'}))
 }
@@ -1794,12 +1801,15 @@ dbapi.saveDeviceIdentity = function(serial, identity) {
   , version: identity.version
   , abi: identity.abi
   , sdk: identity.sdk
-  , display: identity.display
+  , display: cleanDisplay(identity.display)
   , phone: identity.phone
   , product: identity.product
   , cpuPlatform: identity.cpuPlatform
   , openGLESVersion: identity.openGLESVersion
   , marketName: identity.marketName
+  , cpu: identity.cpu || null
+  , memory: identity.memory || null
+  , releasedAt: identity.releasedAt || null
   }))
 }
 
@@ -1855,6 +1865,19 @@ dbapi.loadPresentDevices = function() {
   return db.run(r.table('devices').getAll(true, {
     index: 'present'
   }))
+}
+
+dbapi.loadDeviceByChannel = function(channel, groups) {
+  return db.run(r.table('devices').getAll(channel, {index: 'channel'})
+    .filter(function(device) {
+      return r.expr(groups).contains(device('group')('id'))
+    }).limit(1))
+    .then(function(cursor) {
+      return cursor.toArray()
+    })
+    .then(function(devices) {
+      return devices[0] || null
+    })
 }
 
 dbapi.loadDeviceBySerial = function(serial) {

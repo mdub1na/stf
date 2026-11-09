@@ -2,7 +2,9 @@ import wire from '../../wire/index.js'
 import wireutil from '../../wire/util.js'
 import wirerouter from '../../wire/router.js'
 import grouputil from '../../util/grouputil.js'
+import {AutomationLease} from '../../util/automation-lease.js'
 import {randomUUID} from 'node:crypto'
+import {TouchGesture} from '../../wire/touch-gesture.js'
 import type {IosDeviceState, PrototypeClient} from './client.js'
 import type {IosOwner} from './access.js'
 import {findCatalogDevice} from '../../util/device-catalog.js'
@@ -22,15 +24,19 @@ export class IosBridge {
   readonly channel: string
   readonly solo = wireutil.makePrivateChannel()
   owner: IosOwner | null = null
+  usage: string | null = null
   private state: IosDeviceState | null = null
   private identity: InstanceType<typeof wire.DeviceIdentityMessage> | null = null
   private registered = false
   private epoch = 0
   private activity = 0
   private timeout: number
+  private readonly automationLease = new AutomationLease(() => this.leave('automatic_timeout'))
+  private automationLeaseId: string | null = null
   private queue = Promise.resolve()
   private touch: {from: Point, to: Point, started: number} | null = null
   private multitouch = false
+  private readonly gestures: TouchGesture
   private lease = randomUUID()
   private installId: string | null = null
   private lastObservation: IosDeviceState | null = null
@@ -45,6 +51,10 @@ export class IosBridge {
   , private readonly disconnect: () => void
   , private readonly report: (error: unknown) => void
   ) {
+    this.gestures = new TouchGesture(() => this.resetTouch(), {
+      report: error => this.report(error), onFinish: () => this.resetTouch()
+    })
+    this.gestures.setOwner(null)
     this.channel = 'ios:' + options.serial
     this.timeout = options.groupTimeout
     const router = wirerouter()
@@ -65,7 +75,26 @@ export class IosBridge {
             throw new Error('Device not ready')
           }
           await grouputil.match({serial: options.serial}, message.requirements)
-          this.join(message.owner, message.timeout)
+          this.join(message.owner, message.timeout, message.usage, message.leaseId)
+          return {owner: this.owner}
+        })
+      })
+      .on(wire.AutomationLeaseMessage, (channel, message) => {
+        this.transaction(String(channel), async() => {
+          if (message.serial !== options.serial || !this.owner || !this.registered) {
+            throw new Error('Stale automation lease')
+          }
+          this.automationLease.assertCurrent(message.owner.email, message.leaseId)
+          if (message.action === 'renew') {
+            return {expiresAt: this.automationLease.renew(
+              message.owner.email, message.leaseId, message.timeout || 0
+            )}
+          }
+          if (message.action === 'release') {
+            this.leave('automation_release')
+            return null
+          }
+          throw new Error('Invalid automation lease action')
         })
       })
       .on(wire.AutoGroupMessage, (_channel, message) => {
@@ -76,43 +105,75 @@ export class IosBridge {
       .on(wire.UngroupMessage, (channel, message) => {
         this.transaction(String(channel), async() => {
           await grouputil.match({serial: options.serial}, message.requirements)
+          if (message.reservationId && message.reservationId !== this.owner?.reservationId) {
+            throw new Error('Device session changed')
+          }
           this.leave('ungroup_request')
         })
       })
       .on(wire.TouchDownMessage, (_channel, message) => {
-        if (message.contact !== 0 || this.touch) {
-          this.multitouch = true
-          this.touch = null
-        }
-        else if (!this.multitouch && this.point(message)) {
-          this.touch = {from: message, to: message, started: Date.now()}
-        }
+        const arrived = performance.now()
+        this.gestures.push(message.seq, () => {
+          if (message.contact !== 0 || this.touch) {
+            this.multitouch = true
+            this.touch = null
+          }
+          else if (!this.multitouch && this.point(message)) {
+            this.touch = {from: message, to: message, started: arrived}
+          }
+        }, message.gestureId, message.reservationId, {type: 'down', contact: message.contact})
       })
       .on(wire.TouchMoveMessage, (_channel, message) => {
-        if (this.touch && message.contact === 0 && this.point(message)) {
-          this.touch.to = message
-        }
+        this.gestures.push(message.seq, () => {
+          if (this.touch && message.contact === 0 && this.point(message)) {
+            this.touch.to = message
+          }
+        }, message.gestureId, message.reservationId, {type: 'move', contact: message.contact})
       })
       .on(wire.TouchUpMessage, (_channel, message) => {
-        const touch = this.touch
-        this.touch = null
-        if (touch && message.contact === 0 && !this.multitouch) {
-          const distance = Math.hypot(touch.to.x - touch.from.x, touch.to.y - touch.from.y)
-          if (distance < 0.005) {
-            this.command('/tap', touch.to)
+        const arrived = performance.now()
+        this.gestures.push(message.seq, () => {
+          const touch = this.touch
+          this.touch = null
+          if (touch && message.contact === 0 && !this.multitouch) {
+            const distance = Math.hypot(touch.to.x - touch.from.x, touch.to.y - touch.from.y)
+            if (distance < 0.005) {
+              this.command('/tap', touch.to)
+            }
+            else if (arrived < touch.started) {
+              // Up-before-Down arrival cannot recover the hold time. Dropping the
+              // swipe avoids turning an unknown duration into a fast fling.
+              this.report(new Error('Touch swipe duration is unknown; retry the gesture'))
+            }
+            else {
+              this.command('/swipe', {
+                from: touch.from, to: touch.to
+              , durationMs: Math.max(50, Math.min(5000, Math.round(arrived - touch.started)))
+              })
+            }
           }
-          else {
-            this.command('/swipe', {
-              from: touch.from, to: touch.to
-            , durationMs: Math.max(50, Math.min(5000, Date.now() - touch.started))
-            })
-          }
+        }, message.gestureId, message.reservationId, {type: 'up', contact: message.contact})
+      })
+      .on(wire.GestureStartMessage, (_channel, message) => {
+        this.gestures.start(message.seq, message.gestureId, message.reservationId)
+      })
+      .on(wire.TouchResetMessage, (_channel, message) => {
+        if (message.gestureId && message.cancel !== false) {
+          this.gestures.clear(message.gestureId, message.reservationId,
+            message.cancelThrough === true)
+        }
+        else {
+          this.gestures.push(message.seq, () => this.resetTouch(),
+            message.gestureId, message.reservationId, {type: 'reset'})
         }
       })
-      .on(wire.GestureStartMessage, () => this.resetTouch())
-      .on(wire.TouchResetMessage, () => this.resetTouch())
-      .on(wire.TouchCommitMessage, () => null)
-      .on(wire.GestureStopMessage, () => this.resetTouch())
+      .on(wire.TouchCommitMessage, (_channel, message) => {
+        this.gestures.push(message.seq, () => {}, message.gestureId, message.reservationId,
+          {type: 'commit'})
+      })
+      .on(wire.GestureStopMessage, (_channel, message) => {
+        this.gestures.stop(message.seq, message.gestureId, message.reservationId)
+      })
       .on(wire.TypeMessage, (_channel, message) => this.command('/text', {text: message.text}))
       .on(wire.PasteMessage, (channel, message) => {
         this.command('/text', {text: message.text}, String(channel))
@@ -277,19 +338,28 @@ export class IosBridge {
     )
   }
 
-  private join(owner: IosOwner, timeout?: number | null) {
-    if (this.owner && this.owner.email !== owner.email) {
+  private join(
+    owner: IosOwner, timeout?: number | null, usage?: string | null, leaseId?: string | null
+  ) {
+    if (this.owner && (this.owner.email !== owner.email || leaseId)) {
       throw new Error('Device already owned')
     }
     if (!this.owner) {
       this.ownerAbort = new AbortController()
-      this.owner = owner
+      this.owner = {...owner, reservationId: randomUUID()}
+      this.usage = usage || null
+      this.gestures.setOwner(this.owner.reservationId!)
       this.lease = randomUUID()
       this.epoch++
       // GroupMessage/API timeouts are milliseconds; the CLI fallback is seconds.
       this.timeout = Math.min(3600, Math.max(10,
         timeout ? timeout / 1000 : this.options.groupTimeout))
-      this.broadcast(new wire.JoinGroupMessage(this.options.serial, owner))
+      this.automationLeaseId = usage === 'automation' ? leaseId || null : null
+      if (this.automationLeaseId) {
+        this.automationLease.start(owner.email, this.automationLeaseId,
+          timeout || this.options.groupTimeout * 1000)
+      }
+      this.broadcast(new wire.JoinGroupMessage(this.options.serial, this.owner, usage, leaseId))
     }
     this.keepalive()
   }
@@ -303,9 +373,12 @@ export class IosBridge {
     if (id) {
       this.client.request('/installations/cancel', {id, lease}).catch(this.report)
     }
+    this.automationLease.clear()
+    this.automationLeaseId = null
     this.owner = null
+    this.usage = null
     this.epoch++
-    this.resetTouch()
+    this.gestures.setOwner(null)
     this.disconnect()
     if (owner) {
       this.broadcast(new wire.LeaveGroupMessage(this.options.serial, owner, reason))
@@ -331,7 +404,7 @@ export class IosBridge {
       return
     }
     const setup = [wire.ProbeMessage.$code, wire.DeviceRegisteredMessage.$code
-      , wire.GroupMessage.$code, wire.AutoGroupMessage.$code]
+      , wire.GroupMessage.$code, wire.AutoGroupMessage.$code, wire.AutomationLeaseMessage.$code]
     if (!setup.includes(envelope.type) && (!this.owner || !this.registered)) {
       return
     }
@@ -402,7 +475,8 @@ export class IosBridge {
         this.broadcast(new wire.DeviceHeartbeatMessage(this.options.serial))
       }
       this.publishHealth(state)
-      if (this.owner && Date.now() - this.activity > this.timeout * 1000) {
+      if (this.owner && !this.automationLeaseId &&
+          Date.now() - this.activity > this.timeout * 1000) {
         this.leave('automatic_timeout')
       }
       if (this.owner && this.installId) {

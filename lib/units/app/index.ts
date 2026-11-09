@@ -20,6 +20,7 @@ import compression from 'compression'
 
 import logger from '../../util/logger.js'
 import pathutil from '../../util/pathutil.js'
+import cookieutil, {type CookieUnitOptions} from '../../util/cookieutil.js'
 
 import auth from './middleware/auth.js'
 import deviceIconMiddleware from './middleware/device-icons.js'
@@ -31,7 +32,7 @@ import markdownServe from 'markdown-serve'
 var require = createRequire(import.meta.url)
 var packageJson = require('../../../package.json')
 
-interface AppOptions {
+interface AppOptions extends CookieUnitOptions {
   port: number
   secret: string
   ssid: string
@@ -54,8 +55,10 @@ export default function(options: AppOptions) {
   var app = express()
   var server = http.createServer(app)
 
+  cookieutil.warnIfInsecureSameSiteNone(options, log)
+
   app.use('/static/wiki', markdownServe.middleware({
-    rootDirectory: pathutil.root('node_modules/@devicefarmer/stf-wiki')
+    rootDirectory: pathutil.resource('wiki')
   , view: 'docs'
   }))
 
@@ -87,8 +90,9 @@ export default function(options: AppOptions) {
 
   app.use('/static/app/data', serveStatic(pathutil.resource('data')))
   app.use('/static/app/status', serveStatic(pathutil.resource('common/status')))
-  app.use('/static/app/browsers', browserIconMiddleware())
-  app.use('/static/app/appstores', appstoreIconMiddleware())
+  app.use('/static/app/browsers/icon', browserIconMiddleware())
+  app.use('/static/app/browser-icons', browserIconMiddleware())
+  app.use('/static/app/appstores/icon', appstoreIconMiddleware())
   app.use('/static/app/devices', deviceIconMiddleware())
   app.use('/static/app', serveStatic(pathutil.resource('app')))
 
@@ -102,11 +106,13 @@ export default function(options: AppOptions) {
     next()
   })
 
-  app.use(cookieSession({
-    name: options.ssid
-  , keys: [options.secret]
+  app.use(cookieSession(cookieutil.sessionOptions({
+    ssid: options.ssid
+  , secret: options.secret
   , httpOnly: false
-  }))
+  , cookieSameSite: options.cookieSameSite
+  , cookieSecure: options.cookieSecure
+  })))
 
   app.use(auth({
     secret: options.secret
@@ -125,7 +131,9 @@ export default function(options: AppOptions) {
 
   app.post('/app/logout', function(req, res) {
     req.session = null
-    res.clearCookie('XSRF-TOKEN', {path: '/'})
+    res.clearCookie('XSRF-TOKEN', {
+      ...cookieutil.xsrfCookieOptions(options, req), path: '/'
+    })
     // Cancel any unfinished OAuth flow as well as the main STF session.
     res.clearCookie(options.ssid + '.oauth', {path: '/auth/oauth'})
     res.clearCookie(options.ssid + '.oauth.sig', {path: '/auth/oauth'})
@@ -133,7 +141,7 @@ export default function(options: AppOptions) {
   })
 
   app.use(function(req, res, next) {
-    res.cookie('XSRF-TOKEN', req.csrfToken())
+    res.cookie('XSRF-TOKEN', req.csrfToken(), cookieutil.xsrfCookieOptions(options, req))
     next()
   })
 

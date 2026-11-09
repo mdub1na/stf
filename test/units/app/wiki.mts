@@ -46,11 +46,47 @@ describe('wiki rendering', function() {
   })
 
   it('should render the wiki through the application Pug view', async function() {
-    var response = await fetch(origin + '/static/wiki/Home', {redirect: 'manual'})
+    var response = await fetch(origin + '/static/wiki/' + encodeURIComponent('[en]-Help'), {
+      redirect: 'manual'
+    })
     var body = await response.text()
     expect(response.status).to.equal(200)
     expect(response.headers.get('content-type')).to.match(/^text\/html/)
     expect(body).to.contain('stf-docs')
-    expect(body).to.contain('<p>Welcome to the stf wiki!</p>')
+    expect(body).to.contain('STF Help</h1>')
+  })
+
+  it('should link only to wiki pages that exist with the same case', function() {
+    var pages = fs.readdirSync(pathutil.resource('wiki'))
+    pages.filter(function(page) {
+      return page.endsWith('.md')
+    }).forEach(function(page) {
+      var markdown = fs.readFileSync(pathutil.resource('wiki/' + page), 'utf8')
+      for (var match of markdown.matchAll(/\]\(\/#!\/docs\/([^)#]+)\)/g)) {
+        expect(pages, `${page} links to ${match[1]}`).to.include(`[en]-${match[1]}.md`)
+      }
+    })
+  })
+
+  it('should serve the browser and app store icons but not their data', async function() {
+    for (var icon of [
+      {path: '/static/app/browsers/icon/chrome.svg', type: 'image/svg+xml'}
+    , {path: '/static/app/browser-icons/chrome.svg', type: 'image/svg+xml'}
+    , {path: '/static/app/browsers/icon/yandex.svg', type: 'image/svg+xml'}
+    , {path: '/static/app/browser-icons/yandex.svg', type: 'image/svg+xml'}
+    , {path: '/static/app/appstores/icon/24x24/google-play-store.png', type: 'image/png'}
+    , {path: '/static/app/appstores/icon/96x96/google-play-store.png', type: 'image/png'}
+    ]) {
+      var response = await fetch(origin + icon.path)
+      await response.arrayBuffer()
+      expect(response.status, icon.path).to.equal(200)
+      expect(response.headers.get('content-type'), icon.path).to.equal(icon.type)
+    }
+    // Unknown paths fall through to the login redirect.
+    var inventory = await fetch(origin + '/static/app/browsers/inventory.json', {
+      redirect: 'manual'
+    })
+    await inventory.arrayBuffer()
+    expect(inventory.status).to.equal(302)
   })
 })

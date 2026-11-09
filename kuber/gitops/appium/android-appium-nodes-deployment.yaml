@@ -5,7 +5,7 @@ metadata:
   labels:
     app.kubernetes.io/name: android-appium-node-1
 spec:
-  replicas: 8
+  replicas: 4
   strategy:
     rollingUpdate:
       maxSurge: 1
@@ -60,6 +60,8 @@ spec:
             - uiautomator2
             - --allow-insecure
             - uiautomator2:chromedriver_autodownload
+            - --log-level
+            - warn
           env:
             - name: ANDROID_ADB_SERVER_HOST
               value: adbd.stf.svc.cluster.local
@@ -126,7 +128,7 @@ metadata:
   labels:
     app.kubernetes.io/name: android-appium-node-2
 spec:
-  replicas: 8
+  replicas: 3
   strategy:
     rollingUpdate:
       maxSurge: 1
@@ -181,6 +183,8 @@ spec:
             - uiautomator2
             - --allow-insecure
             - uiautomator2:chromedriver_autodownload
+            - --log-level
+            - warn
           env:
             - name: ANDROID_ADB_SERVER_HOST
               value: adbd-2.stf.svc.cluster.local

@@ -1,0 +1,50 @@
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: stf-coordinator
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: stf-coordinator
+  policyTypes: [Ingress, Egress]
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: stf
+        - namespaceSelector:
+            matchLabels:
+              stf-coordinator-access: allowed
+      ports:
+        - protocol: TCP
+          port: 8080
+  egress:
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+      ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: stf
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/name: stf-api
+      ports:
+        - protocol: TCP
+          port: 3000
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: appium
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/name: appium-grid-router
+      ports:
+        - protocol: TCP
+          port: 4444

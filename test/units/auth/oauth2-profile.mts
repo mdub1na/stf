@@ -37,6 +37,14 @@ describe('auth-oauth2 profile', function() {
     expect(getIdentity(profile, {requireVerifiedEmail: false})?.email).to.equal(profile.email)
   })
 
+  ;[false, 'false'].forEach(function(verified) {
+    it('should reject an explicitly unverified email with claim checking disabled: ' +
+      String(verified), function() {
+      expect(getIdentity({...profile, email_verified: verified}, {requireVerifiedEmail: false}))
+        .to.equal(null)
+    })
+  })
+
   ;['', 'alice', '@example.com', 'alice@', 'alice@@example.com'
     , 'alice@exa mple.com', 7, null].forEach(function(email) {
     it('should reject an invalid email: ' + String(email), function() {
@@ -52,6 +60,8 @@ describe('auth-oauth2 profile', function() {
   it('should match the optional domain exactly, ignoring domain case', function() {
     expect(getIdentity(profile, {domain: '@EXAMPLE.COM'})?.email).to.equal(profile.email)
     expect(getIdentity(profile, {domain: 'ample.com'})).to.equal(null)
+    profile.email = 'alice@team.example.com'
+    expect(getIdentity(profile, {domain: 'example.com'})).to.equal(null)
     profile.email = 'alice@notexample.com'
     expect(getIdentity(profile, {domain: 'example.com'})).to.equal(null)
   })

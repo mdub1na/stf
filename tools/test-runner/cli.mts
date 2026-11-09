@@ -42,8 +42,7 @@ export async function main(argv: string[]): Promise<number> {
     process.stdout.write(`${metadata.version}\n`)
     return 0
   }
-  const [namespace, action, ...args] = argv[0] === 'utils' && (argv.length === 1 || argv[1] === 'test')
-    ? ['autotest', ...argv.slice(2)] : argv
+  const [namespace, action, ...args] = argv
   if (namespace === undefined || argv.length === 1 && (namespace === '--help' || namespace === '-h')) {
     process.stdout.write(help)
     return 0

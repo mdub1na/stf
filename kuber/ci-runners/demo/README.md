@@ -14,8 +14,8 @@
 ## Команда подключения
 
 ```sh
-stf utils test run --runner appium --platform Android --run-id "$CI_PIPELINE_ID-$CI_JOB_ID" -- node tests/appium-settings.mjs
-stf utils test run --runner maestro --platform Android --run-id "$CI_PIPELINE_ID-$CI_JOB_ID" -- bash tests/maestro-settings.sh
+stf autotest run --runner appium --platform Android --run-id "$CI_PIPELINE_ID-$CI_JOB_ID" -- node tests/appium-settings.mjs
+stf autotest run --runner maestro --platform Android --run-id "$CI_PIPELINE_ID-$CI_JOB_ID" -- bash tests/maestro-settings.sh
 ```
 
 В тестовой команде доступен `STF_CONNECTION_FILE`. Appium получает URL локального прокси и W3C capabilities; Maestro — локальный ADB endpoint, содержащий только выделенный телефон. Тестовый код не использует токен STF, Kubernetes API, общий ADB server или Appium Grid напрямую.

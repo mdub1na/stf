@@ -9,8 +9,7 @@ import {normalizeFarmUrl, readFarmToken} from '../coordinator.mts'
 import {cli, directory, farm, token} from './helpers.mts'
 
 test('public help and version need no SDK, farm access, or token', async() => {
-  for (const args of [[], ['--help'], ['autotest'], ['autotest', '--help'], ['autotest', 'run', '--help'],
-    ['utils'], ['utils', 'test'], ['utils', 'test', '--help'], ['utils', 'test', 'run', '--help']]) {
+  for (const args of [[], ['--help'], ['autotest'], ['autotest', '--help'], ['autotest', 'run', '--help']]) {
     const result = await cli(args, {FARM_TOKEN: ''}).finished
     assert.equal(result.code, 0, result.stderr)
     assert.match(result.stdout, /^Usage: stf autotest run /)
@@ -32,11 +31,17 @@ test('invalid flags and unsupported physical iOS Maestro do not echo token argum
   }
 })
 
-test('legacy utils test run invokes a test with its original arguments', async() => {
+test('rejects the former utils namespace', async() => {
+  const result = await cli(['utils', 'test', 'run', '--help']).finished
+  assert.equal(result.code, 1)
+  assert.match(result.stderr, /^Unknown command\./)
+})
+
+test('autotest run forwards arguments after the command separator', async() => {
   const temp = await directory()
   const api = await farm()
   try {
-    const result = await cli(['utils', 'test', 'run', '--farm-url', api.url, '--token-file', temp.tokenFile,
+    const result = await cli(['autotest', 'run', '--farm-url', api.url, '--token-file', temp.tokenFile,
       '--runner', 'appium', '--platform', 'Android', '--', process.execPath,
       '-e', 'console.log(process.argv[1])', '--', '--help']).finished
     assert.equal(result.code, 0, result.stderr)

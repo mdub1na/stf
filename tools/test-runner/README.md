@@ -5,8 +5,8 @@ STF coordinator lease. It supports Appium on Android/iOS and Maestro on physical
 Android. Test source, builds and reports remain in the application's CI project.
 The coordinator owns device allocation, global concurrency and cleanup.
 
-The package installs its own `stf` executable with `stf autotest run`. Existing
-CI jobs can still use `stf utils test run`. Node.js 22.18 or newer is required.
+The package installs the `stf` executable. Run tests with `stf autotest run`.
+Node.js 22.18 or newer is required.
 Build the standalone package from source and pin the source and CI image digest.
 
 ## Build the client

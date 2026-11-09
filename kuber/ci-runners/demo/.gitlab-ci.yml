@@ -28,19 +28,19 @@ appium-android-one:
   variables:
     DEMO_HOLD_SECONDS: "45"
   script:
-    - stf utils test run --runner appium --platform Android --run-id "$CI_PIPELINE_ID-$CI_JOB_ID" -- node tests/appium-settings.mjs
+    - stf autotest run --runner appium --platform Android --run-id "$CI_PIPELINE_ID-$CI_JOB_ID" -- node tests/appium-settings.mjs
 
 maestro-android:
   stage: test
   timeout: 15m
   script:
-    - stf utils test run --runner maestro --platform Android --run-id "$CI_PIPELINE_ID-$CI_JOB_ID" -- bash tests/maestro-settings.sh
+    - stf autotest run --runner maestro --platform Android --run-id "$CI_PIPELINE_ID-$CI_JOB_ID" -- bash tests/maestro-settings.sh
 
 appium-android-two:
   stage: test
   timeout: 15m
   script:
-    - stf utils test run --runner appium --platform Android --run-id "$CI_PIPELINE_ID-$CI_JOB_ID" -- node tests/appium-settings.mjs
+    - stf autotest run --runner appium --platform Android --run-id "$CI_PIPELINE_ID-$CI_JOB_ID" -- node tests/appium-settings.mjs
 
 appium-ios:
   stage: test
@@ -48,4 +48,4 @@ appium-ios:
   rules:
     - if: '$FARM_TEST_IOS == "true"'
   script:
-    - stf utils test run --runner appium --platform iOS --run-id "$CI_PIPELINE_ID-$CI_JOB_ID" -- node tests/appium-settings.mjs
+    - stf autotest run --runner appium --platform iOS --run-id "$CI_PIPELINE_ID-$CI_JOB_ID" -- node tests/appium-settings.mjs

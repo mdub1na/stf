@@ -88,6 +88,8 @@ networkPolicy:
   # NetworkPolicyPeers for providers of other releases that connect to this
   # release's triproxy-dev; they get its pub and pull ports only.
   remoteProvidersFrom: []
+  # NetworkPolicyPeers outside this release allowed to reach the coordinator.
+  coordinatorFrom: []
 core:
   nodeSelector: {}
   tolerations: []
@@ -109,6 +111,7 @@ android:
   #   maxPort: 7431 # Optional exact endpoint; overrides capacity-derived bound.
   #   service: {create: true}
   #   externalAdb: {host: '', port: 5037}
+  #   appium: {replicas: 2, systemPorts: [8200, 8201]}
   #   adbKeysClaim: ''
   #   extraArgs: []
 ios:
@@ -124,3 +127,35 @@ ios:
   #   tokenKey: token
   #   nodeSelector: {kubernetes.io/hostname: usb-worker}
   #   persistence: {existingClaim: '', storageClass: '', size: 5Gi}
+  #   appium: {platformVersion: '27.0.1'}
+coordinator:
+  # Requires an STF image that includes the coordinator and fenced lease API.
+  enabled: false
+  existingSecret: ''
+  # Optional key in the credentials Secret for the project token configuration.
+  projectTokensKey: ''
+  maxParallel: 10
+  upstreamTimeoutSeconds: 30
+  # Empty uses the release STF image and API Service.
+  image: {}
+  stfApiUrl: ''
+  publicUrl: ''
+  # Leave empty to use the bundled Grid if enabled, or run Maestro without Appium.
+  appiumGridUrl: ''
+  # Empty derives Maestro pools from android.providers. Explicit pools replace them.
+  adbPools: []
+  persistence: {existingClaim: '', size: 1Gi, storageClass: '', annotations: {}}
+  resources:
+    requests: {cpu: 100m, memory: 128Mi}
+    limits: {cpu: '1', memory: 512Mi}
+appium:
+  enabled: false
+  # Build docker/appium/Dockerfile and supply the resulting image reference.
+  image: {repository: '', tag: '', digest: '', pullPolicy: IfNotPresent}
+  # The default Appium base image publishes amd64. Clear with a multi-arch build.
+  nodeArchitecture: amd64
+  gridImage: selenium/hub:4.51.0-20261010@sha256:4f94ce0ca99cb98234cd86829a9659eccf1b641277eb212f7101b0d96b3fe998
+  relayImage: selenium/node-base:4.51.0-20261010@sha256:e582019bb0748d7b551ebd8d0aaeb0197531510683ccdf172a4b45087830dc9d
+  resources:
+    requests: {cpu: 100m, memory: 256Mi}
+    limits: {cpu: '2', memory: 1Gi}

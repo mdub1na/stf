@@ -1,6 +1,6 @@
 # STF on Kubernetes
 
-The Helm chart in [`kubernetes/helm`](.) deploys the STF server, a browser-facing proxy and an optional single-node RethinkDB. Android and Linux iOS USB providers are opt-in and can be assigned to separate nodes. The chart uses the existing STF commands and images; it does not install Argo CD, Appium Grid or a test scheduler.
+The Helm chart in [`kubernetes/helm`](.) deploys the STF server, a browser-facing proxy and an optional single-node RethinkDB. Android and Linux iOS USB providers are opt-in and can be assigned to separate nodes. The optional coordinator queues device requests and manages leases for CI test runners.
 
 Run the commands below from the root of the STF repository. Examples and verification scripts are provided in the repository checkout.
 
@@ -61,6 +61,8 @@ Keep installation values in an environment-specific file outside the STF checkou
 | `storage.persistence` | Optional persistent upload volume; temporary storage metadata remains process-local |
 | `networkPolicy` | Ingress isolation of internal units, allowed proxy sources and remote providers |
 | `proxy.ingress` | Optional Ingress, controller class, annotations and existing TLS Secret references |
+| `coordinator` | Optional test queue, persistent lease state and worker connections |
+| `appium` | Optional Selenium Grid and Appium relays for selected USB devices |
 | `core.nodeSelector`, `core.units` | Core scheduling and per-unit overrides |
 | `ports.http`, `messaging.app`, `messaging.dev` | HTTP and ZeroMQ ports; override when adopting existing endpoints |
 | `proxy.containerPort`, `proxy.service.port` | Proxy listener and Service ports |
@@ -81,7 +83,7 @@ RethinkDB, the ZeroMQ triproxies, provider ports and USB ADB servers do not auth
 - `proxy.extraScreenRoutes` pointing at iOS screen Services of another release need a policy in that release admitting this release's proxy on port 17440.
 - Network selectors use fixed release and component labels on pod templates, independently of `selectorOverrides`. Legacy Deployment and Service selectors stay unchanged. Overrides may omit these labels, but conflicting values are rejected while isolation is enabled.
 - Existing NetworkPolicies are additive: another policy can allow traffic this chart does not. Review them when adopting an existing installation. Externally managed databases and ADB servers need their own policies.
-- Additional services such as Appium or a coordinator need narrowly scoped policies for their required connections; do not grant them unrestricted access to the internal units.
+- `networkPolicy.coordinatorFrom` allows selected CI pods or a private gateway to reach the coordinator's HTTP and WebSocket port through its ClusterIP Service.
 
 ## USB providers
 
@@ -134,6 +136,67 @@ The [USB values example](examples/usb.yaml) combines Android and iOS configurati
 Register the OAuth client callback as `https://stf.example.com/auth/oauth/callback` and create an existing Secret named `stf-oauth` in the release namespace with keys `STF_AUTH_OAUTH2_OAUTH_CLIENT_ID` and `STF_AUTH_OAUTH2_OAUTH_CLIENT_SECRET`. Keep the secret values out of Helm values files. The provider's UserInfo response must include `email`; `email_verified: false` is rejected.
 
 Keep the pairing/state claim for each phone. Confirm that the selected node exposes the expected usbmuxd socket and has already established trust with that iPhone. WDA must be signed and installed beforehand; the Kubernetes chart does not perform signing or first-time device preparation. See the [provider limits and recovery behavior](../../doc/ios-provider.md).
+
+## Automation coordinator
+
+Enable the coordinator to reserve STF devices for tests running in another process or CI repository. Deploy a matching STF build containing `stf coordinator` and the fenced reservation protocol in the API, processors and providers. The chart's default STF image predates this feature. Configure `image` with the matching build, or use `coordinator.image` to select a separate compatible coordinator image.
+
+Create a Kubernetes Secret in the release namespace. Supply `stf-token` from a dedicated STF account with access to the intended device groups, and `api-token` as a separate high-entropy coordinator operator token. The coordinator reads both from files and expects tokens of at least 24 characters with no internal whitespace. To give CI projects separate credentials and quotas, store the project policy JSON in the same Secret and set `coordinator.projectTokensKey` to its key. See the [coordinator guide](../../doc/coordinator.md) for the format.
+
+Add this to your release values to run Maestro on its Android devices:
+
+```yaml
+coordinator:
+  enabled: true
+  existingSecret: stf-coordinator-credentials
+  maxParallel: 8
+```
+
+`maxParallel` caps active leases across runners and projects. The coordinator uses one replica and stores the queue and lease history on a persistent claim. Set `coordinator.persistence.existingClaim` when adopting existing state. Drain active leases before replacing the coordinator or changing its upstream configuration, and keep the same claim during upgrades. Use one coordinator for each device pool.
+
+The default STF API endpoint is the release's API Service. Set `coordinator.stfApiUrl` to the full `/api/v1` URL for an existing installation. The chart derives ADB pools from `android.providers`, including their `externalAdb` settings. To connect to Android providers managed outside this release, set `coordinator.adbPools` with their exact STF provider names, ADB Service hosts and ports, and `systemPorts: []`. An explicit pool list replaces the derived one.
+
+The coordinator Service is reachable at `http://<service>.<namespace>.svc:8080` inside the cluster. For a local check, forward its port and inspect readiness:
+
+```sh
+kubectl --context "$KUBE_CONTEXT" --namespace stf port-forward service/stf-coordinator 8080:8080
+# Run in a second terminal.
+curl --fail http://127.0.0.1:8080/readyz
+```
+
+Run Maestro from the test repository using [`stf autotest run`](../../tools/test-runner/README.md) with `--runner maestro`. Workers outside the cluster need a private HTTPS route to the coordinator that supports WebSocket upgrades. Allow that gateway in `networkPolicy.coordinatorFrom` and use its URL as `coordinator.publicUrl` for worker-facing links.
+
+### Appium with Selenium Grid
+
+To install the bundled Grid, build and publish the Appium image from this checkout. It includes UiAutomator2 and XCUITest, so pods start with both drivers available. Its pinned Appium base is Linux amd64. Android Appium relays and iPhone pods with an Appium sidecar are scheduled on amd64 by default. Set `appium.nodeArchitecture` to match a compatible image you supply, or clear it for a multi-architecture image.
+
+```sh
+docker buildx build --platform linux/amd64 --push \
+  -f docker/appium/Dockerfile -t YOUR_REGISTRY/stf-appium:VERSION .
+```
+
+Enable the coordinator and add `appium.enabled` and your image reference to the release values. For each Android pool that should run Appium, set the number of relay replicas and supply at least one distinct UiAutomator2 `systemPort` per replica.
+
+```yaml
+appium:
+  enabled: true
+  image: {repository: YOUR_REGISTRY/stf-appium, tag: VERSION}
+android:
+  providers:
+    - name: android-a
+      nodeSelector: {kubernetes.io/hostname: usb-worker}
+      appium: {replicas: 2, systemPorts: [8200, 8201]}
+```
+
+Each relay handles one session. The chart adds the selected ports to its Android ADB Service. For an external ADB server, make its configured `systemPorts` and ADB control port reachable from the relays. Pools sharing an ADB host need disjoint `systemPorts`. Android providers without an `appium` entry continue to serve Maestro.
+
+The bundled Android Appium server disables automatic logcat capture by default. This avoids a driver subprocess crash during session teardown. Appium log commands require logcat capture.
+
+To add an iPhone, set `appium: {platformVersion: '27.0.1'}` on its `ios.devices` entry, using the exact version reported by STF. After an iOS update, update this value to refresh the Grid slot. Appium and its relay share the provider pod. They reuse the running STF WDA session, so WDA must be signed, installed and trusted as described under USB providers. The device's pairing state stays on its existing claim.
+
+CI connects to the coordinator and runs the test with `stf autotest run --runner appium`. The Hub and relay endpoints are for internal traffic. With an enforcing CNI, the chart limits Hub access to the coordinator and relay pods. See the [CI worker guide](../../doc/ci-runners.md) for the worker contract. If first Appium sessions start slowly on your devices, increase `coordinator.upstreamTimeoutSeconds` from its 30-second default.
+
+For a separately deployed Grid, use `coordinator.appiumGridUrl` in place of `appium.enabled`. Supply explicit `coordinator.adbPools` entries for Android and expose their `systemPorts` and ADB control port to the Appium nodes. With both Grid options off, the coordinator runs Maestro on Android. Drain active Appium leases against the original Grid before changing or disabling it. The coordinator needs that Grid to clean up any Appium leases still held in persistent state.
 
 ## Database migration and upgrades
 

@@ -9,10 +9,11 @@ import {normalizeFarmUrl, readFarmToken} from '../coordinator.mts'
 import {cli, directory, farm, token} from './helpers.mts'
 
 test('public help and version need no SDK, farm access, or token', async() => {
-  for (const args of [[], ['--help'], ['utils'], ['utils', 'test'], ['utils', 'test', '--help'], ['utils', 'test', 'run', '--help']]) {
+  for (const args of [[], ['--help'], ['autotest'], ['autotest', '--help'], ['autotest', 'run', '--help'],
+    ['utils'], ['utils', 'test'], ['utils', 'test', '--help'], ['utils', 'test', 'run', '--help']]) {
     const result = await cli(args, {FARM_TOKEN: ''}).finished
     assert.equal(result.code, 0, result.stderr)
-    assert.match(result.stdout, /stf utils test run/)
+    assert.match(result.stdout, /^Usage: stf autotest run /)
     assert.equal(result.stderr, '')
   }
   const version = await cli(['--version']).finished
@@ -21,14 +22,28 @@ test('public help and version need no SDK, farm access, or token', async() => {
 })
 
 test('invalid flags and unsupported physical iOS Maestro do not echo token arguments', async() => {
-  for (const args of [['utils', 'test', 'run', '--token', token],
-    ['utils', 'test', 'run', '--runner', 'maestro', '--platform', 'iOS', '--', 'unused'],
-    ['utils', 'test', 'run', '--runner', 'appium', '--platform', 'Android', '--queue-timeout', '0', '--farm-url', 'http://127.0.0.1', '--', 'unused']]) {
+  for (const args of [['autotest', 'run', '--token', token],
+    ['autotest', 'run', '--runner', 'maestro', '--platform', 'iOS', '--', 'unused'],
+    ['autotest', 'run', '--runner', 'appium', '--platform', 'Android', '--queue-timeout', '0', '--farm-url', 'http://127.0.0.1', '--', 'unused']]) {
     const result = await cli(args).finished
     assert.equal(result.code, 1)
     assert.doesNotMatch(result.stdout + result.stderr, new RegExp(token))
     assert.doesNotMatch(result.stderr, /\n\s+at /)
   }
+})
+
+test('legacy utils test run invokes a test with its original arguments', async() => {
+  const temp = await directory()
+  const api = await farm()
+  try {
+    const result = await cli(['utils', 'test', 'run', '--farm-url', api.url, '--token-file', temp.tokenFile,
+      '--runner', 'appium', '--platform', 'Android', '--', process.execPath,
+      '-e', 'console.log(process.argv[1])', '--', '--help']).finished
+    assert.equal(result.code, 0, result.stderr)
+    assert.equal(result.stdout, '--help\n')
+    assert.match(result.stderr, /cleanup confirmed/)
+  }
+  finally { await api.close(); await temp.close() }
 })
 
 test('token file reader rejects shared files and symbolic links', async() => {
@@ -100,14 +115,14 @@ test('packed client installed offline with an empty cache runs help and a comple
     const installedDependency = JSON.parse(await readFile(join(prefix, 'node_modules', 'ws', 'package.json'), 'utf8'))
     assert.equal(installedDependency.version, dependency.version)
     const bin = join(prefix, 'node_modules', '.bin', 'stf')
-    const help = await exec(process.execPath, [bin, 'utils', 'test', 'run', '--help'], {timeout: 5000})
-    assert.match(help.stdout, /stf utils test run/)
+    const help = await exec(process.execPath, [bin, 'autotest', 'run', '--help'], {timeout: 5000})
+    assert.match(help.stdout, /^Usage: stf autotest run /)
     assert.equal(help.stderr, '')
     const script = `const result=await fetch(process.env.APPIUM_SERVER_URL+'/session',{
       method:'POST',headers:{'Content-Type':'application/json'},
       body:JSON.stringify({capabilities:{alwaysMatch:JSON.parse(process.env.APPIUM_CAPABILITIES_JSON)}})});
       if((await result.json()).value.sessionId!=='session-1') process.exit(5);`
-    const run = await exec(process.execPath, [bin, 'utils', 'test', 'run', '--farm-url', api.url,
+    const run = await exec(process.execPath, [bin, 'autotest', 'run', '--farm-url', api.url,
       '--token-file', temp.tokenFile, '--runner', 'appium', '--platform', 'Android', '--',
       process.execPath, '--input-type=module', '--eval', script], {timeout: 8000, maxBuffer: 131072})
     assert.match(run.stderr, /cleanup confirmed/)

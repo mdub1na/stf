@@ -53,11 +53,17 @@ The reusable external-repository template is `kuber/ci-runners/demo/`. Test sour
 
 Configure `FARM_TOKEN_FILE` as a masked file CI variable containing that project's coordinator token. `FARM_URL` is `http://stf-coordinator.stf.svc.cluster.local:8080` inside this cluster. Other repositories receive separate project identities/tokens. Publish their worker image in their own project registry, or explicitly allow only that project's job tokens to pull a centrally hosted image. Never disable the image project's job-token allowlist for broad cross-project access.
 
+For a worker outside Kubernetes, point `FARM_URL` at a private HTTPS origin
+for the coordinator. The proxy must preserve the Authorization header and
+forward WebSocket upgrades for Maestro. Configure `coordinator.publicUrl` and
+`networkPolicy.coordinatorFrom` in the [Helm chart](../kubernetes/helm/README.md)
+for that origin and proxy. The worker connects only to the coordinator.
+
 Each new repository also needs its project-locked runner, a distinct coordinator project identity/token digest and a parallelism quota. Keep the same pod/network isolation and exact worker-image allowlist. The prototype loads coordinator project policies at startup; drain existing leases before restarting it to change those policies. The test repository receives neither the coordinator operator token nor a registry push credential.
 
 ```sh
-stf utils test run --runner appium --platform Android --run-id "$CI_PIPELINE_ID-$CI_JOB_ID" -- node tests/appium-settings.mjs
-stf utils test run --runner maestro --platform Android --run-id "$CI_PIPELINE_ID-$CI_JOB_ID" -- bash tests/maestro-settings.sh
+stf autotest run --runner appium --platform Android --run-id "$CI_PIPELINE_ID-$CI_JOB_ID" -- node tests/appium-settings.mjs
+stf autotest run --runner maestro --platform Android --run-id "$CI_PIPELINE_ID-$CI_JOB_ID" -- bash tests/maestro-settings.sh
 ```
 
 The wrapper obtains and renews the lease, prepares a local transport, writes `STF_CONNECTION_FILE` and invokes the repository's command. The test owns assertions and reports. The wrapper and coordinator own cleanup, including cancellation and expired heartbeats. Do not combine this wrapper with another client that independently allocates a device.
@@ -70,10 +76,9 @@ The demo uses Node's standard `fetch` API for W3C Appium commands, so it has no 
 
 ## Verification and shutdown
 
-The `stf utils test run` examples use the standalone client from
-[`tools/test-runner`](../tools/test-runner/README.md), not the server's `stf`
-executable. From the STF checkout, check the client and render the worker
-resources without contacting a farm:
+The `stf autotest run` examples use the standalone client from
+[`tools/test-runner`](../tools/test-runner/README.md). From the STF checkout,
+check the client and render the worker resources without contacting a farm:
 
 ```sh
 (cd tools/test-runner && npm ci --ignore-scripts --no-audit --no-fund && npm test)

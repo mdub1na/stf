@@ -37,8 +37,10 @@ export async function validateOptions(options: CoordinatorOptions): Promise<AdbP
       options.upstreamTimeoutSeconds > 300) {
     throw new Error('Invalid coordinator port or timeout relationship')
   }
-  for (const value of [options.publicUrl, options.stfApiUrl, options.appiumGridUrl]) {
-    endpoint(value)
+  endpoint(options.publicUrl)
+  endpoint(options.stfApiUrl)
+  if (typeof options.appiumGridUrl !== 'undefined') {
+    endpoint(options.appiumGridUrl)
   }
   if (!path.isAbsolute(options.stateFile)) {
     throw new Error('stateFile must be an absolute path on persistent storage')
@@ -53,7 +55,7 @@ export async function validateOptions(options: CoordinatorOptions): Promise<AdbP
     if (!pool || typeof pool.provider !== 'string' || !pool.provider ||
         typeof pool.host !== 'string' || !/^[A-Za-z0-9_.-]+$/.test(pool.host) ||
         !Number.isInteger(pool.port) || pool.port < 1 || pool.port > 65535 ||
-        !Array.isArray(pool.systemPorts) || !pool.systemPorts.length ||
+        !Array.isArray(pool.systemPorts) ||
         providers.has(pool.provider)) {
       throw new Error('Invalid or duplicate ADB pool configuration')
     }

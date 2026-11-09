@@ -34,7 +34,7 @@ export const builder = (yargs: Argv) => yargs
     type: 'string', describe: 'Optional project token digests and concurrency limits JSON.'
   })
   .option('appium-grid-url', {
-    type: 'string', demandOption: true, describe: 'Appium Grid base URL.'
+    type: 'string', describe: 'Appium Grid base URL. Omit to enable only Maestro leases.'
   })
   .option('state-file', {
     type: 'string', demandOption: true
@@ -91,10 +91,11 @@ export async function handler(argv: CommandArgv<typeof builder>) {
   const options: CoordinatorOptions = {
     host: argv.host, port: argv.port, publicUrl: argv.publicUrl
   , stfApiUrl: argv.stfApiUrl, stfTokenFile: argv.stfTokenFile, apiTokenFile: argv.apiTokenFile
-  , appiumGridUrl: argv.appiumGridUrl, stateFile: argv.stateFile, adbPoolsFile: argv.adbPoolsFile
+  , stateFile: argv.stateFile, adbPoolsFile: argv.adbPoolsFile
   , leaseTtlSeconds: argv.leaseTtlSeconds, heartbeatIntervalSeconds: argv.heartbeatIntervalSeconds
   , pollIntervalSeconds: argv.pollIntervalSeconds, maxDurationSeconds: argv.maxDurationSeconds
   , maxParallel: argv.maxParallel, upstreamTimeoutSeconds: argv.upstreamTimeoutSeconds
+  , ...(typeof argv.appiumGridUrl === 'undefined' ? {} : {appiumGridUrl: argv.appiumGridUrl})
   , ...(argv.projectTokensFile ? {projectTokensFile: argv.projectTokensFile} : {})
   }
   return require('../../units/coordinator/index.js').default(options)

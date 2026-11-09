@@ -3,6 +3,15 @@
 {{- $udids := dict -}}
 {{- $nodes := dict -}}
 {{- $externalPools := dict -}}
+{{- $bundledGrid := .Values.appium.enabled -}}
+{{- $hasAppiumDevice := false -}}
+{{- $appiumPools := dict -}}
+{{- if $bundledGrid -}}
+{{- if not .Values.coordinator.enabled }}{{ fail "appium.enabled requires coordinator.enabled" }}{{ end -}}
+{{- if .Values.coordinator.appiumGridUrl }}{{ fail "appium.enabled and coordinator.appiumGridUrl are mutually exclusive" }}{{ end -}}
+{{- $image := .Values.appium.image -}}
+{{- if or (not $image.repository) (not (or $image.tag $image.digest)) }}{{ fail "appium.image requires a repository and tag or digest; build docker/appium/Dockerfile" }}{{ end -}}
+{{- end -}}
 {{- range .Values.android.providers -}}
 {{- if hasKey $names .name }}{{ fail "provider/device names must be unique" }}{{ end -}}
 {{- $_ := set $names .name true -}}
@@ -27,6 +36,14 @@
 {{- if hasKey $nodes $node }}{{ fail "configure one USB ADB server per node; use externalAdb and disjoint serials to share it" }}{{ end -}}
 {{- $_ := set $nodes $node true -}}
 {{- end -}}
+{{- if and $bundledGrid .appium -}}
+{{- $hasAppiumDevice = true -}}
+{{- if lt (len .appium.systemPorts) (int (default 1 .appium.replicas)) }}{{ fail "Android Appium requires at least one systemPort per replica" }}{{ end -}}
+{{- $arch := index (default dict .appium.nodeSelector) "kubernetes.io/arch" -}}
+{{- if and $arch $.Values.appium.nodeArchitecture (ne $arch $.Values.appium.nodeArchitecture) }}{{ fail "Android Appium nodeSelector conflicts with appium.nodeArchitecture" }}{{ end -}}
+{{- $pool := include "stf.androidPool" (dict "root" $ "provider" .) | fromJson -}}
+{{- $_ := set $appiumPools $pool.provider $pool -}}
+{{- end -}}
 {{- end -}}
 {{- range .Values.ios.devices -}}
 {{- if hasKey $names .name }}{{ fail "provider/device names must be unique" }}{{ end -}}
@@ -35,9 +52,48 @@
 {{- if hasKey $udids $id }}{{ fail "iOS UDIDs must be unique" }}{{ end -}}
 {{- $_ := set $udids $id true -}}
 {{- if not .nodeSelector }}{{ fail "an iPhone requires nodeSelector for its USB host" }}{{ end -}}
+{{- if and $bundledGrid .appium -}}
+{{- $hasAppiumDevice = true -}}
+{{- $arch := index .nodeSelector "kubernetes.io/arch" -}}
+{{- if and $arch $.Values.appium.nodeArchitecture (ne $arch $.Values.appium.nodeArchitecture) }}{{ fail "iOS Appium nodeSelector conflicts with appium.nodeArchitecture" }}{{ end -}}
+{{- range .extraContainers -}}
+{{- if and (kindIs "map" .) (has .name (list "appium" "relay")) }}{{ fail "bundled iOS Appium requires removing the old appium or relay extraContainer" }}{{ end -}}
 {{- end -}}
+{{- range .extraVolumes -}}
+{{- if and (kindIs "map" .) (eq (default "" .name) "appium-relay-config") }}{{ fail "bundled iOS Appium reserves the appium-relay-config volume name" }}{{ end -}}
+{{- end -}}
+{{- end -}}
+{{- end -}}
+{{- if and $bundledGrid (not $hasAppiumDevice) }}{{ fail "appium.enabled requires Appium configuration for at least one provider or iPhone" }}{{ end -}}
 {{- if .Values.ios.devices -}}
 {{- if or (not .Values.ios.image.repository) (and (not .Values.ios.image.tag) (not .Values.ios.image.digest)) }}{{ fail "ios.image requires a real repository and tag or digest; build docker/ios/Dockerfile" }}{{ end -}}
+{{- end -}}
+{{- if .Values.coordinator.enabled -}}
+{{- $c := .Values.coordinator -}}
+{{- if and $c.image (or (not $c.image.repository) (not (or $c.image.tag $c.image.digest))) }}{{ fail "coordinator.image requires a repository and tag or digest" }}{{ end -}}
+{{- if and $c.appiumGridUrl .Values.android.providers (not $c.adbPools) }}{{ fail "coordinator.adbPools must be explicit when Appium Grid is enabled with Android providers" }}{{ end -}}
+{{- $providers := dict -}}
+{{- $systemPorts := dict -}}
+{{- $adbPorts := dict -}}
+{{- $pools := include "stf.coordinatorAdbPools" . | fromJsonArray -}}
+{{- range $pools -}}
+{{- $_ := set $adbPorts (printf "%s:%v" .host .port) true -}}
+{{- end -}}
+{{- range $pools -}}
+{{- if hasKey $providers .provider }}{{ fail "coordinator.adbPools provider names must be unique" }}{{ end -}}
+{{- $_ := set $providers .provider . -}}
+{{- $host := .host -}}
+{{- range .systemPorts -}}
+{{- $key := printf "%s:%v" $host . -}}
+{{- if hasKey $systemPorts $key }}{{ fail "coordinator.adbPools systemPorts cannot overlap on the same host" }}{{ end -}}
+{{- if hasKey $adbPorts $key }}{{ fail "coordinator.adbPools systemPorts cannot use an ADB control port" }}{{ end -}}
+{{- $_ := set $systemPorts $key true -}}
+{{- end -}}
+{{- end -}}
+{{- range $provider, $expected := $appiumPools -}}
+{{- $configured := get $providers $provider -}}
+{{- if or (not $configured) (ne $configured.host $expected.host) (ne $configured.port $expected.port) (not (deepEqual (sortAlpha $configured.systemPorts) (sortAlpha $expected.systemPorts))) }}{{ fail (printf "coordinator.adbPools must match the bundled Appium ADB pool for %s" $provider) }}{{ end -}}
+{{- end -}}
 {{- end -}}
 {{- if and (not .Values.database.bundled) (not .Values.database.external.host) }}{{ fail "database.external.host is required" }}{{ end -}}
 
@@ -50,6 +106,11 @@
 {{- range .Values.proxy.extraScreenRoutes -}}
 {{- if hasKey $routes .path }}{{ fail "extra screen paths must be unique" }}{{ end -}}
 {{- $_ := set $routes .path true -}}
+{{- end -}}
+{{- if $bundledGrid -}}
+{{- range $component, $labels := .Values.selectorOverrides -}}
+{{- if hasKey $labels "stf-appium-relay" }}{{ fail (printf "selectorOverrides.%s cannot set the reserved stf-appium-relay label" $component) }}{{ end -}}
+{{- end -}}
 {{- end -}}
 {{- if .Values.networkPolicy.enabled -}}
 {{- range $component, $labels := .Values.selectorOverrides -}}

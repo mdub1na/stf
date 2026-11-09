@@ -1,4 +1,5 @@
 import {createHash, randomUUID} from 'node:crypto'
+import {setTimeout as wait} from 'node:timers/promises'
 import {BackendError} from './backend.js'
 import {CoordinatorError, endpoint} from './config.js'
 import {validMaintenanceId, validMaintenanceSerial} from './maintenance.js'
@@ -13,6 +14,12 @@ import type {
 
 const terminal = new Set(['released', 'expired'])
 const requestTerminal = new Set(['cancelled', 'expired', 'failed'])
+
+function matchesAdbRoute(capabilities: Record<string, unknown>, pool: AdbPool) {
+  const port = capabilities['appium:adbPort']
+  return capabilities['appium:remoteAdbHost'] === pool.host &&
+    (typeof port === 'undefined' || port === pool.port)
+}
 
 export class Coordinator {
   private state: CoordinatorState = {version: 2, requests: [], leases: [], maintenance: []}
@@ -58,6 +65,13 @@ export class Coordinator {
     }
   }
 
+  private assertAppiumEnabled() {
+    if (typeof this.options.appiumGridUrl === 'undefined') {
+      throw new CoordinatorError(409, 'runner_disabled',
+        'Appium is disabled; configure --appium-grid-url to enable it')
+    }
+  }
+
   get ready() {
     return this.initialized && !this.stopping && !this.fault
   }
@@ -68,8 +82,23 @@ export class Coordinator {
   }
 
   async start() {
-    this.state = await this.store.load()
+    const state = await this.store.load()
+    const maestroOnly = typeof this.options.appiumGridUrl === 'undefined'
+    if (maestroOnly && state.leases.some(lease =>
+      lease.runner !== 'maestro' && this.held(lease))) {
+      throw new CoordinatorError(503, 'appium_state_requires_grid',
+        'Persisted Appium leases still require cleanup with the original Appium Grid')
+    }
     this.owner = (await this.backend.identity()).email
+    this.state = state
+    if (maestroOnly) {
+      for (const request of this.state.requests) {
+        if (request.state === 'queued' && request.input.runner !== 'maestro') {
+          request.state = 'failed'
+          request.error = 'runner_disabled'
+        }
+      }
+    }
     for (const lease of this.state.leases) {
       if (!terminal.has(lease.state)) {
         lease.state = 'cleaning'
@@ -211,6 +240,9 @@ export class Coordinator {
             'Idempotency-Key was already used for a different request')
         }
         return this.requestView(existing.id)
+      }
+      if (input.runner !== 'maestro') {
+        this.assertAppiumEnabled()
       }
       if (this.state.requests.length >= 10000) {
         throw new CoordinatorError(429, 'queue_limit', 'Prototype request history limit reached')
@@ -402,8 +434,7 @@ export class Coordinator {
           }
         }
         const platform = stereotype.platformName
-        const route = device.platform === 'Android' ? pool &&
-          stereotype['appium:remoteAdbHost'] === pool.host :
+        const route = device.platform === 'Android' ? pool && matchesAdbRoute(stereotype, pool) :
           stereotype['appium:udid'] === device.serial &&
           stereotype['appium:platformVersion'] === device.version
         if (node.availability === 'UP' && slot.session === null &&
@@ -514,6 +545,7 @@ export class Coordinator {
         }
         return this.maintenanceView(existing.id)
       }
+      this.assertAppiumEnabled()
       const devices = await this.backend.devices()
       const matching = devices.filter(device => device.serial === serial)
       if (matching.length !== 1) {
@@ -533,6 +565,7 @@ export class Coordinator {
     return this.exclusive(async() => {
       this.assertReady()
       const maintenance = this.maintenanceView(id)
+      this.assertAppiumEnabled()
       if (maintenance.state !== 'ready') {
         throw new CoordinatorError(409, 'device_busy', 'Device still has coordinator leases')
       }
@@ -593,21 +626,28 @@ export class Coordinator {
 
   private connection(device: FarmDevice, grid: GridStatus | null,
     runner = 'appium'): Record<string, unknown> | null {
-    const pool = this.pools.find(item => item.provider === device.provider)
-    if (device.platform === 'Android' && !pool) {
+    const pool = device.platform === 'Android' ?
+      this.pools.find(item => item.provider === device.provider) : null
+    if (runner === 'maestro') {
+      return pool ? {} : null
+    }
+    if (!grid || (device.platform === 'Android' && !pool?.systemPorts.length)) {
       return null
     }
-    if (runner === 'maestro') {
-      return device.platform === 'Android' && pool ? {} : null
+    if (pool && this.pools.some(other => other.host === pool.host &&
+      other.port !== pool.port && other.systemPorts.length) && grid.nodes.some(node =>
+      node.availability === 'UP' && node.slots.some(({stereotype}) =>
+        String(stereotype.platformName).toLowerCase() === 'android' &&
+        stereotype['appium:remoteAdbHost'] === pool.host &&
+        typeof stereotype['appium:adbPort'] === 'undefined'))) {
+      // Grid can route either ADB port to a legacy slot that advertises only the hostname.
+      return null
     }
-    if (!grid) {
- return null
-}
     const nodes = grid.nodes.filter(node => node.availability === 'UP' &&
       node.slots.some(slot => {
         const cap = slot.stereotype
         return String(cap.platformName).toLowerCase() === device.platform.toLowerCase() &&
-          (device.platform === 'Android' ? cap['appium:remoteAdbHost'] === pool!.host :
+          (pool ? matchesAdbRoute(cap, pool) :
             cap['appium:udid'] === device.serial &&
             cap['appium:platformVersion'] === device.version)
       }))
@@ -616,7 +656,7 @@ export class Coordinator {
       .flatMap(slot => slot.session ? [slot.session.sessionId] : []))
     const pending = this.state.leases.filter(lease => this.held(lease) &&
       (lease.runner || 'appium') === 'appium' && lease.device.platform === device.platform &&
-      (device.platform === 'Android' ? lease.capabilities['appium:remoteAdbHost'] === pool!.host :
+      (pool ? matchesAdbRoute(lease.capabilities, pool) :
         lease.device.serial === device.serial) &&
       (!lease.sessionId || !sessions.has(lease.sessionId))).length
     if (free <= pending) {
@@ -627,22 +667,22 @@ export class Coordinator {
     , 'appium:automationName': device.platform === 'Android' ? 'UiAutomator2' : 'XCUITest'
     , 'appium:noReset': true, 'appium:newCommandTimeout': 120
     }
-    if (device.platform === 'iOS') {
+    if (!pool) {
       return {...result, 'appium:platformVersion': device.version, 'appium:autoLaunch': false
       , 'appium:skipLogCapture': true, 'appium:shouldTerminateApp': false}
     }
     const unavailable = new Set(this.state.leases.filter(lease => this.held(lease) &&
       (lease.runner || 'appium') === 'appium' &&
-      lease.capabilities['appium:remoteAdbHost'] === pool!.host)
+      lease.capabilities['appium:remoteAdbHost'] === pool.host)
       .map(lease => lease.capabilities['appium:systemPort']))
     for (const slot of grid.nodes.flatMap(node => node.slots)) {
-      if (slot.session?.capabilities['appium:remoteAdbHost'] === pool!.host) {
+      if (slot.session?.capabilities['appium:remoteAdbHost'] === pool.host) {
         unavailable.add(slot.session.capabilities['appium:systemPort'])
       }
     }
-    const port = pool!.systemPorts.find(value => !unavailable.has(value))
-    return port === undefined ? null : {...result, 'appium:remoteAdbHost': pool!.host
-    , 'appium:adbPort': pool!.port, 'appium:systemPort': port}
+    const port = pool.systemPorts.find(value => !unavailable.has(value))
+    return port === undefined ? null : {...result, 'appium:remoteAdbHost': pool.host
+    , 'appium:adbPort': pool.port, 'appium:systemPort': port, 'appium:suppressKillServer': true}
   }
 
   tick(): Promise<void> {
@@ -911,7 +951,7 @@ export class Coordinator {
         return
       }
       if (lease.creatingSession) {
-        const grid = await this.backend.grid()
+        const grid = await this.backend.grid({allowBusy: true})
         const sessions = grid.nodes.flatMap(node => node.slots).flatMap(slot =>
           slot.session && slot.session.capabilities['stf:leaseId'] === lease.id ?
             [slot.session.sessionId] : [])
@@ -934,11 +974,7 @@ export class Coordinator {
         if (response.status >= 300 && response.status !== 404) {
           throw new Error('Appium session cleanup failed')
         }
-        const grid = await this.backend.grid()
-        if (grid.nodes.some(node => node.slots.some(slot =>
-          slot.session?.sessionId === session))) {
-          throw new Error('Grid still reports the Appium session')
-        }
+        await this.confirmAppiumSessionEnded(session)
         const settled = await this.exclusive(async() => {
           // Preserve the SID until an accepted command settles; a late failure must
           // retain the identity needed to reconfirm termination on the next cleanup.
@@ -1004,6 +1040,20 @@ export class Coordinator {
     }
   }
 
+  private async confirmAppiumSessionEnded(sessionId: string) {
+    // Grid updates the Distributor's slot after the relay acknowledges the DELETE.
+    for (const delay of [0, 50, 100, 200, 400, 800]) {
+      await wait(delay)
+      const grid = await this.backend.grid({allowBusy: true})
+      const stillActive = grid.nodes.some(node => node.slots.some(slot =>
+        slot.session?.sessionId === sessionId))
+      if (!stillActive) {
+        return
+      }
+    }
+    throw new Error('Grid still reports the Appium session')
+  }
+
   private createCapabilities(lease: Lease, body: unknown): unknown {
     const input = body as {capabilities?: {
       alwaysMatch?: Record<string, unknown>, firstMatch?: Record<string, unknown>[]
@@ -1022,6 +1072,7 @@ export class Coordinator {
       , ...(capabilities.firstMatch || [{}])[0]}
     const protectedKeys = new Set(['platformName', 'appium:udid', 'appium:systemPort'
       , 'appium:remoteAdbHost', 'appium:adbPort', 'appium:automationName', 'appium:platformVersion'
+      , 'appium:suppressKillServer', 'suppressKillServer'
       , 'appium:webDriverAgentUrl', 'appium:derivedDataPath', 'appium:wdaLocalPort'
       , 'appium:newCommandTimeout', 'appium:autoLaunch', 'appium:shouldTerminateApp'
     , 'stf:leaseId'])

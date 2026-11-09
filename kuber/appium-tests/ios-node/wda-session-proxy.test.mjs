@@ -6,7 +6,7 @@ import {tmpdir} from 'node:os'
 import path from 'node:path'
 import {fileURLToPath} from 'node:url'
 import {spawn} from 'node:child_process'
-import {createWdaSessionProxy} from './wda-session-proxy.mjs'
+import {createWdaSessionProxy} from '../../../kubernetes/helm/files/appium/wda-session-proxy.mjs'
 
 async function fixture(t) {
   const calls = []
@@ -93,7 +93,8 @@ test('blocks requests to shut down WDA', async t => {
 test('starts when invoked through a ConfigMap style symlink', {timeout: 5000}, async t => {
   const directory = await mkdtemp(path.join(tmpdir(), 'wda-configmap-'))
   const entry = path.join(directory, 'proxy.mjs')
-  await symlink(fileURLToPath(new URL('./wda-session-proxy.mjs', import.meta.url)), entry)
+  await symlink(fileURLToPath(new URL(
+    '../../../kubernetes/helm/files/appium/wda-session-proxy.mjs', import.meta.url)), entry)
   const child = spawn(process.execPath, [entry], {env: {...process.env, WDA_PROXY_PORT: '0'}, stdio: ['ignore', 'pipe', 'pipe']})
   t.after(async () => {
     child.kill('SIGTERM')

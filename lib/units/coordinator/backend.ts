@@ -14,13 +14,15 @@ export class BackendError extends Error {
 
 export class HttpFarmBackend implements FarmBackend {
   private readonly stfUrl: string
-  private readonly gridUrl: string
+  private readonly gridUrl?: string
   private readonly maestro: MaestroDeviceAdapter
 
-  constructor(stfUrl: string, gridUrl: string, private readonly token: string,
+  constructor(stfUrl: string, gridUrl: string | undefined, private readonly token: string,
     private readonly timeoutMs: number, pools: AdbPool[] = []) {
     this.stfUrl = endpoint(stfUrl).replace(/(?:\/api\/v1)?$/, '/api/v1')
-    this.gridUrl = endpoint(gridUrl)
+    if (typeof gridUrl !== 'undefined') {
+      this.gridUrl = endpoint(gridUrl)
+    }
     this.maestro = new MaestroDeviceAdapter(pools)
   }
 
@@ -64,18 +66,26 @@ export class HttpFarmBackend implements FarmBackend {
     })
   }
 
-  async grid(): Promise<GridStatus> {
-    const response = await fetch(this.gridUrl + '/status', {
+  async grid({allowBusy = false}: {allowBusy?: boolean} = {}): Promise<GridStatus> {
+    const response = await fetch(this.gridEndpoint() + '/status', {
       redirect: 'error', signal: AbortSignal.timeout(this.timeoutMs)
     })
     if (!response.ok) {
       throw new BackendError(response.status, 'Grid status')
     }
-    const result = await response.json() as {value: GridStatus}
-    if (!result.value?.ready || !Array.isArray(result.value.nodes)) {
+    const {value: grid} = await response.json() as {value: GridStatus}
+    if (!Array.isArray(grid?.nodes) ||
+        !grid.ready && !(allowBusy && grid.nodes.some(node => node.availability === 'UP'))) {
       throw new BackendError(503, 'Grid readiness')
     }
-    return result.value
+    return grid
+  }
+
+  private gridEndpoint(): string {
+    if (!this.gridUrl) {
+      throw new Error('Appium Grid URL is not configured')
+    }
+    return this.gridUrl
   }
 
   async capture(serial: string, leaseId: string, timeout: number, runner?: Runner) {
@@ -112,7 +122,7 @@ export class HttpFarmBackend implements FarmBackend {
   async webdriver(method: string, route: string, body?: unknown): Promise<UpstreamResponse> {
     // A body parser may supply {} for a bodyless command; fetch rejects GET/HEAD payloads.
     const hasBody = body !== undefined && !['GET', 'HEAD'].includes(method.toUpperCase())
-    const response = await fetch(this.gridUrl + route, {
+    const response = await fetch(this.gridEndpoint() + route, {
       method, redirect: 'error', signal: AbortSignal.timeout(this.timeoutMs)
     , headers: {'Content-Type': 'application/json'}
     , ...(hasBody ? {body: JSON.stringify(body)} : {})

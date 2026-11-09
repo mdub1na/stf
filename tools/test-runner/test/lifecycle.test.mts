@@ -6,7 +6,7 @@ import {CoordinatorClient} from '../coordinator.mts'
 import {cli, directory, farm, gone, token, until} from './helpers.mts'
 
 function args(url: string, tokenFile: string, command: string[]) {
-  return ['utils', 'test', 'run', '--farm-url', url, '--token-file', tokenFile,
+  return ['autotest', 'run', '--farm-url', url, '--token-file', tokenFile,
     '--runner', 'appium', '--platform', 'Android', '--cleanup-timeout', '3', '--', ...command]
 }
 

@@ -107,6 +107,23 @@
               "adbKeysClaim": {
                 "type": "string"
               },
+              "appium": {
+                "type": "object",
+                "required": ["systemPorts"],
+                "properties": {
+                  "replicas": { "type": "integer", "minimum": 1, "maximum": 128 },
+                  "systemPorts": {
+                    "allOf": [{ "$ref": "#/definitions/systemPorts" }],
+                    "minItems": 1
+                  },
+                  "nodeSelector": {
+                    "type": "object",
+                    "additionalProperties": { "type": "string" }
+                  },
+                  "tolerations": { "type": "array" }
+                },
+                "additionalProperties": false
+              },
               "extraArgs": {
                 "type": "array",
                 "items": {
@@ -188,6 +205,14 @@
               },
               "marketName": {
                 "type": "string"
+              },
+              "appium": {
+                "type": "object",
+                "required": ["platformVersion"],
+                "properties": {
+                  "platformVersion": { "type": "string", "pattern": "^[0-9]+(\\.[0-9]+){0,2}$" }
+                },
+                "additionalProperties": false
               },
               "nodeSelector": {
                 "type": "object",
@@ -554,6 +579,88 @@
       },
       "additionalProperties": false
     },
+    "coordinator": {
+      "type": "object",
+      "properties": {
+        "enabled": {
+          "type": "boolean"
+        },
+        "existingSecret": {
+          "type": "string"
+        },
+        "projectTokensKey": {
+          "type": "string",
+          "pattern": "^[-._a-zA-Z0-9]*$"
+        },
+        "maxParallel": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9007199254740991
+        },
+        "upstreamTimeoutSeconds": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 300
+        },
+        "image": {
+          "$ref": "#/definitions/optionalImage"
+        },
+        "stfApiUrl": {
+          "$ref": "#/definitions/optionalHttpEndpoint"
+        },
+        "publicUrl": {
+          "$ref": "#/definitions/optionalHttpEndpoint"
+        },
+        "appiumGridUrl": {
+          "$ref": "#/definitions/optionalHttpEndpoint"
+        },
+        "adbPools": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["provider", "host", "port", "systemPorts"],
+            "properties": {
+              "provider": { "type": "string", "minLength": 1 },
+              "host": { "type": "string", "pattern": "^[A-Za-z0-9_.-]+$" },
+              "port": { "type": "integer", "minimum": 1, "maximum": 65535 },
+              "systemPorts": {
+                "$ref": "#/definitions/systemPorts"
+              }
+            },
+            "additionalProperties": false
+          }
+        },
+        "persistence": {
+          "type": "object",
+          "properties": {
+            "existingClaim": { "type": "string" },
+            "size": { "type": "string", "minLength": 1 },
+            "storageClass": { "type": "string" },
+            "annotations": {
+              "type": "object",
+              "additionalProperties": { "type": "string" }
+            }
+          },
+          "additionalProperties": false
+        },
+        "resources": {
+          "type": "object"
+        }
+      },
+      "additionalProperties": false
+    },
+    "appium": {
+      "type": "object",
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "image": { "$ref": "#/definitions/optionalImage" },
+        "nodeArchitecture": { "enum": ["", "amd64", "arm64"] },
+        "gridImage": { "type": "string", "minLength": 1 },
+        "relayImage": { "type": "string", "minLength": 1 },
+        "resources": { "type": "object" }
+      },
+      "additionalProperties": false
+    },
     "networkPolicy": {
       "type": "object",
       "properties": {
@@ -571,12 +678,38 @@
           "items": {
             "$ref": "#/definitions/networkPolicyPeer"
           }
+        },
+        "coordinatorFrom": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/networkPolicyPeer"
+          }
         }
       },
       "additionalProperties": false
     }
   },
   "definitions": {
+    "optionalImage": {
+      "type": "object",
+      "properties": {
+        "repository": { "type": "string" },
+        "tag": { "type": "string" },
+        "digest": { "type": "string", "pattern": "^(sha256:[0-9a-f]{64})?$" },
+        "pullPolicy": { "enum": ["Always", "IfNotPresent", "Never"] }
+      },
+      "additionalProperties": false
+    },
+    "systemPorts": {
+      "type": "array",
+      "maxItems": 128,
+      "uniqueItems": true,
+      "items": { "type": "integer", "minimum": 1024, "maximum": 65535 }
+    },
+    "optionalHttpEndpoint": {
+      "type": "string",
+      "pattern": "^$|^https?://[^/?#@\\s]+(?:/[^?#\\s]*)?$"
+    },
     "networkPolicyPeer": {
       "type": "object",
       "minProperties": 1,

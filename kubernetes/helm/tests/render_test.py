@@ -39,6 +39,8 @@ class ChartTest(unittest.TestCase):
         self.assertEqual(len([x for x in items if x['kind'] == 'Deployment']), 13)
         self.assertEqual(obj(items, 'Service', 'stf-proxy')['spec']['ports'][0]['port'], 7100)
         self.assertFalse(any(x['kind'] == 'Secret' for x in items))
+        self.assertFalse(any(
+            feature in x['metadata']['name'] for x in items for feature in ('coordinator', 'appium')))
         for x in items:
             spec = x.get('spec', {})
             if x['kind'] == 'Service':
@@ -50,6 +52,180 @@ class ChartTest(unittest.TestCase):
     def test_missing_secret_and_invalid_origin_fail_without_cluster(self):
         render({'session': {'existingSecret': ''}}, failure='existingSecret')
         render({'publicOrigin': 'https://stf.example.com/path'}, failure='publicOrigin')
+
+    def test_maestro_coordinator_uses_release_services_and_persistent_singleton(self):
+        values = {
+            'coordinator': {'enabled': True, 'existingSecret': 'lease-credentials', 'maxParallel': 8},
+            'android': {'providers': [
+                {'name': 'usb', 'nodeSelector': {'kubernetes.io/hostname': 'usb-a'}},
+                {'name': 'remote', 'externalAdb': {'host': 'adb.example', 'port': 15037}}]},
+            'resourceNames': {'api': 'existing-api', 'android-usb': 'usb-provider', 'adb-usb': 'usb-adb'},
+            'ports': {'http': 3100}, 'imagePullSecrets': [{'name': 'registry-key'}]
+        }
+        items = render(values, release='farm', namespace='test-farm')
+        name = 'farm-stf-coordinator'
+        deployment = obj(items, 'Deployment', name)['spec']
+        self.assertEqual(deployment['replicas'], 1)
+        self.assertEqual(deployment['strategy'], {'type': 'Recreate', 'rollingUpdate': None})
+        pod = deployment['template']['spec']
+        self.assertFalse(pod['automountServiceAccountToken'])
+        self.assertFalse(pod['enableServiceLinks'])
+        self.assertEqual(pod['securityContext']['fsGroup'], 1000)
+        self.assertEqual(pod['imagePullSecrets'], [{'name': 'registry-key'}])
+        self.assertEqual(pod['initContainers'][0]['name'], 'wait-migration')
+        self.assertFalse(any('hostPath' in v for v in pod['volumes']))
+        container = pod['containers'][0]
+        self.assertEqual(container['image'], obj(items, 'Deployment', 'existing-api')['spec']
+                         ['template']['spec']['containers'][0]['image'])
+        self.assertEqual(container['command'], ['stf', 'coordinator'])
+        self.assertIn('--stf-api-url=http://existing-api:3100/api/v1', container['args'])
+        self.assertIn('--public-url=http://farm-stf-coordinator.test-farm.svc:8080', container['args'])
+        self.assertIn('--max-parallel=8', container['args'])
+        self.assertFalse(any('--appium-grid-url=' in arg for arg in container['args']))
+        self.assertEqual(container['readinessProbe']['httpGet']['path'], '/readyz')
+        volumes = {v['name']: v for v in pod['volumes']}
+        self.assertEqual(volumes['credentials']['secret']['secretName'], 'lease-credentials')
+        self.assertEqual(volumes['credentials']['secret']['items'], [
+            {'key': 'stf-token', 'path': 'stf-token'}, {'key': 'api-token', 'path': 'api-token'}])
+        claim = obj(items, 'PersistentVolumeClaim', name + '-state')
+        self.assertEqual(volumes['state']['persistentVolumeClaim']['claimName'], claim['metadata']['name'])
+        self.assertEqual(claim['metadata']['annotations']['helm.sh/resource-policy'], 'keep')
+        self.assertEqual(claim['spec']['accessModes'], ['ReadWriteOnce'])
+        service = obj(items, 'Service', name)['spec']
+        self.assertEqual(service['type'], 'ClusterIP')
+        self.assertEqual(service['selector'], deployment['selector']['matchLabels'])
+        self.assertFalse(any(x['kind'] == 'NetworkPolicy' and x['metadata']['name'] == name for x in items))
+        pools = obj(items, 'ConfigMap', name + '-adb-pools')['data']['adb-pools.json']
+        self.assertEqual(json.loads(pools), [
+            {'provider': 'usb-provider', 'host': 'usb-adb', 'port': 5037, 'systemPorts': []},
+            {'provider': 'farm-stf-android-remote', 'host': 'adb.example', 'port': 15037, 'systemPorts': []}])
+        values['android']['providers'][1]['externalAdb']['port'] = 5037
+        changed = obj(render(values, release='farm', namespace='test-farm'), 'Deployment', name)['spec']
+        self.assertNotEqual(deployment['template']['metadata']['annotations']['checksum/adb-pools'],
+                            changed['template']['metadata']['annotations']['checksum/adb-pools'])
+
+    def test_coordinator_accepts_existing_state_and_explicit_upstreams(self):
+        pools = [{'provider': 'old-provider', 'host': 'adb.other.svc', 'port': 5037, 'systemPorts': [8200]}]
+        peers = [{'namespaceSelector': {'matchLabels': {'role': 'ingress'}},
+                  'podSelector': {'matchLabels': {'app': 'controller'}}}]
+        values = {
+            'coordinator': {'enabled': True, 'existingSecret': 'credentials', 'projectTokensKey': 'projects',
+                            'image': {'repository': 'registry.example/coordinator', 'tag': 'custom'},
+                            'stfApiUrl': 'http://api.other.svc:7100/api/v1',
+                            'appiumGridUrl': 'http://router.grid.svc:4444/wd/hub',
+                            'publicUrl': 'https://coordinator.example', 'adbPools': pools,
+                            'persistence': {'existingClaim': 'previous-lease-state'}},
+            'image': {'digest': 'sha256:' + 'a' * 64},
+            'networkPolicy': {'coordinatorFrom': peers}
+        }
+        items = render(values)
+        name = 'stf-coordinator'
+        pod = obj(items, 'Deployment', name)['spec']['template']['spec']
+        self.assertNotIn('initContainers', pod)
+        container = pod['containers'][0]
+        self.assertEqual(container['image'], 'registry.example/coordinator:custom')
+        self.assertIn('--stf-api-url=http://api.other.svc:7100/api/v1', container['args'])
+        self.assertIn('--public-url=https://coordinator.example', container['args'])
+        self.assertIn('--appium-grid-url=http://router.grid.svc:4444/wd/hub', container['args'])
+        self.assertIn('--project-tokens-file=/secrets/projects.json', container['args'])
+        self.assertIn({'name': 'state', 'persistentVolumeClaim': {'claimName': 'previous-lease-state'}}, pod['volumes'])
+        self.assertFalse(any(x['kind'] == 'PersistentVolumeClaim' and x['metadata']['name'].startswith(name) for x in items))
+        self.assertEqual(json.loads(obj(items, 'ConfigMap', name + '-adb-pools')['data']['adb-pools.json']), pools)
+        policy = obj(items, 'NetworkPolicy', name)['spec']
+        self.assertEqual(policy['podSelector']['matchLabels'], {
+            'app.kubernetes.io/instance': 'stf', 'app.kubernetes.io/component': 'coordinator'})
+        self.assertEqual(policy['ingress'], [{'from': peers, 'ports': [{'protocol': 'TCP', 'port': 'http'}]}])
+
+    def test_invalid_coordinator_inputs_fail_before_install(self):
+        provider = {'name': 'usb', 'nodeSelector': {'kubernetes.io/hostname': 'usb-a'}}
+        pool = {'provider': 'android-a', 'host': 'adb.example', 'port': 5037, 'systemPorts': [8200]}
+        for overrides, failure in [
+            ({'existingSecret': ''}, 'coordinator.existingSecret'),
+            ({'image': {'repository': 'registry.example/stf'}}, 'coordinator.image'),
+            ({'stfApiUrl': 'https://user:secret@api.example'}, 'stfApiUrl'),
+            ({'maxParallel': 0}, 'maxParallel'),
+            ({'appiumGridUrl': 'http://grid.example:4444'}, 'coordinator.adbPools must be explicit'),
+            ({'adbPools': [pool, {**pool, 'host': 'second.example'}]}, 'provider names must be unique'),
+            ({'adbPools': [pool, {**pool, 'provider': 'android-b'}]}, 'systemPorts cannot overlap'),
+        ]:
+            with self.subTest(failure=failure):
+                render({'android': {'providers': [provider]},
+                        'coordinator': {'enabled': True, 'existingSecret': 'credentials', **overrides}},
+                       failure=failure)
+
+    def test_bundled_grid_limits_access_and_routes_each_device_to_its_relay(self):
+        values = {
+            'coordinator': {'enabled': True, 'existingSecret': 'leases'},
+            'appium': {'enabled': True, 'image': {'repository': 'example.invalid/appium', 'tag': 'test'}},
+            'android': {'providers': [
+                {'name': 'usb', 'nodeSelector': {'kubernetes.io/hostname': 'usb-a'},
+                 'appium': {'replicas': 2, 'systemPorts': [8200, 8201]}},
+                {'name': 'maestro', 'externalAdb': {'host': 'adb.example'}}]},
+            'ios': {'image': IOS_IMAGE, 'devices': [
+                {**iphone(), 'appium': {'platformVersion': '26.7.1'}}]}
+        }
+        items = render(values)
+        coordinator = obj(items, 'Deployment', 'stf-coordinator')['spec']['template']['spec']['containers'][0]
+        self.assertIn('--appium-grid-url=http://stf-appium-grid:4444', coordinator['args'])
+        grid = obj(items, 'Service', 'stf-appium-grid')['spec']
+        self.assertEqual(grid['type'], 'ClusterIP')
+        self.assertEqual({p['port'] for p in grid['ports']}, {4442, 4443, 4444})
+        adb = obj(items, 'Service', 'stf-adb-usb')['spec']
+        self.assertEqual({p['port'] for p in adb['ports']}, {5037, 8200, 8201})
+        android = obj(items, 'Deployment', 'stf-appium-android-usb')['spec']
+        self.assertEqual(android['replicas'], 2)
+        appium = next(c for c in android['template']['spec']['containers'] if c['name'] == 'appium')
+        defaults = next(arg for arg in appium['args'] if arg.startswith('--default-capabilities='))
+        self.assertEqual(json.loads(defaults.split('=', 1)[1]), {
+            'appium:suppressKillServer': True, 'appium:skipLogcatCapture': True})
+        pools = json.loads(obj(items, 'ConfigMap', 'stf-coordinator-adb-pools')['data']['adb-pools.json'])
+        self.assertEqual([p['systemPorts'] for p in pools], [[8200, 8201], []])
+        for deployment, configmap, stereotype in [
+            (android, 'stf-appium-android-usb',
+             {'platformName': 'Android', 'appium:automationName': 'UiAutomator2',
+              'appium:remoteAdbHost': 'stf-adb-usb', 'appium:adbPort': 5037}),
+            (obj(items, 'Deployment', 'stf-ios-iphone-a')['spec'], 'stf-ios-iphone-a-appium',
+             {'platformName': 'iOS', 'appium:automationName': 'XCUITest',
+              'appium:udid': iphone()['udid'], 'appium:platformVersion': '26.7.1'})
+        ]:
+            pod = deployment['template']
+            self.assertEqual(pod['metadata']['labels']['stf-appium-relay'], 'true')
+            self.assertEqual(pod['spec']['nodeSelector']['kubernetes.io/arch'], 'amd64')
+            self.assertFalse(pod['spec']['automountServiceAccountToken'])
+            relay = next(c for c in pod['spec']['containers'] if c['name'] == 'relay')
+            self.assertEqual(relay['args'], ['--host', '$(POD_IP)', '--hub', 'http://stf-appium-grid:4444',
+                                             '--config', '/opt/stf-relay/node.toml'])
+            config = obj(items, 'ConfigMap', configmap)['data']['node.toml'].splitlines()
+            self.assertIn('url = "http://127.0.0.1:4723"', config)
+            self.assertIn('max-sessions = 1', config)
+            slots = json.loads(next(line for line in config if line.startswith('configs = '))[10:])
+            self.assertEqual([slots[0], json.loads(slots[1])], ['1', stereotype])
+
+        internal = obj(items, 'NetworkPolicy', 'stf-internal')['spec']['podSelector']
+        self.assertEqual(internal['matchExpressions'], [
+            {'key': 'app.kubernetes.io/component', 'operator': 'NotIn', 'values': ['appium-grid']},
+            {'key': 'stf-appium-relay', 'operator': 'NotIn', 'values': ['true']}])
+        hub = obj(items, 'NetworkPolicy', 'stf-appium-grid')['spec']['ingress']
+        self.assertEqual(hub[0]['ports'], [{'protocol': 'TCP', 'port': 4444}])
+        self.assertEqual(hub[0]['from'][0]['podSelector']['matchLabels']['app.kubernetes.io/component'],
+                         'coordinator')
+        relays = obj(items, 'NetworkPolicy', 'stf-appium-relays')['spec']['ingress']
+        self.assertEqual([rule['ports'][0]['port'] for rule in relays], [6666, 17440])
+
+    def test_bundled_grid_requires_explicit_compatible_runtime_and_slots(self):
+        appium = {'enabled': True, 'image': {'repository': 'example.invalid/appium', 'tag': 'test'}}
+        coordinator = {'enabled': True, 'existingSecret': 'leases'}
+        render({'appium': appium}, failure='appium.enabled requires coordinator.enabled')
+        render({'appium': {'enabled': True}, 'coordinator': coordinator}, failure='appium.image')
+        render({'appium': appium, 'coordinator': coordinator}, failure='at least one provider or iPhone')
+        render({'appium': appium,
+                'coordinator': {**coordinator, 'appiumGridUrl': 'http://grid.example:4444'}},
+               failure='mutually exclusive')
+        render({'appium': appium, 'coordinator': coordinator,
+                'android': {'providers': [
+                    {'name': 'usb', 'nodeSelector': {'kubernetes.io/hostname': 'usb-a'},
+                     'appium': {'replicas': 2, 'systemPorts': [8200]}}]}},
+               failure='one systemPort per replica')
 
     def test_nondefault_namespace_and_resource_identity_overrides(self):
         values = {'fullnameOverride': 'custom', 'resourceNames': {'api': 'previous-api'},
@@ -427,7 +603,7 @@ class ChartTest(unittest.TestCase):
                    {'namespaceSelector': {'matchExpressions': [{'key': 'role', 'operator': 'Exists', 'values': ['x']}]}},
                    {'namespaceSelector': {'matchExpressions': [{'key': 'role', 'operator': 'DoesNotExist', 'values': ['x']}]}},
                    {'namespaceSelector': {'matchExpressions': [{'key': 'role', 'operator': 'Exists', 'unknown': True}]}}]
-        for setting in ['proxyFrom', 'remoteProvidersFrom']:
+        for setting in ['proxyFrom', 'remoteProvidersFrom', 'coordinatorFrom']:
             for peer in invalid:
                 with self.subTest(setting=setting, peer=peer):
                     render({'networkPolicy': {setting: [peer]}}, failure=setting)

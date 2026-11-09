@@ -1,10 +1,13 @@
 import assert from 'node:assert/strict'
+import {mkdtemp, rm, writeFile} from 'node:fs/promises'
+import {tmpdir} from 'node:os'
+import path from 'node:path'
 import yargs from 'yargs'
 import {builder, command, describe as description} from '../../lib/cli/coordinator/index.js'
+import {validateOptions} from '../../lib/units/coordinator/config.js'
 
 const required = [
   '--stf-api-url', 'http://stf.example.test/api/v1'
-, '--appium-grid-url', 'http://grid.example.test'
 , '--stf-token-file', '/secrets/stf-token'
 , '--api-token-file', '/secrets/api-token'
 , '--state-file', '/state/coordinator.json'
@@ -33,6 +36,27 @@ describe('coordinator CLI', () => {
     assert.equal(argv.upstreamTimeoutSeconds, 30)
     assert.equal(argv.stfTokenFile, '/secrets/stf-token')
     assert.equal(argv.apiTokenFile, '/secrets/api-token')
+    assert.equal(typeof argv.appiumGridUrl, 'undefined')
+  })
+
+  it('allows Maestro-only Android pools alongside optional Appium Grid', async() => {
+    const directory = await mkdtemp(path.join(tmpdir(), 'stf-coordinator-options-'))
+    try {
+      const pools = [{provider: 'android', host: 'adb', port: 5037, systemPorts: []}]
+      const {appiumGridUrl, projectTokensFile, ...argv} = parse(required)
+      assert.equal(appiumGridUrl, undefined)
+      assert.equal(projectTokensFile, undefined)
+      const config = {...argv, stateFile: path.join(directory, 'state.json')
+        , adbPoolsFile: path.join(directory, 'pools.json')}
+      await writeFile(config.adbPoolsFile, JSON.stringify(pools))
+      assert.deepEqual(await validateOptions(config), pools)
+      assert.deepEqual(await validateOptions({...config, appiumGridUrl: 'http://grid.example.test'}),
+        pools)
+      await assert.rejects(validateOptions({...config, appiumGridUrl: ''}), /Invalid URL/)
+    }
+    finally {
+      await rm(directory, {recursive: true, force: true})
+    }
   })
 
   it('reads namespaced environment settings and lets explicit flags override them', () => {

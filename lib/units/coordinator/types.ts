@@ -15,7 +15,7 @@ export interface CoordinatorOptions {
   stfApiUrl: string
   stfTokenFile: string
   apiTokenFile: string
-  appiumGridUrl: string
+  appiumGridUrl?: string
   stateFile: string
   adbPoolsFile: string
   projectTokensFile?: string
@@ -154,7 +154,7 @@ export interface UpstreamResponse {
 export interface FarmBackend {
   identity(): Promise<{email: string}>
   devices(): Promise<FarmDevice[]>
-  grid(): Promise<GridStatus>
+  grid(options?: {allowBusy?: boolean}): Promise<GridStatus>
   capture(serial: string, leaseId: string, timeout: number, runner?: Runner): Promise<void>
   renew(serial: string, leaseId: string, timeout: number): Promise<void>
   release(serial: string, leaseId: string): Promise<void>

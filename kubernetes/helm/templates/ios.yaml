@@ -4,6 +4,28 @@
 {{- $name := include "stf.name" (dict "root" $r "component" $component) -}}
 {{- $p := merge (default dict .persistence) (dict "enabled" true "existingClaim" "" "storageClass" "" "size" "5Gi" "annotations" dict) -}}
 {{- if not $p.enabled }}{{ fail "iOS device state persistence cannot be disabled" }}{{ end -}}
+{{- $platformVersion := get (default dict .appium) "platformVersion" -}}
+{{- $appium := and $r.Values.appium.enabled $platformVersion -}}
+{{- $appiumConfigName := include "stf.name" (dict "root" $r "component" (printf "%s-appium" $component)) -}}
+{{- $appiumConfig := dict -}}
+{{- $nodeSelector := deepCopy .nodeSelector -}}
+{{- $podLabels := include "stf.podLabels" (dict "root" $r "component" $component) | fromYaml -}}
+{{- if $appium -}}
+  {{- $stereotype := dict "platformName" "iOS" "appium:automationName" "XCUITest" "appium:udid" .udid "appium:platformVersion" $platformVersion -}}
+  {{- $_ := set $appiumConfig "node.toml" (include "stf.appiumRelayConfig" (dict "stereotype" $stereotype "port" 4723)) -}}
+  {{- range list "start-appium.mjs" "wda-session-proxy.mjs" -}}
+    {{- $_ := set $appiumConfig . ($r.Files.Get (printf "files/appium/%s" .)) -}}
+  {{- end -}}
+  {{- $_ := set $podLabels "stf-appium-relay" "true" -}}
+  {{- with $r.Values.appium.nodeArchitecture -}}
+    {{- $_ := set $nodeSelector "kubernetes.io/arch" . -}}
+  {{- end -}}
+{{ printf "\n---\n" }}apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ $appiumConfigName }}
+data: {{ toYaml $appiumConfig | nindent 2 }}
+{{- end -}}
 {{ printf "\n---\n" }}apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -15,16 +37,19 @@ spec:
     matchLabels: {{ include "stf.selector" (dict "root" $r "component" $component) | nindent 6 }}
   template:
     metadata:
-      labels: {{ include "stf.podLabels" (dict "root" $r "component" $component) | nindent 8 }}
+      labels: {{ toYaml $podLabels | nindent 8 }}
       annotations:
         checksum/config: {{ toJson (dict "device" . "origin" $r.Values.publicOrigin "migration" (include "stf.migration" $r)) | sha256sum }}
+        {{- if $appium }}
+        checksum/appium: {{ toJson $appiumConfig | sha256sum }}
+        {{- end }}
     spec:
       automountServiceAccountToken: false
       enableServiceLinks: false
       {{- if $r.Values.migration.enabled }}
       serviceAccountName: {{ include "stf.name" (dict "root" $r "component" "wait-migration") }}
       {{- end }}
-      nodeSelector: {{ toYaml .nodeSelector | nindent 8 }}
+      nodeSelector: {{ toYaml $nodeSelector | nindent 8 }}
       {{- with .tolerations }}
       tolerations: {{ toYaml . | nindent 8 }}
       {{- end }}
@@ -109,6 +134,21 @@ spec:
           resources: {{ toYaml (default $r.Values.core.resources .resources) | nindent 12 }}
           readinessProbe: {tcpSocket: {port: screen}, periodSeconds: 5}
           volumeMounts: [{name: token, mountPath: /token, readOnly: true}]
+        {{- if $appium }}
+        - name: appium
+          image: {{ include "stf.image" $r.Values.appium.image | quote }}
+          imagePullPolicy: {{ $r.Values.appium.image.pullPolicy }}
+          command: [node, /opt/stf-appium/start-appium.mjs]
+          securityContext: {runAsNonRoot: true, allowPrivilegeEscalation: false, capabilities: {drop: [ALL]}}
+          resources: {{ toYaml $r.Values.appium.resources | nindent 12 }}
+          livenessProbe:
+            exec: {command: [node, -e, "Promise.all([fetch('http://127.0.0.1:4723/status'),fetch('http://127.0.0.1:18101/healthz')]).then(rs=>process.exit(rs.every(r=>r.ok)?0:1)).catch(()=>process.exit(1))"]}
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            timeoutSeconds: 5
+          volumeMounts: [{name: appium-relay-config, mountPath: /opt/stf-appium, readOnly: true}]
+        {{- include "stf.appiumRelay" (dict "root" $r "sidecar" true) | nindent 8 }}
+        {{- end }}
         {{- with .extraContainers }}{{ toYaml . | nindent 8 }}{{ end }}
       volumes:
         {{- include "stf.migrationVolumes" $r | nindent 8 }}
@@ -122,6 +162,10 @@ spec:
           secret:
             secretName: {{ .tokenSecret | quote }}
             items: [{key: {{ default "token" .tokenKey | quote }}, path: token}]
+        {{- if $appium }}
+        - name: appium-relay-config
+          configMap: {name: {{ $appiumConfigName | quote }}}
+        {{- end }}
         {{- with .extraVolumes }}{{ toYaml . | nindent 8 }}{{ end }}
 {{- if dig "create" true (default dict .service) }}
 ---

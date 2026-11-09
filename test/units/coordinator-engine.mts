@@ -10,6 +10,8 @@ import type {
 
 const owner = 'coordinator@example.test'
 const initialTime = Date.parse('2026-10-18T10:00:00Z')
+const maintenanceId = '34725f38-4b42-4c84-94d8-31eb3baa2478'
+const otherMaintenanceId = '71b30b15-1f08-4dfb-9126-761897aa9cc0'
 const freshWda = (expires = initialTime + 86400000, checked = initialTime) => ({
   profile: 'valid' as const, expiresAt: new Date(expires).toISOString()
 , checkedAt: new Date(checked).toISOString()
@@ -559,6 +561,32 @@ describe('coordinator allocation and lifetime', () => {
       ['adb-one', 'adb-two'])
   })
 
+  it('requires unambiguous Appium Grid routes for ADB pools sharing a hostname', async() => {
+    const farm = new FakeFarm()
+    farm.inventory[1]!.provider = 'provider-two'
+    const [first, second] = farm.slots.nodes.map(node => node.slots[0]!.stereotype)
+    first!['appium:adbPort'] = 5037
+    second!['appium:adbPort'] = 5037
+    const separate = [pools[0]!, {
+      provider: 'provider-two', host: 'adb-one', port: 5038, systemPorts: [8202]
+    }]
+    const {engine} = await fixture({}, farm, new MemoryStore(), separate)
+    const request = await engine.submit(input({provider: 'provider-two'}), 'other-adb-port')
+    await engine.tick()
+    assert.equal(engine.requestView(request.id).state, 'queued')
+
+    second!['appium:adbPort'] = 5038
+    delete first!['appium:adbPort']
+    await engine.tick()
+    assert.equal(engine.requestView(request.id).state, 'queued')
+
+    first!['appium:adbPort'] = 5037
+    await engine.tick()
+    const leaseId = engine.requestView(request.id).leaseId
+    assert.ok(leaseId)
+    assert.equal(engine.leaseView(leaseId).capabilities['appium:adbPort'], 5038)
+  })
+
   it('requires an exact UP iOS relay with the current OS version', async() => {
     const farm = new FakeFarm()
     farm.inventory = [phone('IPHONE-A', {platform: 'iOS', version: '27.0.1'
@@ -588,6 +616,7 @@ describe('coordinator session isolation and uncertain cleanup', () => {
     for (const conflict of [
       {'appium:udid': 'OTHER'}, {'appium:systemPort': 9999}
     , {'appium:remoteAdbHost': 'other-adb'}, {'appium:newCommandTimeout': 0}
+    , {'appium:suppressKillServer': false}, {suppressKillServer: false}
     , {platformName: 'iOS'}, {'appium:webDriverAgentUrl': 'http://another-phone'}
     ]) {
       await rejectCode(engine.webdriver(lease.id, 'POST', '/session', {
@@ -600,6 +629,7 @@ describe('coordinator session isolation and uncertain cleanup', () => {
       capabilities: {alwaysMatch: Record<string, unknown>}
     }
     assert.equal(body.capabilities.alwaysMatch['appium:systemPort'], 8200)
+    assert.equal(body.capabilities.alwaysMatch['appium:suppressKillServer'], true)
     assert.equal(body.capabilities.alwaysMatch['appium:udid'], 'ANDROID-A')
     assert.equal(body.capabilities.alwaysMatch['stf:leaseId'], lease.id)
     assert.equal(body.capabilities.alwaysMatch['appium:appPackage'], 'example.app')
@@ -699,6 +729,29 @@ describe('coordinator session isolation and uncertain cleanup', () => {
       await engine.recover(lease.id)
       assert.equal(engine.leaseView(lease.id).state, 'released')
     }
+  })
+
+  it('waits for a busy Grid to retire the deleted Appium session before releasing STF', async() => {
+    const {engine, allocate, create, farm} = await fixture()
+    const lease = await allocate()
+    await create(lease.id)
+    farm.retainDeletedSession = true
+    farm.slots.ready = false
+    let observations = 0
+    const readGrid = farm.grid.bind(farm)
+    farm.grid = async({allowBusy = false}: {allowBusy?: boolean} = {}) => {
+      assert.equal(allowBusy, true)
+      observations++
+      assert.equal(farm.inventory[0]!.automationLeaseId, lease.id)
+      if (observations === 2) {
+        farm.slots.nodes[0]!.slots[0]!.session = null
+      }
+      return readGrid()
+    }
+    await engine.release(lease.id)
+    await engine.tick()
+    assert.equal(observations, 2)
+    assert.equal(engine.leaseView(lease.id).state, 'released')
   })
 
   it('recovers a failed command after confirming termination of its known session', async() => {
@@ -903,6 +956,79 @@ describe('coordinator session isolation and uncertain cleanup', () => {
 
 
 describe('coordinator Maestro allocation and cleanup', () => {
+  const maestroOnlyOptions = {...options}
+  delete maestroOnlyOptions.appiumGridUrl
+
+  it('rejects Appium and allocates and releases Maestro without querying Grid', async() => {
+    const farm = new FakeFarm()
+    const store = new MemoryStore()
+    const poolConfig = pools.map(pool => ({...pool, systemPorts: []}))
+    const engine = new Coordinator(maestroOnlyOptions, poolConfig, farm, store, () => initialTime)
+    await engine.start()
+    await rejectCode(engine.submit(input(), 'default-appium'), 'runner_disabled', 409)
+    await rejectCode(engine.submit(input({runner: 'appium'}), 'explicit-appium'),
+      'runner_disabled', 409)
+    assert.deepEqual(store.state.requests, [])
+
+    const request = await engine.submit(input({runner: 'maestro'}), 'maestro')
+    await engine.tick()
+    const leaseId = engine.requestView(request.id).leaseId
+    assert.ok(leaseId)
+    assert.equal(engine.leaseView(leaseId).connection.type, 'adb')
+    await engine.release(leaseId)
+    await engine.tick()
+    assert.equal(engine.leaseView(leaseId).state, 'released')
+    assert.equal(farm.gridCalls, 0)
+    assert.deepEqual(farm.webdriverCalls, [])
+  })
+
+  it('refuses to start without Grid when a saved Appium lease needs cleanup', async() => {
+    const {allocate, farm, store, create} = await fixture()
+    const lease = await allocate()
+    await create(lease.id)
+    const savedLease = store.state.leases[0]!
+    delete savedLease.runner // Old state files imply Appium when runner is missing.
+    const before = structuredClone(store.state)
+    const saves = store.saves
+    const gridCalls = farm.gridCalls
+    const engine = new Coordinator(maestroOnlyOptions, pools, farm, store, () => initialTime)
+    await rejectCode(engine.start(), 'appium_state_requires_grid', 503)
+    assert.equal(engine.ready, false)
+    await engine.stop()
+    assert.equal(store.saves, saves)
+    assert.deepEqual(store.state, before)
+    assert.equal(farm.inventory[0]?.automationLeaseId, lease.id)
+    assert.equal(farm.gridCalls, gridCalls)
+  })
+
+  it('fails saved queued Appium requests and preserves history and iOS drains without Grid',
+    async() => {
+      const {engine: previous, allocate, farm, store} = await fixture()
+      const lease = await allocate()
+      await previous.release(lease.id)
+      await previous.tick()
+      const queued = await previous.submit(input(), 'queued-appium')
+      const ios = phone('IPHONE-A', {platform: 'iOS'})
+      farm.inventory.push(ios)
+      await previous.startMaintenance(ios.serial, maintenanceId)
+      const gridCalls = farm.gridCalls
+
+      const engine = new Coordinator(maestroOnlyOptions, pools, farm, store, () => initialTime)
+      await engine.start()
+      await engine.tick()
+      const request = engine.requestView(queued.id)
+      assert.equal(request.state, 'failed')
+      assert.equal(request.error, 'runner_disabled')
+      assert.equal(store.state.requests.find(item => item.id === queued.id)?.state, 'failed')
+      assert.equal(engine.leaseView(lease.id).state, 'released')
+      await rejectCode(engine.finishMaintenance(maintenanceId), 'runner_disabled', 409)
+      assert.equal(engine.maintenanceView(maintenanceId).serial, ios.serial)
+      assert.equal(store.state.maintenance.length, 1)
+      await rejectCode(engine.startMaintenance('IPHONE-B', otherMaintenanceId),
+        'runner_disabled', 409)
+      assert.equal(farm.gridCalls, gridCalls)
+    })
+
   it('quarantines a saved Maestro lease after worker ownership is lost', async() => {
     const {allocate, farm, store, config} = await fixture()
     const lease = await allocate({runner: 'maestro', serial: 'ANDROID-A'})
@@ -978,6 +1104,17 @@ describe('coordinator Maestro allocation and cleanup', () => {
     assert.equal(farm.captures.length, 1)
   })
 
+  it('allows only Maestro on Android pools without Appium system ports', async() => {
+    const poolConfig = pools.map(pool => ({...pool, systemPorts: []}))
+    const {engine, farm} = await fixture({}, new FakeFarm(), new MemoryStore(), poolConfig)
+    const appium = await engine.submit(input(), 'appium')
+    const maestro = await engine.submit(input({runner: 'maestro'}), 'maestro')
+    await engine.tick()
+    assert.equal(engine.requestView(appium.id).state, 'queued')
+    assert.equal(engine.requestView(maestro.id).state, 'allocated')
+    assert.equal(farm.captures.length, 1)
+  })
+
   it('closes lease streams and confirms driver cleanup before releasing STF', async() => {
     const {engine, allocate, farm} = await fixture()
     const lease = await allocate({runner: 'maestro'})
@@ -1004,13 +1141,15 @@ describe('coordinator Maestro allocation and cleanup', () => {
   })
 
   it('recovers a persisted Maestro baseline and cleans before reissuing the device', async() => {
-    const {engine, allocate, farm, store, config} = await fixture()
+    const {engine, allocate, farm, store} = await fixture()
     const lease = await allocate({runner: 'maestro'})
-    const restarted = new Coordinator(config, pools, farm, store, () => initialTime + 1000)
+    const restarted = new Coordinator(maestroOnlyOptions, pools, farm, store,
+      () => initialTime + 1000)
     await restarted.start()
     assert.equal(restarted.leaseView(lease.id).state, 'expired')
     assert.ok(farm.events.includes('maestro-cleanup:ANDROID-A'))
     assert.equal(farm.inventory[0]?.owner, null)
+    assert.equal(farm.gridCalls, 0)
     await engine.stop()
   })
 
@@ -1022,8 +1161,6 @@ describe('coordinator Maestro allocation and cleanup', () => {
 })
 
 
-const maintenanceId = '34725f38-4b42-4c84-94d8-31eb3baa2478'
-const otherMaintenanceId = '71b30b15-1f08-4dfb-9126-761897aa9cc0'
 function iosFarm() {
   const farm = new FakeFarm()
   farm.inventory = [phone('IPHONE-A', {platform: 'iOS', version: '27.0.1'

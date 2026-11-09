@@ -5,10 +5,9 @@ STF coordinator lease. It supports Appium on Android/iOS and Maestro on physical
 Android. Test source, builds and reports remain in the application's CI project.
 The coordinator owns device allocation, global concurrency and cleanup.
 
-The package installs its own `stf` executable with `stf utils test run`; the STF
-server executable does not provide this namespace. Node.js 22.18 or newer is
-required. There is no public npm release; CI images should pin the source and
-image digest.
+The package installs its own `stf` executable with `stf autotest run`. Existing
+CI jobs can still use `stf utils test run`. Node.js 22.18 or newer is required.
+Build the standalone package from source and pin the source and CI image digest.
 
 ## Build the client
 
@@ -17,7 +16,7 @@ From this directory in a fresh checkout:
 ```sh
 npm ci --ignore-scripts --no-audit --no-fund
 npm run build
-node stf.mjs utils test run --help
+node stf.mjs autotest run --help
 ```
 
 The last command lists the client options without contacting a farm. The build
@@ -38,13 +37,13 @@ a CLI argument. `COORDINATOR_URL`,
 `COORDINATOR_TOKEN_FILE` and `COORDINATOR_TOKEN` are compatibility aliases.
 
 ```sh
-stf utils test run --runner appium --platform Android \
+stf autotest run --runner appium --platform Android \
   --run-id "android-${CI_JOB_ID}" -- ./gradlew test
 
-stf utils test run --runner appium --platform iOS \
+stf autotest run --runner appium --platform iOS \
   --run-id "ios-${CI_JOB_ID}" -- ./gradlew test
 
-stf utils test run --runner maestro --platform Android \
+stf autotest run --runner maestro --platform Android \
   --run-id "maestro-${CI_JOB_ID}" -- ./ci/maestro-test.sh
 ```
 

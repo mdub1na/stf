@@ -1,4 +1,5 @@
 import {spawn} from 'node:child_process'
+import {fileURLToPath} from 'node:url'
 
 const children = []
 let stopping = false
@@ -17,8 +18,8 @@ function stop(code) {
   })
 }
 for (const [command, args] of [
-  [process.execPath, ['/opt/stf-appium/wda-session-proxy.mjs']],
-  ['appium', ['--address', '0.0.0.0', '--port', '4723', '--use-drivers', 'xcuitest', '--default-capabilities', JSON.stringify({
+  [process.execPath, [fileURLToPath(new URL('wda-session-proxy.mjs', import.meta.url))]],
+  ['appium', ['--address', process.env.APPIUM_BIND_ADDRESS ?? '127.0.0.1', '--port', '4723', '--use-drivers', 'xcuitest', '--default-capabilities', JSON.stringify({
     'appium:webDriverAgentUrl': 'http://127.0.0.1:18101',
     'appium:skipLogCapture': true,
     'appium:autoLaunch': false

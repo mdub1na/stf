@@ -3,7 +3,7 @@ import {once} from 'node:events'
 import lifecycle from '../../util/lifecycle.js'
 import logger from '../../util/logger.js'
 import {HttpFarmBackend} from './backend.js'
-import {secret, validateOptions} from './config.js'
+import {CoordinatorError, secret, validateOptions} from './config.js'
 import {Coordinator} from './engine.js'
 import {createCoordinatorApp, attachCoordinatorAdb} from './http.js'
 import {CoordinatorAccess} from './access.js'
@@ -41,10 +41,13 @@ export default async function startCoordinator(options: CoordinatorOptions) {
   try {
     await engine.start()
   }
-  catch {
+  catch (error) {
     adb.close()
     server.closeAllConnections()
     server.close()
+    if (error instanceof CoordinatorError && error.code === 'appium_state_requires_grid') {
+      throw error
+    }
     throw new Error('Coordinator recovery failed; persistent state was preserved')
   }
   timer = setInterval(() => {

@@ -1,0 +1,50 @@
+{{- if .Values.appium.enabled -}}
+{{- $identity := dict "root" . "component" "appium-grid" -}}
+{{- $name := include "stf.name" $identity -}}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ $name }}
+  labels: {{ include "stf.labels" . | nindent 4 }}
+spec:
+  replicas: 1
+  strategy: {type: Recreate, rollingUpdate: null}
+  selector:
+    matchLabels: {{ include "stf.selector" $identity | nindent 6 }}
+  template:
+    metadata:
+      labels: {{ include "stf.podLabels" $identity | nindent 8 }}
+    spec:
+      enableServiceLinks: false
+      automountServiceAccountToken: false
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets: {{ toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: hub
+          image: {{ .Values.appium.gridImage | quote }}
+          ports:
+            - {name: http, containerPort: 4444}
+            - {name: publish, containerPort: 4442}
+            - {name: subscribe, containerPort: 4443}
+          startupProbe: {httpGet: {path: /status, port: http}, periodSeconds: 2, failureThreshold: 60}
+          readinessProbe: {httpGet: {path: /status, port: http}, periodSeconds: 5}
+          livenessProbe: {httpGet: {path: /status, port: http}, periodSeconds: 10}
+          resources:
+            requests: {cpu: 100m, memory: 256Mi}
+            limits: {cpu: '1', memory: 1Gi}
+          securityContext: {allowPrivilegeEscalation: false, capabilities: {drop: [ALL]}}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ $name }}
+  labels: {{ include "stf.labels" . | nindent 4 }}
+spec:
+  type: ClusterIP
+  selector: {{ include "stf.selector" $identity | nindent 4 }}
+  ports:
+    - {name: http, port: 4444, targetPort: http}
+    - {name: publish, port: 4442, targetPort: publish}
+    - {name: subscribe, port: 4443, targetPort: subscribe}
+{{- end }}

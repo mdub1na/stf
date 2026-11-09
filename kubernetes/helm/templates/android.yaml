@@ -4,7 +4,8 @@
 {{- $name := include "stf.name" (dict "root" $r "component" $component) -}}
 {{- $adb := include "stf.name" (dict "root" $r "component" (printf "adb-%s" .name)) -}}
 {{- $external := default dict .externalAdb -}}
-{{- $adbHost := default $adb $external.host -}}
+{{- $pool := include "stf.androidPool" (dict "root" $r "provider" .) | fromJson -}}
+{{- $appium := and $r.Values.appium.enabled .appium -}}
 {{- $min := int (default 7400 .minPort) -}}
 {{- $capacity := int (default 8 .capacity) -}}
 {{- $max := int (default (sub (add $min (mul 4 $capacity)) 1) .maxPort) -}}
@@ -51,8 +52,8 @@ spec:
             - {{ . | quote }}
             {{- end }}
             - --name={{ $name }}
-            - --adb-host={{ $adbHost }}
-            - --adb-port={{ default 5037 $external.port }}
+            - --adb-host={{ $pool.host }}
+            - --adb-port={{ $pool.port }}
             - --public-ip={{ regexReplaceAll ":[0-9]+$" (urlParse $r.Values.publicOrigin).host "" }}
             - --min-port={{ $min }}
             - --max-port={{ $max }}
@@ -133,6 +134,82 @@ metadata:
   name: {{ $adb }}
 spec:
   selector: {{ include "stf.selector" (dict "root" $r "component" (printf "adb-%s" .name)) | nindent 4 }}
+  {{- if $appium }}
+  ports:
+    - {name: adb, port: 5037, targetPort: adb}
+    {{- range $pool.systemPorts }}
+    - {name: appium-{{ . }}, port: {{ . }}, targetPort: {{ . }}}
+    {{- end }}
+  {{- else }}
   ports: [{name: adb, port: 5037, targetPort: adb}]
+  {{- end }}
+{{- end }}
+{{- if $appium }}
+{{- $identity := dict "root" $r "component" (printf "appium-android-%s" .name) -}}
+{{- $appiumName := include "stf.name" $identity -}}
+{{- $stereotype := dict "platformName" "Android" "appium:automationName" "UiAutomator2" "appium:remoteAdbHost" $pool.host "appium:adbPort" $pool.port -}}
+{{- $relayConfig := include "stf.appiumRelayConfig" (dict "stereotype" $stereotype "port" 4723) -}}
+{{- $probe := list "node" "-e" "fetch('http://127.0.0.1:4723/status').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))" -}}
+{{- $nodeSelector := deepCopy (default dict $appium.nodeSelector) -}}
+{{- with $r.Values.appium.nodeArchitecture -}}
+  {{- $_ := set $nodeSelector "kubernetes.io/arch" . -}}
+{{- end -}}
+{{ printf "\n---\n" }}apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ $appiumName }}
+  labels: {{ include "stf.labels" $r | nindent 4 }}
+data:
+  node.toml: |
+    {{- $relayConfig | nindent 4 }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ $appiumName }}
+  labels: {{ include "stf.labels" $r | nindent 4 }}
+spec:
+  replicas: {{ default 1 $appium.replicas }}
+  selector:
+    matchLabels: {{ include "stf.selector" $identity | nindent 6 }}
+  template:
+    metadata:
+      labels: {{ merge (dict "stf-appium-relay" "true") (include "stf.podLabels" $identity | fromYaml) | toYaml | nindent 8 }}
+      annotations:
+        checksum/relay-config: {{ $relayConfig | sha256sum }}
+    spec:
+      enableServiceLinks: false
+      automountServiceAccountToken: false
+      {{- with $nodeSelector }}
+      nodeSelector: {{ toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with $appium.tolerations }}
+      tolerations: {{ toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with $r.Values.imagePullSecrets }}
+      imagePullSecrets: {{ toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: appium
+          image: {{ include "stf.image" $r.Values.appium.image | quote }}
+          imagePullPolicy: {{ $r.Values.appium.image.pullPolicy }}
+          command: [appium]
+          args:
+            - --address=127.0.0.1
+            - --port=4723
+            - --use-drivers=uiautomator2
+            - '--default-capabilities={"appium:suppressKillServer":true,"appium:skipLogcatCapture":true}'
+          env:
+            - {name: ANDROID_ADB_SERVER_HOST, value: {{ $pool.host | quote }}}
+            - {name: ANDROID_ADB_SERVER_PORT, value: {{ $pool.port | quote }}}
+            - {name: ADB_SERVER_SOCKET, value: {{ printf "tcp:%s:%v" $pool.host $pool.port | quote }}}
+          startupProbe: {exec: {command: {{ $probe | toJson }}}, periodSeconds: 2, failureThreshold: 60}
+          readinessProbe: {exec: {command: {{ $probe | toJson }}}, periodSeconds: 5}
+          resources: {{ toYaml $r.Values.appium.resources | nindent 12 }}
+          securityContext: {allowPrivilegeEscalation: false, capabilities: {drop: [ALL]}}
+        {{- include "stf.appiumRelay" (dict "root" $r) | nindent 8 }}
+      volumes:
+        - name: appium-relay-config
+          configMap: {name: {{ $appiumName }}}
 {{- end }}
 {{- end }}

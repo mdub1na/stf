@@ -53,6 +53,71 @@ app.kubernetes.io/component: {{ .component | quote }}
     secretKeyRef: {name: {{ .Values.database.external.existingSecret | quote }}, key: {{ .Values.database.external.authKeyKey | quote }}}
 {{- end }}
 {{- end -}}
+{{- define "stf.coordinatorAdbPools" -}}
+{{- $pools := .Values.coordinator.adbPools -}}
+{{- if not $pools -}}
+  {{- range .Values.android.providers -}}
+    {{- $pools = append $pools (include "stf.androidPool" (dict "root" $ "provider" .) | fromJson) -}}
+  {{- end -}}
+{{- end -}}
+{{- toJson $pools -}}
+{{- end -}}
+{{- define "stf.androidPool" -}}
+{{- $provider := include "stf.name" (dict "root" .root "component" (printf "android-%s" .provider.name)) -}}
+{{- $adb := include "stf.name" (dict "root" .root "component" (printf "adb-%s" .provider.name)) -}}
+{{- $external := default dict .provider.externalAdb -}}
+{{- $systemPorts := list -}}
+{{- if and .root.Values.appium.enabled .provider.appium -}}
+  {{- $systemPorts = .provider.appium.systemPorts -}}
+{{- end -}}
+{{- toJson (dict "provider" $provider "host" (default $adb $external.host) "port" (default 5037 $external.port) "systemPorts" $systemPorts) -}}
+{{- end -}}
+{{- define "stf.appiumGridUrl" -}}
+{{- if .Values.appium.enabled -}}
+  {{- printf "http://%s:4444" (include "stf.name" (dict "root" . "component" "appium-grid")) -}}
+{{- else -}}
+  {{- .Values.coordinator.appiumGridUrl -}}
+{{- end -}}
+{{- end -}}
+{{- define "stf.appiumRelayConfig" -}}
+[server]
+port = 6666
+
+[node]
+detect-drivers = false
+max-sessions = 1
+
+[relay]
+url = "http://127.0.0.1:{{ .port }}"
+status-endpoint = "/status"
+configs = ["1", {{ .stereotype | toJson | quote }}]
+{{- end -}}
+{{- define "stf.appiumRelay" -}}
+- name: relay
+  image: {{ .root.Values.appium.relayImage | quote }}
+  command: [java, -jar, /opt/selenium/selenium-server.jar, node]
+  args:
+    - --host
+    - $(POD_IP)
+    - --hub
+    - {{ include "stf.appiumGridUrl" .root | quote }}
+    - --config
+    - /opt/stf-relay/node.toml
+  env:
+    - name: POD_IP
+      valueFrom:
+        fieldRef: {fieldPath: status.podIP}
+  ports: [{name: relay, containerPort: 6666}]
+  {{- if not .sidecar }}
+  readinessProbe: {httpGet: {path: /status, port: relay}, periodSeconds: 5}
+  {{- end }}
+  resources:
+    requests: {cpu: 25m, memory: 128Mi}
+    limits: {cpu: 500m, memory: 512Mi}
+  securityContext: {allowPrivilegeEscalation: false, capabilities: {drop: [ALL]}}
+  volumeMounts:
+    - {name: appium-relay-config, mountPath: /opt/stf-relay, readOnly: true}
+{{- end -}}
 {{- define "stf.waitMigration" -}}
 {{- if .Values.migration.enabled -}}
 - name: wait-migration

@@ -5,7 +5,7 @@ import {runTest} from './run.mts'
 import {RunnerError} from './types.mts'
 import type {Allocation, Runner} from './types.mts'
 
-const help = `Usage: stf utils test run --runner appium|maestro --platform Android|iOS [options] -- COMMAND [ARGS...]
+const help = `Usage: stf autotest run --runner appium|maestro --platform Android|iOS [options] -- COMMAND [ARGS...]
 
 The repository command runs with one coordinator lease and a private STF_CONNECTION_FILE.
 Appium receives APPIUM_SERVER_URL and APPIUM_CAPABILITIES_JSON.
@@ -42,18 +42,18 @@ export async function main(argv: string[]): Promise<number> {
     process.stdout.write(`${metadata.version}\n`)
     return 0
   }
-  const namespace = ['utils', 'test', 'run']
-  if (argv.length < 3 && argv.every((part, index) => part === namespace[index]) ||
-      argv.length === 1 && ['--help', '-h'].includes(argv[0]!)) {
+  const [namespace, action, ...args] = argv[0] === 'utils' && (argv.length === 1 || argv[1] === 'test')
+    ? ['autotest', ...argv.slice(2)] : argv
+  if (namespace === undefined || argv.length === 1 && (namespace === '--help' || namespace === '-h')) {
     process.stdout.write(help)
     return 0
   }
-  if (argv[0] !== 'utils' || argv[1] !== 'test') throw new RunnerError('Unknown command. Run stf --help for usage.')
-  if (argv[2] === '--help' || argv[2] === '-h') { process.stdout.write(help); return 0 }
-  if (argv[2] !== 'run') throw new RunnerError('Unknown test command. Run stf utils test run --help for usage.')
-  const separator = argv.indexOf('--', 3)
-  const options = separator < 0 ? argv.slice(3) : argv.slice(3, separator)
-  const command = separator < 0 ? [] : argv.slice(separator + 1)
+  if (namespace !== 'autotest') throw new RunnerError('Unknown command. Run stf --help for usage.')
+  if (action === undefined || action === '--help' || action === '-h') { process.stdout.write(help); return 0 }
+  if (action !== 'run') throw new RunnerError('Unknown autotest command. Run stf autotest --help for usage.')
+  const separator = args.indexOf('--')
+  const options = separator < 0 ? args : args.slice(0, separator)
+  const command = separator < 0 ? [] : args.slice(separator + 1)
   let parsed
   try {
     parsed = parseArgs({args: options, strict: true, options: {
@@ -64,7 +64,7 @@ export async function main(argv: string[]): Promise<number> {
       'cleanup-timeout': {type: 'string'}, help: {type: 'boolean', short: 'h'}
     }})
   }
-  catch { throw new RunnerError('Invalid arguments. Run stf utils test run --help; tokens belong in a private file or environment.') }
+  catch { throw new RunnerError('Invalid arguments. Run stf autotest run --help; tokens belong in a private file or environment.') }
   const value = parsed.values
   if (value.help) { process.stdout.write(help); return 0 }
   const runner = value.runner as Runner | undefined

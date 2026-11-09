@@ -17,6 +17,10 @@
               {
                 "name": "APPIUM_HOME",
                 "value": "/tmp/stf-ios-appium"
+              },
+              {
+                "name": "APPIUM_BIND_ADDRESS",
+                "value": "0.0.0.0"
               }
             ],
             "ports": [

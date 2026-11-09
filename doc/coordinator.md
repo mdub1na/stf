@@ -8,9 +8,11 @@ WebDriver routing and node slots.
 
 This is a single-instance prototype with project-scoped credentials and quotas.
 Appium supports the farm's Android and iOS nodes; Maestro supports physical Android.
+Appium leases require an Appium Grid. A Maestro-only coordinator uses STF and the
+Android provider's ADB service.
 There is no coordinator web UI, user-role migration or test execution engine.
-The deployment is opt-in and is not added to the farm GitOps root. Short hardware
-validation does not establish multi-hour reliability; record that separately.
+The service is opt-in. Install it with the [STF Helm chart](../kubernetes/helm/README.md)
+or run `stf coordinator` directly.
 
 The iOS signing guard and operator-only persistent device drains are documented
 in [Personal Team WDA renewal](../tools/wda-renewal/README.md). They require the
@@ -30,7 +32,8 @@ STF viewer -------------------------------------------------------> live screen
 
 The portable worker client and GitLab Kubernetes runner deployment are described
 in [CI workers beside the farm](ci-runners.md). Code in another repository uses
-`stf utils test run`, not the server's STF credential or the shared pool ADB port.
+`stf autotest run` with a project credential. Only the coordinator accesses the
+shared pool ADB port.
 
 ## Project credentials and typed connections
 
@@ -357,6 +360,13 @@ on one remote host need distinct `systemPort` values; separate remote hosts
 can reuse the same number. Coordinator port reservations survive restart and
 are held through cleanup/quarantine.
 
+For Maestro-only deployments, set `systemPorts` to `[]` in each pool. Maestro
+still needs the provider name and ADB host and port. With Grid enabled, pools
+with an empty list remain available to Maestro. When Appium pools share a host
+with different ADB ports, each matching Grid relay must advertise `appium:adbPort`
+explicitly. The coordinator sets `appium:suppressKillServer` on Appium sessions
+to protect the shared ADB server.
+
 A direct STF/Appium run is outside this allocator and can use the same ADB
 host. During the prototype, use coordinator-only phones/pools or otherwise
 ensure direct runs do not overlap its devices and port range. Do not infer
@@ -402,6 +412,15 @@ start. `--host` defaults to `127.0.0.1`, port to `8080`, and public URL to
 Every CLI option supports the `STF_COORDINATOR_` environment prefix, for example
 `STF_COORDINATOR_MAX_PARALLEL=2`. Token settings always name files; there is no
 plaintext `--api-token` or `--stf-token` option.
+
+Omit `--appium-grid-url` for Maestro-only operation. Request `runner: maestro`
+explicitly. The default runner is Appium, and disabled Appium requests return
+HTTP 409 with `runner_disabled`. Before removing Grid from an existing deployment,
+cancel queued Appium requests and clean up all Appium leases with the original
+Grid still connected. Startup without Grid fails while any Appium lease still
+requires cleanup. Remaining queued Appium requests fail on startup, and lease
+history and any iOS maintenance drains stay in the state file. Starting or
+completing a WDA maintenance drain requires Grid.
 
 To inspect authenticated APIs without putting tokens in command arguments,
 create a private curl configuration from the token file:

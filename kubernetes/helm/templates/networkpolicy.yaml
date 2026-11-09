@@ -12,6 +12,11 @@ spec:
   podSelector:
     matchLabels:
       app.kubernetes.io/instance: {{ .Release.Name | quote }}
+    {{- if .Values.appium.enabled }}
+    matchExpressions:
+      - {key: app.kubernetes.io/component, operator: NotIn, values: [appium-grid]}
+      - {key: stf-appium-relay, operator: NotIn, values: ["true"]}
+    {{- end }}
   policyTypes: [Ingress]
   ingress:
     - from: [{{ toJson $release }}]
@@ -51,5 +56,58 @@ spec:
   ingress:
     - ports: [{protocol: TCP, port: pub}, {protocol: TCP, port: pull}]
       from: {{ toJson . }}
+{{- end }}
+{{- if and .Values.coordinator.enabled .Values.networkPolicy.coordinatorFrom }}
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "stf.name" (dict "root" . "component" "coordinator") }}
+  labels: {{ include "stf.labels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/instance: {{ .Release.Name | quote }}
+      app.kubernetes.io/component: coordinator
+  policyTypes: [Ingress]
+  ingress:
+    - ports: [{protocol: TCP, port: http}]
+      from: {{ toJson .Values.networkPolicy.coordinatorFrom }}
+{{- end }}
+{{- if .Values.appium.enabled }}
+{{- $instance := dict "app.kubernetes.io/instance" .Release.Name -}}
+{{- $hub := dict "podSelector" (dict "matchLabels" (merge (dict "app.kubernetes.io/component" "appium-grid") $instance)) -}}
+{{- $relay := dict "podSelector" (dict "matchLabels" (merge (dict "stf-appium-relay" "true") $instance)) -}}
+{{- $coordinator := dict "podSelector" (dict "matchLabels" (merge (dict "app.kubernetes.io/component" "coordinator") $instance)) -}}
+{{- $proxy := dict "podSelector" (dict "matchLabels" (merge (dict "app.kubernetes.io/component" "proxy") $instance)) }}
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "stf.name" (dict "root" . "component" "appium-grid") }}
+  labels: {{ include "stf.labels" . | nindent 4 }}
+spec:
+  podSelector: {{ toJson $hub.podSelector }}
+  policyTypes: [Ingress]
+  ingress:
+    - from: [{{ toJson $coordinator }}]
+      ports: [{protocol: TCP, port: 4444}]
+    - from: [{{ toJson $relay }}]
+      ports: [{protocol: TCP, port: 4442}, {protocol: TCP, port: 4443}, {protocol: TCP, port: 4444}]
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "stf.name" (dict "root" . "component" "appium-relays") }}
+  labels: {{ include "stf.labels" . | nindent 4 }}
+spec:
+  podSelector: {{ toJson $relay.podSelector }}
+  policyTypes: [Ingress]
+  ingress:
+    - from: [{{ toJson $hub }}]
+      ports: [{protocol: TCP, port: 6666}]
+    # iOS relays share the provider pod with the STF screen endpoint.
+    - from: [{{ toJson $proxy }}]
+      ports: [{protocol: TCP, port: 17440}]
 {{- end }}
 {{- end }}

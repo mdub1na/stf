@@ -28,13 +28,12 @@ interface OAuth2AuthOptions {
   oauth: ConstructorParameters<typeof Strategy>[0]
 }
 
-export default function(options: OAuth2AuthOptions) {
+export function createApp(options: OAuth2AuthOptions) {
   if (options.oauth.state !== true) {
     throw new Error('OAuth authentication requires state: true')
   }
   var log = logger.createLogger('auth-oauth2')
   var app = express()
-  var server = http.createServer(app)
   var authentication = new passport.Passport()
   var stateMaxAge = 10 * 60 * 1000
 
@@ -163,6 +162,12 @@ export default function(options: OAuth2AuthOptions) {
     res.sendStatus(500)
   })
 
+  return app
+}
+
+export default function(options: OAuth2AuthOptions) {
+  var log = logger.createLogger('auth-oauth2')
+  var server = http.createServer(createApp(options))
   server.listen(options.port)
   log.info('Listening on port %d', options.port)
   return server

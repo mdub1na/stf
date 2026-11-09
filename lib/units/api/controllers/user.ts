@@ -37,6 +37,7 @@ function getUser(req: ApiRequest, res: Response) {
   // delete req.user.groups.lock
   res.json({
     success: true
+  , description: 'User Profile'
   , user: req.user
   })
 }

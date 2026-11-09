@@ -180,7 +180,8 @@ export default function(options: WebsocketOptions) {
         serveClient: false
       , transports: ['websocket']
       })
-  var channelRouter = new events.EventEmitter()
+  var channelRouter = options.channelRouter || new events.EventEmitter()
+  channelRouter.setMaxListeners(0)
 
   // Output
   var push = zmqutil.socket('push')
@@ -240,21 +241,37 @@ export default function(options: WebsocketOptions) {
   io.on('connection', function(socket) {
     var req = socket.request as WebsocketRequest
     var user = req.user
-    var channels: string[] = []
+    const channels = new Set<string>()
     var messageListener: MessageListener
 
-    const gestures = new Map<string, AuthorizedInput>()
+    const cleanupFences = new Map<string, {channel: string, identity: AuthorizedInput}>()
     const authorizedInput = new WeakMap<object, AuthorizedInput>()
     const inputIdentity = (data: object): AuthorizedInput =>
       authorizedInput.get(data) || {gestureId: null, reservationId: null}
-    const resetGesture = (channel: string, identity = gestures.get(channel)) => {
+    const fenceKey = (channel: string, identity: AuthorizedInput) =>
+      JSON.stringify([channel, identity.reservationId, identity.gestureId?.split(':')[0]])
+    const cancelGesture = (channel: string, identity: AuthorizedInput) => {
+      push.send([channel, wireutil.envelope(new wire.TouchResetMessage({
+        seq: 0, ...identity, cancel: true, cancelThrough: true
+      }))])
+    }
+    const resetGesture = (channel: string, identity?: AuthorizedInput) => {
       if (identity) {
-        if (gestures.get(channel)?.gestureId === identity.gestureId) {
-          gestures.delete(channel)
+        const key = fenceKey(channel, identity)
+        const latest = cleanupFences.get(key)
+        if (!latest || Number(latest.identity.gestureId?.split(':')[1]) <=
+            Number(identity.gestureId?.split(':')[1])) {
+          cleanupFences.delete(key)
         }
-        push.send([channel, wireutil.envelope(new wire.TouchResetMessage({
-          seq: 0, ...identity, cancel: true
-        }))])
+        cancelGesture(channel, identity)
+      }
+      else {
+        for (const [key, fence] of [...cleanupFences]) {
+          if (fence.channel === channel) {
+            cleanupFences.delete(key)
+            cancelGesture(channel, fence.identity)
+          }
+        }
       }
     }
     const deviceAccess = new DevicePacketAccess(dbapi.loadDeviceByChannel, dbapi.loadDeviceBySerial)
@@ -273,6 +290,17 @@ export default function(options: WebsocketOptions) {
       if (data && typeof data === 'object') {
         authorizedInput.set(data, identity)
       }
+      if (packet[0] === 'input.gestureStart' && typeof packet[1] === 'string' &&
+          identity.gestureId) {
+        const key = fenceKey(packet[1], identity)
+        cleanupFences.delete(key)
+        cleanupFences.set(key, {channel: packet[1], identity})
+        if (cleanupFences.size > 128) {
+          const oldest = cleanupFences.values().next().value!
+          cleanupFences.delete(fenceKey(oldest.channel, oldest.identity))
+          cancelGesture(oldest.channel, oldest.identity)
+        }
+      }
     }}))
     socket.on('error', error => log.warn('Socket request rejected: %s', error.message))
 
@@ -280,15 +308,23 @@ export default function(options: WebsocketOptions) {
     socket.emit('socket.ip', user.ip)
 
     function joinChannel(channel: string) {
-      channels.push(channel)
-      channelRouter.on(channel, messageListener)
-      sub.subscribe(channel)
+      if (channel && channel !== wireutil.global && !channels.has(channel)) {
+        channels.add(channel)
+        if (channelRouter.listenerCount(channel) === 0) {
+          sub.subscribe(channel)
+        }
+        channelRouter.on(channel, messageListener)
+      }
     }
 
     function leaveChannel(channel: string) {
-      _.pull(channels, channel)
-      channelRouter.removeListener(channel, messageListener)
-      sub.unsubscribe(channel)
+      if (channel && channels.has(channel)) {
+        channels.delete(channel)
+        channelRouter.removeListener(channel, messageListener)
+        if (channel !== wireutil.global && channelRouter.listenerCount(channel) === 0) {
+          sub.unsubscribe(channel)
+        }
+      }
     }
 
     function createKeyHandler(Klass: new(key: string) => WireEnvelopeMessage) {
@@ -796,9 +832,7 @@ export default function(options: WebsocketOptions) {
           ])
         })
         .on('input.gestureStart', function(channel, data) {
-          resetGesture(channel)
           const identity = inputIdentity(data)
-          gestures.set(channel, identity)
           push.send([
             channel
           , wireutil.envelope(new wire.GestureStartMessage({seq: data.seq, ...identity}))
@@ -806,9 +840,8 @@ export default function(options: WebsocketOptions) {
         })
         .on('input.gestureStop', function(channel, data) {
           const identity = inputIdentity(data)
-          if (gestures.get(channel)?.gestureId === identity.gestureId) {
-            gestures.delete(channel)
-          }
+          // Dispatch does not acknowledge completion at the provider. Keep the
+          // source fence so disconnect also cancels buffered, already sent gestures.
           push.send([
             channel
           , wireutil.envelope(new wire.GestureStopMessage({seq: data.seq, ...identity}))
@@ -1295,16 +1328,23 @@ export default function(options: WebsocketOptions) {
         })
     })
     .finally(function() {
-      for (const channel of gestures.keys()) {
+      const cleanupChannels = new Set([...cleanupFences.values()].map(fence => fence.channel))
+      for (const channel of cleanupChannels) {
         resetGesture(channel)
       }
       // Clean up all listeners and subscriptions
       channelRouter.removeListener(wireutil.global, messageListener)
       channels.forEach(function(channel) {
         channelRouter.removeListener(channel, messageListener)
-        sub.unsubscribe(channel)
+        if (channel !== wireutil.global && channelRouter.listenerCount(channel) === 0) {
+          sub.unsubscribe(channel)
+        }
       })
+      channels.clear()
       socket.disconnect(true)
+      if (typeof socket.removeAllListeners === 'function') {
+        socket.removeAllListeners()
+      }
     })
     .catch(function(err) {
       // Cannot guarantee integrity of client
@@ -1329,4 +1369,10 @@ export default function(options: WebsocketOptions) {
 
   server.listen(options.port)
   log.info('Listening on port %d', options.port)
+
+  return {
+    server
+  , io
+  , channelRouter
+  }
 }

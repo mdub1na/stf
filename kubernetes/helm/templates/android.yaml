@@ -149,6 +149,7 @@ spec:
 {{- $appiumName := include "stf.name" $identity -}}
 {{- $stereotype := dict "platformName" "Android" "appium:automationName" "UiAutomator2" "appium:remoteAdbHost" $pool.host "appium:adbPort" $pool.port -}}
 {{- $relayConfig := include "stf.appiumRelayConfig" (dict "stereotype" $stereotype "port" 4723) -}}
+{{- $logcatProbe := $r.Files.Get "files/appium/logcat-probe.mjs" -}}
 {{- $probe := list "node" "-e" "fetch('http://127.0.0.1:4723/status').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))" -}}
 {{- $nodeSelector := deepCopy (default dict $appium.nodeSelector) -}}
 {{- with $r.Values.appium.nodeArchitecture -}}
@@ -162,6 +163,8 @@ metadata:
 data:
   node.toml: |
     {{- $relayConfig | nindent 4 }}
+  logcat-probe.mjs: |
+    {{- $logcatProbe | nindent 4 }}
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -176,7 +179,7 @@ spec:
     metadata:
       labels: {{ merge (dict "stf-appium-relay" "true") (include "stf.podLabels" $identity | fromYaml) | toYaml | nindent 8 }}
       annotations:
-        checksum/relay-config: {{ $relayConfig | sha256sum }}
+        checksum/relay-config: {{ printf "%s\n%s" $relayConfig $logcatProbe | sha256sum }}
     spec:
       enableServiceLinks: false
       automountServiceAccountToken: false
@@ -193,12 +196,12 @@ spec:
         - name: appium
           image: {{ include "stf.image" $r.Values.appium.image | quote }}
           imagePullPolicy: {{ $r.Values.appium.image.pullPolicy }}
-          command: [appium]
+          command: [sh, -ec]
           args:
-            - --address=127.0.0.1
-            - --port=4723
-            - --use-drivers=uiautomator2
-            - '--default-capabilities={"appium:suppressKillServer":true,"appium:skipLogcatCapture":true}'
+            - |
+              skip_logcat=$(node /opt/stf-appium/logcat-probe.mjs)
+              exec appium --address=127.0.0.1 --port=4723 --use-drivers=uiautomator2 \
+                --default-capabilities="{\"appium:suppressKillServer\":true,\"appium:skipLogcatCapture\":${skip_logcat}}"
           env:
             - {name: ANDROID_ADB_SERVER_HOST, value: {{ $pool.host | quote }}}
             - {name: ANDROID_ADB_SERVER_PORT, value: {{ $pool.port | quote }}}
@@ -207,6 +210,7 @@ spec:
           readinessProbe: {exec: {command: {{ $probe | toJson }}}, periodSeconds: 5}
           resources: {{ toYaml $r.Values.appium.resources | nindent 12 }}
           securityContext: {allowPrivilegeEscalation: false, capabilities: {drop: [ALL]}}
+          volumeMounts: [{name: appium-relay-config, mountPath: /opt/stf-appium, readOnly: true}]
         {{- include "stf.appiumRelay" (dict "root" $r) | nindent 8 }}
       volumes:
         - name: appium-relay-config

@@ -190,7 +190,11 @@ android:
 
 Each relay handles one session. The chart adds the selected ports to its Android ADB Service. For an external ADB server, make its configured `systemPorts` and ADB control port reachable from the relays. Pools sharing an ADB host need disjoint `systemPorts`. Android providers without an `appium` entry continue to serve Maestro.
 
-The bundled Android Appium server disables automatic logcat capture by default. This avoids a driver subprocess crash during session teardown. Appium log commands require logcat capture.
+The bundled Android Appium server checks whether it can stop a child process
+before enabling automatic logcat capture. When the runtime denies the signal,
+Appium disables capture to avoid a driver crash during session teardown.
+Appium log commands require capture. Keep the session default on affected
+nodes. See the [containerd AppArmor issue](https://github.com/containerd/containerd/issues/14485).
 
 To add an iPhone, set `appium: {platformVersion: '27.0.1'}` on its `ios.devices` entry, using the exact version reported by STF. After an iOS update, update this value to refresh the Grid slot. Appium and its relay share the provider pod. They reuse the running STF WDA session, so WDA must be signed, installed and trusted as described under USB providers. The device's pairing state stays on its existing claim.
 

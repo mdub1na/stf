@@ -9,7 +9,7 @@ import {createCoordinatorApp, attachCoordinatorAdb} from '../../lib/units/coordi
 import {CoordinatorAccess} from '../../lib/units/coordinator/access.js'
 import {adbRequest} from '../../lib/units/coordinator/adb-bridge.js'
 import type {StateStore} from '../../lib/units/coordinator/state.js'
-import type {CoordinatorOptions, CoordinatorState, FarmDevice, GridStatus} from
+import type {CoordinatorOptions, CoordinatorState, FarmDevice, GridSlot, GridStatus} from
   '../../lib/units/coordinator/types.js'
 
 const apiToken = 'coordinator-test-token-'.repeat(2)
@@ -90,6 +90,8 @@ describe('coordinator HTTP and real upstream adapters', function() {
     const stfCalls: UpstreamCall[] = []
     const gridCalls: typeof stfCalls = []
     let nextSession = 0
+    let lagNextSessionDeletion = false
+    let pendingSlotRetirement: GridSlot | undefined
     let inventoryFails = false
     let inventoryPause: {entered: ReturnType<typeof deferred>
       , release: ReturnType<typeof deferred>} | null = null
@@ -158,7 +160,13 @@ describe('coordinator HTTP and real upstream adapters', function() {
       const body = await jsonBody(req)
       gridCalls.push({method: req.method!, route, body, headers: req.headers})
       if (route === '/status') {
-        return reply(res, {value: grid})
+        reply(res, {value: grid})
+        if (pendingSlotRetirement) {
+          pendingSlotRetirement.session = null
+          pendingSlotRetirement = undefined
+          grid.ready = true
+        }
+        return
       }
       if (route === '/session' && req.method === 'POST') {
         const slot = grid.nodes.flatMap(node => node.slots).find(item => !item.session)!
@@ -173,7 +181,13 @@ describe('coordinator HTTP and real upstream adapters', function() {
         return reply(res, {value: {error: 'invalid session id', message: 'Unknown session'}}, 404)
       }
       if (req.method === 'DELETE' && !session![2]) {
-        slot.session = null
+        if (lagNextSessionDeletion) {
+          lagNextSessionDeletion = false
+          pendingSlotRetirement = slot
+        }
+        else {
+          slot.session = null
+        }
         return reply(res, {value: null})
       }
       return reply(res, {value: session![2] === '/source' ? '<App/>' : null})
@@ -224,6 +238,10 @@ describe('coordinator HTTP and real upstream adapters', function() {
       return lease.body.lease
     }
     return {engine, backend, store, devices, grid, stfCalls, gridCalls, url, call, allocate
+      , lagSessionDeletion() {
+        grid.ready = false
+        lagNextSessionDeletion = true
+      }
       , advance(milliseconds: number) {
  time += milliseconds
 }
@@ -398,6 +416,7 @@ describe('coordinator HTTP and real upstream adapters', function() {
 
   it('runs W3C sessions, heartbeat and fenced cleanup over HTTP', async function() {
     const f = await fixture()
+    f.grid.nodes.splice(1)
     const lease = await f.allocate()
     const gateway = '/api/v1/leases/' + lease.id + '/webdriver'
     const created = await f.call(gateway + '/session', 'POST', {capabilities: {
@@ -414,7 +433,10 @@ describe('coordinator HTTP and real upstream adapters', function() {
     const renewed = await f.call('/api/v1/leases/' + lease.id + '/renew', 'POST', {})
     assert.equal(renewed.status, 200)
     assert.ok(Date.parse(renewed.body.lease.expiresAt) > Date.parse(lease.expiresAt))
+    const observations = f.gridCalls.filter(item => item.route === '/status').length
+    f.lagSessionDeletion()
     assert.equal((await f.call(gateway + '/session/' + session, 'DELETE')).status, 200)
+    assert.equal(f.gridCalls.filter(item => item.route === '/status').length, observations + 2)
     assert.equal((await f.call('/api/v1/leases/' + lease.id, 'DELETE')).status, 202)
     await f.engine.tick()
     assert.equal((await f.call('/api/v1/leases/' + lease.id)).body.lease.state, 'released')

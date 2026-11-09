@@ -175,9 +175,14 @@ class ChartTest(unittest.TestCase):
         android = obj(items, 'Deployment', 'stf-appium-android-usb')['spec']
         self.assertEqual(android['replicas'], 2)
         appium = next(c for c in android['template']['spec']['containers'] if c['name'] == 'appium')
-        defaults = next(arg for arg in appium['args'] if arg.startswith('--default-capabilities='))
-        self.assertEqual(json.loads(defaults.split('=', 1)[1]), {
-            'appium:suppressKillServer': True, 'appium:skipLogcatCapture': True})
+        self.assertEqual(appium['command'], ['sh', '-ec'])
+        self.assertIn('node /opt/stf-appium/logcat-probe.mjs', appium['args'][0])
+        self.assertIn('exec appium --address=127.0.0.1 --port=4723', appium['args'][0])
+        self.assertIn(r'\"appium:skipLogcatCapture\":${skip_logcat}', appium['args'][0])
+        self.assertIn({'name': 'appium-relay-config', 'mountPath': '/opt/stf-appium', 'readOnly': True},
+                      appium['volumeMounts'])
+        probe = obj(items, 'ConfigMap', 'stf-appium-android-usb')['data']['logcat-probe.mjs']
+        self.assertEqual(probe.strip(), (CHART / 'files/appium/logcat-probe.mjs').read_text().strip())
         pools = json.loads(obj(items, 'ConfigMap', 'stf-coordinator-adb-pools')['data']['adb-pools.json'])
         self.assertEqual([p['systemPorts'] for p in pools], [[8200, 8201], []])
         for deployment, configmap, stereotype in [

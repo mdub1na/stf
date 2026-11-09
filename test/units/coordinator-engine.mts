@@ -754,6 +754,82 @@ describe('coordinator session isolation and uncertain cleanup', () => {
     assert.equal(engine.leaseView(lease.id).state, 'released')
   })
 
+  it('confirms an explicit WebDriver DELETE before accepting a new session', async() => {
+    const {engine, allocate, create, farm, store} = await fixture()
+    const lease = await allocate()
+    const session = await create(lease.id)
+    farm.retainDeletedSession = true
+    farm.slots.ready = false
+    let observations = 0
+    const readGrid = farm.grid.bind(farm)
+    farm.grid = async({allowBusy = false}: {allowBusy?: boolean} = {}) => {
+      assert.equal(allowBusy, true)
+      assert.equal(store.state.leases[0]!.sessionId, session)
+      if (++observations === 2) {
+        farm.slots.nodes[0]!.slots[0]!.session = null
+      }
+      return readGrid()
+    }
+    const closed = await engine.webdriver(lease.id, 'DELETE', '/session/' + session)
+    assert.equal(closed.status, 200)
+    assert.equal(observations, 2)
+    assert.equal(store.state.leases[0]!.sessionId, undefined)
+    assert.notEqual(await create(lease.id), session)
+  })
+
+  it('waits for an explicit session close before releasing the device', async() => {
+    const {engine, allocate, create, farm, store} = await fixture()
+    const lease = await allocate()
+    const session = await create(lease.id)
+    const observing = deferred()
+    const retired = deferred()
+    const readGrid = farm.grid.bind(farm)
+    farm.grid = async() => {
+      observing.resolve()
+      await retired.promise
+      return readGrid()
+    }
+    const route = '/session/' + session
+    const closing = engine.webdriver(lease.id, 'DELETE', route).catch(error => error)
+    await observing.promise
+    try {
+      await engine.release(lease.id)
+      await engine.tick()
+      assert.equal(engine.leaseView(lease.id).state, 'cleaning')
+      assert.equal(store.state.leases[0]!.sessionId, session)
+      assert.equal(farm.inventory[0]!.automationLeaseId, lease.id)
+      assert.equal(farm.webdriverCalls.filter(call => call.method === 'DELETE' &&
+        call.route === route).length, 1)
+    }
+    finally {
+      retired.resolve()
+    }
+    assert.ok(await closing instanceof CoordinatorError)
+    await engine.tick()
+    assert.equal(engine.leaseView(lease.id).state, 'released')
+    assert.equal(farm.inventory[0]!.owner, null)
+    assert.equal(farm.webdriverCalls.filter(call => call.method === 'DELETE' &&
+      call.route === route).length, 1)
+  })
+
+  it('retains the session for recovery when explicit close cannot be confirmed', async() => {
+    const {engine, allocate, create, farm, store} = await fixture()
+    const lease = await allocate()
+    const session = await create(lease.id)
+    farm.gridError = true
+    await rejectCode(engine.webdriver(lease.id, 'DELETE', '/session/' + session),
+      'upstream_unknown', 502)
+    assert.equal(engine.leaseView(lease.id).state, 'quarantined')
+    assert.equal(store.state.leases[0]!.sessionId, session)
+    assert.equal(farm.inventory[0]!.automationLeaseId, lease.id)
+    farm.gridError = false
+    farm.deleteStatus = 404
+    await engine.recover(lease.id)
+    assert.equal(engine.leaseView(lease.id).state, 'expired')
+    assert.equal(store.state.leases[0]!.sessionId, undefined)
+    assert.equal(farm.inventory[0]!.owner, null)
+  })
+
   it('recovers a failed command after confirming termination of its known session', async() => {
     const {engine, allocate, create, farm, store} = await fixture()
     const lease = await allocate()

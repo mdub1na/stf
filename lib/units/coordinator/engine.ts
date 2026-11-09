@@ -31,6 +31,7 @@ export class Coordinator {
   private lastError: string | null = null
   private readonly renewed = new Map<string, number>()
   private readonly commands = new Map<string, Promise<unknown>>()
+  private readonly closingSessions = new Set<string>()
   private readonly allocations = new Map<string, Promise<void>>()
   private readonly cleanups = new Map<string, Promise<void>>()
   private readonly reconciliations = new Map<string, {fingerprint: string
@@ -945,7 +946,7 @@ export class Coordinator {
     this.closeAdb(lease.id)
     try {
       const pending = await this.exclusive(async() => terminal.has(lease.state) ||
-        this.allocations.has(lease.id) ||
+        this.allocations.has(lease.id) || this.closingSessions.has(lease.id) ||
         (lease.creatingSession && this.commands.has(lease.id)))
       if (pending) {
         return
@@ -1109,6 +1110,7 @@ export class Coordinator {
     if (!create && !route.startsWith('/session/')) {
       throw new CoordinatorError(404, 'webdriver_route', 'Unsupported WebDriver route')
     }
+    const closingSession = method === 'DELETE' && parts.length === 2 ? parts[1] : undefined
     const operation = async(): Promise<UpstreamResponse> => {
       let payload = body
       await this.exclusive(async() => {
@@ -1134,10 +1136,18 @@ export class Coordinator {
         }
         lease.commandInFlight = true
         await this.save()
+        if (closingSession) {
+          this.closingSessions.add(lease.id)
+        }
       })
       let response: UpstreamResponse
+      let sessionClosed = false
       try {
         response = await this.backend.webdriver(method, route, payload)
+        if (closingSession && response.status >= 200 && response.status < 300) {
+          await this.confirmAppiumSessionEnded(closingSession)
+          sessionClosed = true
+        }
       }
       catch {
         await this.exclusive(async() => {
@@ -1169,8 +1179,7 @@ export class Coordinator {
           lease.sessionId = sessionId
           delete lease.creatingSession
         }
-        else if (method === 'DELETE' && route ===
-            '/session/' + encodeURIComponent(lease.sessionId || '') && response.status < 300) {
+        else if (sessionClosed) {
           delete lease.sessionId
         }
         await this.save()
@@ -1179,7 +1188,11 @@ export class Coordinator {
       return response
     }
     const previous = this.commands.get(id) || Promise.resolve()
-    const result = previous.catch(() => {}).then(operation)
+    const result = previous.catch(() => {}).then(operation).finally(() => {
+      if (closingSession) {
+        this.closingSessions.delete(lease.id)
+      }
+    })
     this.commands.set(id, result)
     try {
       return await result

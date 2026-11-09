@@ -139,6 +139,7 @@ On Windows you're on your own. In theory you might be able to get STF installed 
 
 We also provide a [Docker](http://docker.com/) container in the [Docker Hub](https://hub.docker.com/) as [devicefarmer/stf](https://hub.docker.com/r/devicefarmer/stf). You can use our [Dockerfile](Dockerfile) as guidance if you'd prefer to do the installation yourself.
 The [docker-compose.yaml](docker-compose.yaml) runs STF units as separate services. See the [Compose setup guide](docker/compose/README.md) for configuration and startup instructions.
+For Kubernetes, see the [Helm deployment guide](kubernetes/helm/README.md).
 
 You should now be ready to [build](#building) or [run](#running) STF.
 
@@ -155,6 +156,27 @@ npm install -g @devicefarmer/stf
 Now you're ready to [run](#running). For development, though, you should [build](#building) instead.
 
 ## Building
+
+To build a container from this checkout, use Docker with BuildKit:
+
+```bash
+docker build -t stf:local .
+docker run --rm stf:local
+```
+
+The Dockerfile supports `linux/amd64` and `linux/arm64`. Build tools stay in separate stages. The runtime contains Node.js, production dependencies, GraphicsMagick and a headless Java runtime. STF runs as an unprivileged user with read-only access to the application files in `/app`. Dependency installation is cached independently of application sources. A root `package-lock.json` is included when present. The bundled AAB-to-APK tool requires amd64.
+
+For custom health checks inside STF containers, replace `wget` with a Node.js probe like the one in [Docker Compose](docker-compose.yaml). Derived images that use `npm` or compile native modules should do so in a build stage and copy the resulting files into the runtime image. To refresh Ubuntu packages in a local build, pass `--no-cache-filter runtime-base` to `docker buildx build`.
+
+To use a custom npm registry or credentials, pass an npm config as a BuildKit secret:
+
+```bash
+docker build --secret id=npmrc,src="$HOME/.npmrc" -t stf:local .
+```
+
+The config file is mounted only for npm build steps and is not copied into image layers. The Ubuntu build excludes `.npmrc` files from its context via `Dockerfile.dockerignore`. Without the secret, npm uses its defaults. Host environment variables referenced by the file (such as `${NPM_TOKEN}`) are not forwarded.
+
+Secret contents do not invalidate the build cache; after changing the config, rebuild with `docker buildx build --no-cache-filter dependencies,production-dependencies,build --secret id=npmrc,src="$HOME/.npmrc" --load -t stf:local .`.
 
 After you've got all the [requirements](#requirements) installed, it's time to fetch the rest of the dependencies.
 

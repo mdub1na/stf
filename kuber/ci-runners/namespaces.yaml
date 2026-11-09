@@ -1,0 +1,15 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: stf-ci
+  labels:
+    app.kubernetes.io/part-of: stf-ci
+    pod-security.kubernetes.io/enforce: baseline
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: stf-ci-jobs
+  labels:
+    app.kubernetes.io/part-of: stf-ci
+    pod-security.kubernetes.io/enforce: baseline

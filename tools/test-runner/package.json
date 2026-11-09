@@ -1,0 +1,13 @@
+{
+  "name": "@finservice/stf-test-runner",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Lease-aware Appium and Maestro runner for STF CI workers",
+  "license": "Apache-2.0",
+  "bin": {"stf": "stf.mjs"},
+  "files": ["stf.mjs", "cli.mjs", "coordinator.mjs", "transports.mjs", "run.mjs", "types.mjs", "README.md", "LICENSE"],
+  "engines": {"node": ">=22.18.0"},
+  "scripts": {"build": "node build.mjs", "prepack": "node build.mjs", "pretest": "node build.mjs", "test": "node --test test/*.test.mts"},
+  "dependencies": {"ws": "8.22.0"}
+}

@@ -6,7 +6,7 @@ import type {CoordinatorOptions} from '../../units/coordinator/types.js'
 const require = createRequire(import.meta.url)
 
 export const command = 'coordinator'
-export const describe = 'Queue automated device leases and proxy their Appium sessions.'
+export const describe = 'Queue Appium and Maestro leases and provide their fenced connections.'
 
 export const builder = (yargs: Argv) => yargs
   .strict()
@@ -29,6 +29,9 @@ export const builder = (yargs: Argv) => yargs
   .option('api-token-file', {
     type: 'string', demandOption: true
   , describe: 'File containing the coordinator worker API token.'
+  })
+  .option('project-tokens-file', {
+    type: 'string', describe: 'Optional project token digests and concurrency limits JSON.'
   })
   .option('appium-grid-url', {
     type: 'string', demandOption: true, describe: 'Appium Grid base URL.'
@@ -92,6 +95,7 @@ export async function handler(argv: CommandArgv<typeof builder>) {
   , leaseTtlSeconds: argv.leaseTtlSeconds, heartbeatIntervalSeconds: argv.heartbeatIntervalSeconds
   , pollIntervalSeconds: argv.pollIntervalSeconds, maxDurationSeconds: argv.maxDurationSeconds
   , maxParallel: argv.maxParallel, upstreamTimeoutSeconds: argv.upstreamTimeoutSeconds
+  , ...(argv.projectTokensFile ? {projectTokensFile: argv.projectTokensFile} : {})
   }
   return require('../../units/coordinator/index.js').default(options)
 }

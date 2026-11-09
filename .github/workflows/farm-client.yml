@@ -1,0 +1,25 @@
+name: Farm client
+on:
+  pull_request:
+    paths:
+      - 'tools/test-runner/**'
+      - 'kuber/ci-runners/**'
+      - '.github/workflows/farm-client.yml'
+      - '.github/workflows/docker.yml'
+      - '.nvmrc'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  client:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: '.nvmrc'
+      - name: Verify installed client and lifecycle
+        run: |
+          npm ci --prefix tools/test-runner --ignore-scripts --no-audit --no-fund
+          npm test --prefix tools/test-runner

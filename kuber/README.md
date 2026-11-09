@@ -36,6 +36,8 @@ the GitOps root.
 - [Local iOS setup and signing](../docker/ios/README.md)
 - [Kubernetes iPhone fleet](./ios-prototype/README.md)
 - [Device lease coordinator](../doc/coordinator.md)
+- [CI worker isolation and setup](../doc/ci-runners.md)
+- [Standalone test runner client](../tools/test-runner/README.md)
 
 ## Reading order for implementation
 

@@ -1,3 +1,6 @@
+import type {MaestroBaseline} from '../../util/maestro-device.js'
+export type {MaestroBaseline} from '../../util/maestro-device.js'
+
 export interface AdbPool {
   provider: string
   host: string
@@ -15,6 +18,7 @@ export interface CoordinatorOptions {
   appiumGridUrl: string
   stateFile: string
   adbPoolsFile: string
+  projectTokensFile?: string
   leaseTtlSeconds: number
   heartbeatIntervalSeconds: number
   pollIntervalSeconds: number
@@ -24,12 +28,15 @@ export interface CoordinatorOptions {
 }
 
 export type Platform = 'Android' | 'iOS'
+export type Runner = 'appium' | 'maestro'
+
 export type RequestState = 'queued' | 'allocated' | 'cancelled' | 'expired' | 'failed'
 export type LeaseState = 'allocating' | 'active' | 'cleaning' |
   'released' | 'expired' | 'quarantined'
 
 export interface AllocationInput {
   runId: string
+  runner?: Runner
   platform: Platform
   serial?: string
   model?: string
@@ -40,6 +47,7 @@ export interface AllocationInput {
 
 export interface AllocationRequest {
   id: string
+  projectId?: string
   key: string
   fingerprint: string
   input: AllocationInput
@@ -67,8 +75,12 @@ export interface FarmDevice {
 
 export interface Lease {
   id: string
+  projectId?: string
   requestId: string
   runId: string
+  runner?: Runner
+  maestroBaseline?: MaestroBaseline
+  maestroCleanupConfirmed?: boolean
   state: LeaseState
   device: FarmDevice
   capabilities: Record<string, unknown>
@@ -110,8 +122,11 @@ export interface FarmBackend {
   identity(): Promise<{email: string}>
   devices(): Promise<FarmDevice[]>
   grid(): Promise<GridStatus>
-  capture(serial: string, leaseId: string, timeout: number): Promise<void>
+  capture(serial: string, leaseId: string, timeout: number, runner?: Runner): Promise<void>
   renew(serial: string, leaseId: string, timeout: number): Promise<void>
   release(serial: string, leaseId: string): Promise<void>
+  maestroBaseline?(device: FarmDevice): Promise<MaestroBaseline>
+  maestroPrepare?(device: FarmDevice): Promise<void>
+  maestroCleanup?(device: FarmDevice, baseline: MaestroBaseline): Promise<void>
   webdriver(method: string, path: string, body?: unknown): Promise<UpstreamResponse>
 }

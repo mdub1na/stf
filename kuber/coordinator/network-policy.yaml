@@ -15,6 +15,13 @@ spec:
         - namespaceSelector:
             matchLabels:
               stf-coordinator-access: allowed
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: stf-ci-jobs
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/name: stf-ci-job
+              stf-coordinator-access: allowed
       ports:
         - protocol: TCP
           port: 8080

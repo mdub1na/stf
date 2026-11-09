@@ -4,8 +4,8 @@ import {BackendError} from '../../lib/units/coordinator/backend.js'
 import {CoordinatorError} from '../../lib/units/coordinator/config.js'
 import type {StateStore} from '../../lib/units/coordinator/state.js'
 import type {
-  AdbPool, AllocationInput, CoordinatorOptions, CoordinatorState, FarmBackend
-, FarmDevice, GridStatus, UpstreamResponse
+  AdbPool, AllocationInput, CaptureReconciliationInput, CoordinatorOptions, CoordinatorState
+, FarmBackend, FarmDevice, GridStatus, UpstreamResponse
 } from '../../lib/units/coordinator/types.js'
 
 const owner = 'coordinator@example.test'
@@ -54,6 +54,8 @@ class MemoryStore implements StateStore {
   state: CoordinatorState = {version: 2, maintenance: [], requests: [], leases: []}
   failWrites = false
   saves = 0
+  saveBarrier: ReturnType<typeof deferred> | null = null
+  saveEntered: ReturnType<typeof deferred> | null = null
 
   async load() {
     return structuredClone(this.state)
@@ -62,6 +64,10 @@ class MemoryStore implements StateStore {
   async save(state: CoordinatorState) {
     if (this.failWrites) {
       throw new Error('Simulated persistent storage failure')
+    }
+    this.saveEntered?.resolve()
+    if (this.saveBarrier) {
+      await this.saveBarrier.promise
     }
     this.saves++
     this.state = structuredClone(state)
@@ -1201,5 +1207,332 @@ describe('coordinator persistent iOS maintenance drain', () => {
     await rejectCode(engine.finishMaintenance(maintenanceId), 'device_not_ready', 409)
     farm.inventory[0]!.ios = {wda: freshWda(initialTime + 420001)}
     await engine.finishMaintenance(maintenanceId)
+  })
+})
+
+
+describe('operator reconciliation of uncertain captures', () => {
+  const acknowledgment = (serial = 'ANDROID-A'): CaptureReconciliationInput => ({
+    serial, captureTransportRetired: true, reason: 'Old capture transport retired in maintenance'
+  , actor: 'operator', projectId: 'legacy'
+  })
+  async function uncertain(serial = 'ANDROID-A') {
+    const farm = new FakeFarm(); const store = new MemoryStore()
+    farm.inventory[0] = phone(serial)
+    const createdAt = initialTime - 600000
+    store.state = {version: 2, maintenance: [], requests: [{
+      id: 'uncertain-request', key: 'old-key', fingerprint: 'old-fingerprint', state: 'allocated'
+    , input: input({serial}), createdAt, queueDeadlineAt: createdAt + 60000
+    , leaseId: 'uncertain-lease'
+    }], leases: [{
+      id: 'uncertain-lease', requestId: 'uncertain-request', runId: 'old-run'
+    , state: 'quarantined', runner: 'appium', device: phone(serial)
+    , capabilities: {'appium:udid': serial}, createdAt, expiresAt: createdAt + 10000
+    , deadlineAt: createdAt + 60000, captureUncertain: true
+    , finishState: 'released', error: 'cleanup_unconfirmed'
+    }]}
+    const f = await fixture({}, farm, store)
+    return {...f, id: 'uncertain-lease', acknowledgment: acknowledgment(serial)}
+  }
+  const current = (engine: Coordinator) =>
+    (engine as unknown as {state: CoordinatorState}).state.leases[0]!
+
+  it('keeps default recovery quarantined until explicit, audited reconciliation',
+    async() => {
+    const f = await uncertain()
+    await f.engine.recover(f.id)
+    assert.equal(f.engine.leaseView(f.id).state, 'quarantined')
+    const requests = structuredClone(f.store.state.requests)
+    const result = await f.engine.recover(f.id, f.acknowledgment)
+    assert.equal(result.state, 'expired')
+    assert.equal(result.captureReconciliation?.previousError, 'cleanup_unconfirmed')
+    assert.equal(result.captureReconciliation?.captureTransportRetired, true)
+    assert.equal(result.captureReconciliation?.reason, f.acknowledgment.reason)
+    assert.equal(result.captureReconciliation?.actor, 'operator')
+    assert.equal(result.captureReconciliation?.projectId, 'legacy')
+    assert.equal(f.store.state.leases.length, 1)
+    assert.equal(f.store.state.leases[0]!.captureUncertain, undefined)
+    assert.equal(f.store.state.leases[0]!.error, undefined)
+    assert.deepEqual(f.store.state.requests, requests)
+    assert.equal(f.farm.captures.length, 0)
+    assert.equal(f.farm.webdriverCalls.length, 0)
+    assert.equal(f.farm.events.some(event => event.startsWith('release:')), false)
+  })
+
+  it('keeps the original audit on exact retries, including after restart',
+    async() => {
+    const f = await uncertain('2a3e120')
+    const first = await f.engine.recover(f.id, f.acknowledgment)
+    const durable = structuredClone(f.store.state)
+    const saves = f.store.saves
+    assert.deepEqual(await f.engine.recover(f.id, f.acknowledgment), first)
+    assert.equal(f.store.saves, saves)
+    const restarted = new Coordinator(f.config, pools, f.farm, f.store, f.now)
+    await restarted.start()
+    const restartedSaves = f.store.saves
+    assert.deepEqual(await restarted.recover(f.id, f.acknowledgment), first)
+    assert.equal(f.store.saves, restartedSaves)
+    assert.deepEqual(f.store.state, durable)
+    await rejectCode(restarted.recover(f.id), 'not_quarantined', 409)
+    await rejectCode(restarted.recover(f.id, {...f.acknowledgment, reason: 'Different operation'}),
+      'reconciliation_unavailable', 409)
+    await rejectCode(restarted.recover(f.id, {...f.acknowledgment, serial: 'ANOTHER'}),
+      'reconciliation_unavailable', 409)
+  })
+
+  it('does not treat an ordinary completed lease as an idempotent reconciliation', async() => {
+    const f = await fixture()
+    const lease = await f.allocate()
+    await f.engine.release(lease.id)
+    await f.engine.tick()
+    await rejectCode(f.engine.recover(lease.id, acknowledgment(lease.device.serial)),
+      'not_quarantined', 409)
+  })
+
+  it('requires an explicit retirement acknowledgment, reason and authenticated operator identity',
+    async() => {
+    const f = await uncertain()
+    for (const override of [
+      {captureTransportRetired: undefined}, {captureTransportRetired: false}
+    , {captureTransportRetired: 'true'}, {reason: ''}, {reason: '  '}
+    , {reason: 'x'.repeat(1025)}, {actor: undefined}, {actor: 'project'}
+    , {projectId: ''}, {serial: ''}, {serial: 'not a serial'}
+    ]) {
+      await rejectCode(f.engine.recover(f.id,
+        {...f.acknowledgment, ...override} as CaptureReconciliationInput),
+      'invalid_reconciliation', 400)
+    }
+    assert.equal(f.engine.leaseView(f.id).state, 'quarantined')
+    assert.equal(f.store.state.leases[0]!.captureReconciliation, undefined)
+  })
+
+  it('rejects wrong devices, fresh captures and unresolved local session operations', async() => {
+    const f = await uncertain()
+    await rejectCode(f.engine.recover(f.id, {...f.acknowledgment, serial: 'ANDROID-B'}),
+      'reconciliation_unavailable', 409)
+    for (const [key, value] of Object.entries({sessionId: 'old-session', creatingSession: true
+      , commandInFlight: true, captureConfirmed: true, runner: 'maestro'
+      , captureUncertain: false})) {
+      const lease = current(f.engine)
+      const before = structuredClone(lease)
+      Object.assign(lease, {[key]: value})
+      await rejectCode(f.engine.recover(f.id, f.acknowledgment),
+        'reconciliation_unavailable', 409)
+      Object.assign(lease, before)
+      if (!(key in before)) {
+ delete (lease as unknown as Record<string, unknown>)[key]
+}
+    }
+    const lease = current(f.engine)
+    lease.createdAt = f.now()
+    await rejectCode(f.engine.recover(f.id, f.acknowledgment), 'capture_not_settled', 409)
+    lease.createdAt = initialTime - 600000
+    for (const name of ['allocations', 'commands', 'cleanups'] as const) {
+      const map = (f.engine as unknown as Record<typeof name, Map<string, Promise<void>>>)[name]
+      map.set(f.id, Promise.resolve())
+      await rejectCode(f.engine.recover(f.id, f.acknowledgment),
+        'reconciliation_unavailable', 409)
+      map.delete(f.id)
+    }
+  })
+
+  it('refuses missing, duplicate, unavailable or owned STF devices', async() => {
+    for (const change of [
+      (farm: FakeFarm) => {
+ farm.inventory = farm.inventory.slice(1)
+}
+    , (farm: FakeFarm) => {
+ farm.inventory.push(structuredClone(farm.inventory[0]!))
+}
+    , (farm: FakeFarm) => {
+ farm.inventory[0]!.present = false
+}
+    , (farm: FakeFarm) => {
+ farm.inventory[0]!.ready = false
+}
+    , (farm: FakeFarm) => {
+ farm.inventory[0]!.provider = 'different-provider'
+}
+    , (farm: FakeFarm) => {
+ farm.inventory[0]!.owner = {email: 'another@example.test'}
+}
+    , (farm: FakeFarm) => {
+ farm.inventory[0]!.using = true
+}
+    , (farm: FakeFarm) => {
+ farm.inventory[0]!.claimed = true
+}
+    , (farm: FakeFarm) => {
+ farm.inventory[0]!.usage = 'automation'
+}
+    , (farm: FakeFarm) => {
+ farm.inventory[0]!.automationLeaseId = 'other-lease'
+}
+    ]) {
+      const f = await uncertain()
+      change(f.farm)
+      await rejectCode(f.engine.recover(f.id, f.acknowledgment), 'device_busy', 409)
+      assert.equal(f.engine.leaseView(f.id).state, 'quarantined')
+    }
+  })
+
+  it('fails closed on malformed Grid snapshots, duplicate identities and uncertain sessions',
+    async() => {
+    for (const change of [
+      (grid: GridStatus) => {
+ grid.ready = false
+}
+    , (grid: GridStatus) => {
+      grid.nodes[0]!.id = '  '
+    }
+    , (grid: GridStatus) => {
+ grid.nodes = []
+}
+    , (grid: GridStatus) => {
+ grid.nodes[1]!.id = grid.nodes[0]!.id
+}
+    , (grid: GridStatus) => {
+ (grid.nodes[0] as any).slots = undefined
+}
+    , (grid: GridStatus) => {
+ (grid.nodes[0]!.slots[0] as any).stereotype = null
+}
+    , (grid: GridStatus) => {
+ (grid.nodes[0]!.slots[0] as any).session = {}
+}
+    , (grid: GridStatus) => {
+ grid.nodes[0]!.slots[0]!.session = {
+        sessionId: 'unknown', capabilities: {}}
+      }
+    , (grid: GridStatus) => {
+      grid.nodes[0]!.slots[0]!.session = {
+        sessionId: 'unknown', capabilities: {'appium:udid': '  '}}
+    }
+    , (grid: GridStatus) => {
+ grid.nodes.forEach(node => {
+ node.slots[0]!.session = {
+        sessionId: 'duplicate', capabilities: {'appium:udid': 'OTHER'}}
+})
+}
+    , (grid: GridStatus) => {
+ grid.nodes.forEach(node => {
+ node.availability = 'DOWN'
+})
+}
+    ]) {
+      const f = await uncertain()
+      change(f.farm.slots)
+      await rejectCode(f.engine.recover(f.id, f.acknowledgment), 'grid_unavailable', 409)
+      assert.equal(f.store.state.leases[0]!.captureReconciliation, undefined)
+    }
+    for (const capabilities of [{'appium:udid': 'ANDROID-A'}
+      , {'appium:udid': 'OTHER', 'stf:leaseId': 'uncertain-lease'}]) {
+      const f = await uncertain()
+      f.farm.slots.nodes[0]!.slots[0]!.session = {sessionId: 'busy', capabilities}
+      await rejectCode(f.engine.recover(f.id, f.acknowledgment), 'device_busy', 409)
+    }
+  })
+
+  it('keeps quarantine when either upstream observation fails', async() => {
+    for (const failure of ['inventoryError', 'gridError'] as const) {
+      const f = await uncertain()
+      f.farm[failure] = true
+      await assert.rejects(f.engine.recover(f.id, f.acknowledgment))
+      assert.equal(f.engine.leaseView(f.id).state, 'quarantined')
+      assert.equal(f.store.state.leases[0]!.captureReconciliation, undefined)
+    }
+  })
+
+  it('checks fresh upstream state again and rejects ownership changes during observation',
+    async() => {
+    const f = await uncertain()
+    const devices = f.farm.devices.bind(f.farm)
+    let observations = 0
+    f.farm.devices = async() => {
+      const snapshot = await devices()
+      if (++observations === 1) {
+ f.farm.inventory[0]!.owner = {email: 'another@example.test'}
+}
+      return snapshot
+    }
+    await rejectCode(f.engine.recover(f.id, f.acknowledgment), 'device_busy', 409)
+    assert.equal(observations, 2)
+    assert.equal(f.engine.leaseView(f.id).state, 'quarantined')
+  })
+
+  it('coalesces identical in-flight acknowledgments and rejects conflicting recovery requests',
+    async() => {
+    const f = await uncertain()
+    f.farm.inventoryBarrier = deferred()
+    f.farm.inventoryEntered = deferred()
+    const first = f.engine.recover(f.id, f.acknowledgment)
+    await f.farm.inventoryEntered.promise
+    const duplicate = f.engine.recover(f.id, f.acknowledgment)
+    await rejectCode(f.engine.recover(f.id, {...f.acknowledgment, reason: 'Different reason'}),
+      'recovery_in_progress', 409)
+    await rejectCode(f.engine.recover(f.id), 'recovery_in_progress', 409)
+    f.farm.inventoryBarrier.resolve()
+    assert.deepEqual(await duplicate, await first)
+    assert.equal(f.farm.gridCalls, 2)
+  })
+
+  it('does not publish a free lease before the reconciliation is durably saved', async() => {
+    const f = await uncertain()
+    f.store.saveBarrier = deferred()
+    f.store.saveEntered = deferred()
+    const pending = f.engine.recover(f.id, f.acknowledgment)
+    await f.store.saveEntered.promise
+    assert.equal(f.engine.leaseView(f.id).state, 'quarantined')
+    assert.equal(f.store.state.leases[0]!.state, 'quarantined')
+    f.store.saveBarrier.resolve()
+    assert.equal((await pending).state, 'expired')
+    assert.equal(f.store.state.leases[0]!.state, 'expired')
+  })
+
+  it('retains quarantine in memory and storage after a failed reconciliation save', async() => {
+    const f = await uncertain()
+    const before = structuredClone(f.store.state)
+    f.store.failWrites = true
+    await rejectCode(f.engine.recover(f.id, f.acknowledgment), 'state_unavailable', 503)
+    assert.equal(f.engine.leaseView(f.id).state, 'quarantined')
+    assert.equal(f.engine.leaseView(f.id).captureReconciliation, undefined)
+    assert.deepEqual(f.store.state, before)
+    assert.equal(f.engine.ready, false)
+  })
+
+  it('preserves another allocation already waiting on its upstream capture', async() => {
+    const f = await uncertain()
+    f.farm.captureBarrier = deferred()
+    f.farm.captureEntered = deferred()
+    const request = await f.engine.submit(input({serial: 'ANDROID-B'}), 'other-allocation')
+    const tick = f.engine.tick()
+    await f.farm.captureEntered.promise
+    await f.engine.recover(f.id, f.acknowledgment)
+    f.farm.captureBarrier.resolve()
+    await tick
+    const allocated = f.engine.requestView(request.id)
+    assert.equal(allocated.state, 'allocated')
+    assert.equal(f.engine.leaseView(allocated.leaseId!).state, 'active')
+    assert.equal(f.store.state.leases.find(lease => lease.id === allocated.leaseId)!.state,
+      'active')
+  })
+
+  it('does not reconcile after cancellation or shutdown wins during upstream reads', async() => {
+    for (const stop of [false, true]) {
+      const f = await uncertain()
+      f.farm.inventoryBarrier = deferred()
+      f.farm.inventoryEntered = deferred()
+      const recovering = f.engine.recover(f.id, f.acknowledgment)
+      await f.farm.inventoryEntered.promise
+      const observed = assert.rejects(recovering)
+      const stopping = stop ? f.engine.stop() : null
+      if (!stop) {
+        await f.engine.release(f.id)
+      }
+      f.farm.inventoryBarrier.resolve()
+      await observed
+      await stopping
+      assert.equal(f.engine.leaseView(f.id).captureReconciliation, undefined)
+    }
   })
 })

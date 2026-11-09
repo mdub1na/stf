@@ -6,7 +6,8 @@ import {wdaProfileCovers} from './wda-profile.js'
 import type {AdbTarget} from './adb-bridge.js'
 import type {StateStore} from './state.js'
 import type {
-  AdbPool, AllocationInput, AllocationRequest, CoordinatorOptions, CoordinatorState, FarmBackend
+  AdbPool, AllocationInput, AllocationRequest, CaptureReconciliationInput, CoordinatorOptions
+, CoordinatorState, FarmBackend
 , FarmDevice, GridStatus, Lease, UpstreamResponse
 } from './types.js'
 
@@ -25,6 +26,8 @@ export class Coordinator {
   private readonly commands = new Map<string, Promise<unknown>>()
   private readonly allocations = new Map<string, Promise<void>>()
   private readonly cleanups = new Map<string, Promise<void>>()
+  private readonly reconciliations = new Map<string, {fingerprint: string
+    , operation: Promise<ReturnType<Coordinator['leaseView']>>}>()
   private ticking: Promise<void> | null = null
   private closeAdb: (id: string) => void = () => {}
   private projectLimits = new Map<string, number>()
@@ -179,7 +182,9 @@ export class Coordinator {
     , capabilities: lease.capabilities
     , ...(runner === 'appium' ? {webdriverUrl: endpoint(this.options.publicUrl) + path} : {})
     , ...(lease.sessionId ? {sessionId: lease.sessionId} : {})
-    , ...(lease.error ? {error: lease.error} : {})}
+    , ...(lease.error ? {error: lease.error} : {})
+    , ...(lease.captureReconciliation ? {captureReconciliation: {...lease.captureReconciliation
+      , at: new Date(lease.captureReconciliation.at).toISOString()}} : {})}
   }
 
   leasesView(projectId?: string) {
@@ -276,10 +281,16 @@ export class Coordinator {
     })
   }
 
-  async recover(id: string) {
+  async recover(id: string, reconciliation?: CaptureReconciliationInput) {
+    if (reconciliation !== undefined) {
+      return this.reconcileUnowned(id, reconciliation)
+    }
     const lease = await this.exclusive(async() => {
       this.assertReady()
       const current = this.lease(id)
+      if (this.reconciliations.has(id)) {
+        throw new CoordinatorError(409, 'recovery_in_progress', 'Lease reconciliation is running')
+      }
       if (current.state !== 'quarantined') {
         throw new CoordinatorError(409, 'not_quarantined', 'Lease is not quarantined')
       }
@@ -289,6 +300,179 @@ export class Coordinator {
     })
     await this.cleanup(lease)
     return this.leaseView(id)
+  }
+
+  private reconcileUnowned(id: string, input: CaptureReconciliationInput) {
+    if (!input || typeof input.serial !== 'string' ||
+        !/^[A-Za-z0-9._:-]{1,256}$/.test(input.serial) ||
+        input.captureTransportRetired !== true || typeof input.reason !== 'string' ||
+        !input.reason.trim() || input.reason.length > 1024 || input.actor !== 'operator' ||
+        typeof input.projectId !== 'string' ||
+        !/^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$/.test(input.projectId)) {
+      throw new CoordinatorError(400, 'invalid_reconciliation',
+        'Expected the exact serial, operator identity and transport retirement acknowledgment')
+    }
+    const confirmed = {...input, reason: input.reason.trim()}
+    const fingerprint = JSON.stringify([confirmed.serial, confirmed.reason
+      , confirmed.actor, confirmed.projectId])
+    const existing = this.reconciliations.get(id)
+    if (existing) {
+      if (existing.fingerprint !== fingerprint) {
+        throw new CoordinatorError(409, 'recovery_in_progress', 'Lease reconciliation is running')
+      }
+      return existing.operation
+    }
+    const operation = this.reconcileCapture(id, confirmed)
+    this.reconciliations.set(id, {fingerprint, operation})
+    operation.finally(() => {
+      if (this.reconciliations.get(id)?.operation === operation) {
+        this.reconciliations.delete(id)
+      }
+    }).catch(() => {})
+    return operation
+  }
+
+  private assertCaptureReconciliation(lease: Lease, serial: string) {
+    this.assertReady()
+    if (lease.state !== 'quarantined') {
+      throw new CoordinatorError(409, 'not_quarantined', 'Lease is not quarantined')
+    }
+    if (lease.device.serial !== serial || lease.captureUncertain !== true ||
+        lease.captureConfirmed === true || (lease.runner && lease.runner !== 'appium') ||
+        lease.sessionId || lease.creatingSession || lease.commandInFlight ||
+        this.allocations.has(lease.id) || this.commands.has(lease.id) ||
+        this.cleanups.has(lease.id)) {
+      throw new CoordinatorError(409, 'reconciliation_unavailable',
+        'Only an idle uncertain Appium capture can be reconciled')
+    }
+    const settledAt = lease.createdAt + this.stfTimeoutMs +
+      this.options.upstreamTimeoutSeconds * 1000
+    if (this.now() < settledAt || this.now() < lease.expiresAt) {
+      throw new CoordinatorError(409, 'capture_not_settled',
+        'The original capture and its ownership timeout must finish first')
+    }
+  }
+
+  private async captureReleased(lease: Lease) {
+    const [devices, grid] = await Promise.all([this.backend.devices(), this.backend.grid()])
+    const matches = Array.isArray(devices) ? devices.filter(device =>
+      device?.serial === lease.device.serial) : []
+    const device = matches.length === 1 ? matches[0]! : null
+    if (!device || device.platform !== lease.device.platform ||
+        device.provider !== lease.device.provider || device.present !== true ||
+        device.ready !== true || device.owner || device.using || device.claimed ||
+        device.usage || device.automationLeaseId) {
+      throw new CoordinatorError(409, 'device_busy', 'STF does not confirm the device is free')
+    }
+    const record = (value: unknown): value is Record<string, unknown> =>
+      value !== null && typeof value === 'object' && !Array.isArray(value)
+    const nodes = grid?.nodes
+    if (grid?.ready !== true || !Array.isArray(nodes) || !nodes.length) {
+      throw new CoordinatorError(409, 'grid_unavailable', 'Grid cleanup is not confirmed')
+    }
+    const nodeIds = new Set<string>(); const sessions = new Set<string>()
+    const pool = this.pools.find(item => item.provider === device.provider)
+    let available = false
+    for (const node of nodes) {
+      if (!record(node) || typeof node.id !== 'string' || !node.id.trim() ||
+          nodeIds.has(node.id) || typeof node.availability !== 'string' ||
+          !Array.isArray(node.slots)) {
+        throw new CoordinatorError(409, 'grid_unavailable', 'Grid cleanup is not confirmed')
+      }
+      nodeIds.add(node.id)
+      for (const slot of node.slots) {
+        if (!record(slot) || !record(slot.stereotype)) {
+          throw new CoordinatorError(409, 'grid_unavailable', 'Grid cleanup is not confirmed')
+        }
+        const stereotype = slot.stereotype
+        if (slot.session !== null) {
+          const session = slot.session
+          if (!record(session) || typeof session.sessionId !== 'string' ||
+              !session.sessionId.trim() || sessions.has(session.sessionId) ||
+              !record(session.capabilities) ||
+              typeof session.capabilities['appium:udid'] !== 'string' ||
+              !session.capabilities['appium:udid'].trim()) {
+            throw new CoordinatorError(409, 'grid_unavailable', 'Grid cleanup is not confirmed')
+          }
+          sessions.add(session.sessionId)
+          if (session.capabilities['appium:udid'] === device.serial ||
+              session.capabilities['stf:leaseId'] === lease.id ||
+              stereotype['appium:udid'] === device.serial) {
+            throw new CoordinatorError(409, 'device_busy', 'Grid still reports a device session')
+          }
+        }
+        const platform = stereotype.platformName
+        const route = device.platform === 'Android' ? pool &&
+          stereotype['appium:remoteAdbHost'] === pool.host :
+          stereotype['appium:udid'] === device.serial &&
+          stereotype['appium:platformVersion'] === device.version
+        if (node.availability === 'UP' && slot.session === null &&
+            typeof platform === 'string' &&
+            platform.toLowerCase() === device.platform.toLowerCase() && route) {
+          available = true
+        }
+      }
+    }
+    if (!available) {
+      throw new CoordinatorError(409, 'grid_unavailable', 'No idle Grid route for the device')
+    }
+  }
+
+  private async reconcileCapture(id: string, input: CaptureReconciliationInput) {
+    const serial = input.serial
+    const result = await this.exclusive(async() => {
+      this.assertReady()
+      const current = this.lease(id)
+      const audit = current.captureReconciliation
+      if (terminal.has(current.state) && audit) {
+        if (current.device.serial !== serial || audit.mode !== 'unowned-capture' ||
+            audit.captureTransportRetired !== true || audit.reason !== input.reason ||
+            audit.actor !== input.actor || audit.projectId !== input.projectId) {
+          throw new CoordinatorError(409, 'reconciliation_unavailable',
+            'The completed reconciliation does not match this acknowledgment')
+        }
+        return {kind: 'completed', value: this.leaseView(id)} as const
+      }
+      this.assertCaptureReconciliation(current, serial)
+      return {kind: 'pending', value: current} as const
+    })
+    if (result.kind === 'completed') {
+      return result.value
+    }
+    const lease = result.value
+    // The operator acknowledges retiring the old capture transport. Age and free
+    // upstream observations alone cannot prove that delayed commands are gone.
+    // Keep the quarantine during bounded reads without blocking other devices.
+    await this.captureReleased(lease)
+    await this.captureReleased(lease)
+    return this.exclusive(async() => {
+      if (this.lease(id) !== lease) {
+        throw new CoordinatorError(409, 'reconciliation_unavailable', 'Lease identity changed')
+      }
+      this.assertCaptureReconciliation(lease, serial)
+      const candidate: Lease = {...lease, state: lease.finishState || 'released'
+        , captureReconciliation: {at: this.now(), mode: 'unowned-capture'
+          , previousError: lease.error || 'cleanup_unconfirmed'
+          , captureTransportRetired: true, reason: input.reason
+          , actor: input.actor, projectId: input.projectId}}
+      delete candidate.captureUncertain
+      delete candidate.error
+      // Do not expose a free slot until its reconciliation is durable. Retain
+      // other Lease object identities used by operations already in flight.
+      const state: CoordinatorState = {...this.state, leases: this.state.leases.map(item =>
+        item === lease ? candidate : item)}
+      try {
+        await this.store.save(state)
+      }
+      catch {
+        this.fault = true
+        throw new CoordinatorError(503, 'state_unavailable', 'Persistent state is unavailable')
+      }
+      Object.assign(lease, candidate)
+      delete lease.captureUncertain
+      delete lease.error
+      return this.leaseView(id)
+    })
   }
 
   private assertActive(lease: Lease) {

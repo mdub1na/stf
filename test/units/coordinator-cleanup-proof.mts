@@ -9,7 +9,7 @@ describe('coordinator durable Maestro cleanup proof', () => {
   it('rejects non-boolean cleanup proof during recovery', async() => {
     const directory = await mkdtemp(join(tmpdir(), 'stf-cleanup-proof-'))
     const store = new FileStateStore(join(directory, 'state.json'))
-    const state: CoordinatorState = {version: 1, requests: [{
+    const state: CoordinatorState = {version: 2, maintenance: [], requests: [{
       id: 'request', key: 'key', fingerprint: 'fingerprint', state: 'allocated',
       input: {runner: 'maestro', platform: 'Android', runId: 'run',
         queueTimeoutSeconds: 60, maxDurationSeconds: 60},

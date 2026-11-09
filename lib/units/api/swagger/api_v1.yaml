@@ -2621,6 +2621,9 @@ definitions:
           leaseId:
             description: Exact requested automation lease fence, when supplied
             type: string
+          automationRunner:
+            type: string
+            enum: [maestro]
   AddUserDevicePayload:
     description: payload object for adding device to user
     required:

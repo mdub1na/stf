@@ -49,7 +49,7 @@ function deferred() {
 }
 
 class MemoryStore implements StateStore {
-  state: CoordinatorState = {version: 1, requests: [], leases: []}
+  state: CoordinatorState = {version: 2, maintenance: [], requests: [], leases: []}
   fail = false
   async load() {
  return structuredClone(this.state)
@@ -628,5 +628,54 @@ describe('coordinator HTTP and real upstream adapters', function() {
     assert.equal(failed.status, 503)
     assert.doesNotMatch(JSON.stringify([status.body, failed.body]),
       new RegExp(stfToken + '|' + apiToken + '|private filesystem|stack'))
+  })
+  it('restricts every maintenance operation to the operator and validates JSON before draining',
+    async() => {
+    const f = await fixture(true, true)
+    const id = '34725f38-4b42-4c84-94d8-31eb3baa2478'
+    const body = {serial: 'IPHONE-A', operationId: id}
+    for (const [route, method] of [['/api/v1/maintenance', 'POST']
+      , ['/api/v1/maintenance/' + id, 'GET'], ['/api/v1/maintenance/' + id, 'DELETE']]) {
+      assert.equal((await f.call(route!, method!, method === 'POST' ? body : undefined,
+        'Bearer ' + projectA)).status, 403)
+    }
+    for (const value of [null, [], {}, {...body, force: true}
+      , {...body, operationId: 'not-a-uuid'}, {...body, serial: 7}]) {
+      assert.equal((await f.call('/api/v1/maintenance', 'POST', value)).status, 400)
+      assert.deepEqual(f.store.state.maintenance, [])
+    }
+    assert.equal((await f.call('/api/v1/maintenance', 'POST', body)).status, 404)
+    const invalid = await fetch(f.url + '/api/v1/maintenance', {method: 'POST'
+      , headers: {Authorization: bearer, 'Content-Type': 'application/json'}, body: '{invalid'})
+    assert.equal(invalid.status, 400)
+    assert.deepEqual(f.store.state.maintenance, [])
+  })
+
+  it('sanitizes WDA metadata and verifies fresh upstream checks before reopening', async() => {
+    const f = await fixture()
+    const id = '34725f38-4b42-4c84-94d8-31eb3baa2478'
+    const now = Date.parse('2026-10-18T00:00:00Z')
+    f.devices[0] = {...f.devices[0]!, serial: 'IPHONE-A', platform: 'iOS'
+      , ios: {wda: {profile: 'valid', checkedAt: new Date(now).toISOString()
+        , expiresAt: new Date(now + 86400000).toISOString()}}}
+    f.grid.nodes[0]!.slots[0]!.stereotype = {platformName: 'iOS', 'appium:udid': 'IPHONE-A'
+      , 'appium:platformVersion': '15'}
+    const route = '/api/v1/maintenance/' + id
+    const started = await f.call('/api/v1/maintenance', 'POST',
+      {serial: 'IPHONE-A', operationId: id})
+    assert.equal(started.status, 202)
+    assert.equal(started.body.maintenance.state, 'ready')
+    assert.equal((await f.call(route)).body.maintenance.serial, 'IPHONE-A')
+    const valid = structuredClone(f.devices[0]!.ios!)
+    f.devices[0]!.ios!.wda.checkedAt = '2026-10-18'
+    assert.equal((await f.backend.devices())[0]!.ios, undefined)
+    assert.equal((await f.call(route, 'DELETE', {force: true})).status, 409)
+    assert.equal(f.store.state.maintenance.length, 1)
+    f.devices[0]!.ios = valid
+    assert.equal((await f.call(route, 'DELETE')).status, 200)
+    assert.equal((await f.call(route)).status, 404)
+    assert.deepEqual(f.store.state.maintenance, [])
+    assert.equal(f.stfCalls.filter(call => call.method !== 'GET').length, 0,
+      'Maintenance API cannot capture or release STF ownership')
   })
 })

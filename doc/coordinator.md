@@ -1,7 +1,7 @@
 # STF coordinator prototype
 
 `stf coordinator` runs a separate STF process for trusted internal test workers.
-One instance owns a request queue, renewable device leases and a lease-scoped
+One instance owns a request queue, renewable device leases and lease-scoped
 Appium/ADB gateways. Workers keep test scenarios, assertions and reports. STF keeps
 its device inventory, access groups and live viewer. Appium Grid keeps its
 WebDriver routing and node slots.
@@ -11,6 +11,10 @@ Appium supports the farm's Android and iOS nodes; Maestro supports physical Andr
 There is no coordinator web UI, user-role migration or test execution engine.
 The deployment is opt-in and is not added to the farm GitOps root. Short hardware
 validation does not establish multi-hour reliability; record that separately.
+
+The iOS signing guard and operator-only persistent device drains are documented
+in [Personal Team WDA renewal](../tools/wda-renewal/README.md). They require the
+version-2 state format; preserve current lease history when planning a rollback.
 
 ## Connection and lifecycle
 
@@ -186,8 +190,11 @@ two processes against one state file or overlapping device/port pools. A missing
 or discarded state file must not be used to justify handing out phones from an
 interrupted run. Investigate upstream ownership/sessions before a deliberate
 state reset. A corrupt state file prevents safe startup.
-This prototype accepts state v1 only; a v2 file is rejected rather than converted
-or discarded.
+The loader accepts state v1 and v2. It preserves existing requests and leases,
+adds an empty maintenance list when loading v1, and writes v2 from then on.
+Version 2 persists device drains across restarts. An older v1-only runtime
+rejects this file. Keep the current state and use a reviewed migration for any
+rollback; never restore an earlier snapshot over newer lease history.
 The prototype retains request/lease history in this file. New requests are
 rejected after 10000 saved requests; automatic history retention/compaction is
 future work. Reusing an existing idempotency key still reads its original
@@ -222,6 +229,9 @@ operator credential to CI jobs. Project credentials cannot call recovery (403).
 | POST | `/api/v1/leases/:id/renew` | Renew with `{}`; returns lease |
 | DELETE | `/api/v1/leases/:id` | 202 and lease cleanup state |
 | POST | `/api/v1/leases/:id/recover` | Retry cleanup of a quarantined lease with `{}` |
+| POST | `/api/v1/maintenance` | Operator-only durable iOS drain with `{serial, operationId}` |
+| GET | `/api/v1/maintenance/:id` | Operator-only drain status |
+| DELETE | `/api/v1/maintenance/:id` | Operator-only completion after fresh device/signing/Grid checks |
 | POST | `/api/v1/leases/:id/webdriver/session` | Create the lease's single W3C session |
 | any | `/api/v1/leases/:id/webdriver/session/:sessionId/...` | Forward only that lease's session commands |
 
@@ -379,9 +389,12 @@ Before applying, review a rendered private overlay with the immutable image,
 real pool mapping and worker-reachable public URL. Set explicit kubeconfig and
 context for every cluster operation; the shell's default cluster may be unrelated.
 
-These manifests run the state-v1 prototype. Do not replace a newer state-v2
-deployment or mount its PVC with this image. Keep the newer image and state
-intact; use a separate state file/PVC for isolated prototype checks.
+This runtime reads v1/v2 state and writes v2. Preserve the existing PVC across
+the upgrade. Do not roll back to a v1-only image on that PVC: it cannot load v2
+or enforce its maintenance drains. A reverse migration requires stopped
+admission, no queued or held work, no drains and a reviewed conversion of the
+current state that retains all request/lease history. Keep rollback experiments
+isolated from the farm PVC.
 
 1. Deploy and verify the matching fenced STF API/processor/providers. Save the
    prior immutable images and resource configuration for rollback.

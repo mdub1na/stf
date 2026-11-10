@@ -195,6 +195,32 @@ describe('provider fenced gesture sequencing', function() {
     f.gesture.clear(id(2), 'new-owner')
   })
 
+  it('keeps untimestamped source watermarks for the whole reservation when opted in', function() {
+    const clock = sinon.useFakeTimers({now: Date.now()})
+    try {
+      const f = fixture({allowUntimestampedIds: true, maxSources: 1, maxRetired: 1})
+      const old = source + ':1'
+      f.gesture.start(0, old, owner)
+      f.gesture.stop(1, old, owner)
+      f.gesture.start(0, id(2), owner)
+      f.gesture.stop(1, id(2), owner)
+      clock.tick(10001)
+      const overflow = id(1, '22222222-2222-4222-8222-222222222222', Date.now())
+      const next = source + ':3'
+      for (const key of [overflow, old, id(3), next]) {
+        f.gesture.start(0, key, owner)
+        f.gesture.push(1, () => f.commands.push(key), key, owner)
+        f.gesture.stop(2, key, owner)
+      }
+      assert.deepEqual(f.commands, [next])
+      assert.ok(f.errors.some(error => /source limit/.test(error.message)))
+      f.gesture.setOwner(null)
+    }
+    finally {
+      clock.restore()
+    }
+  })
+
   it('retains source ordering after tombstone eviction and source overflow',
     function() {
     const f = fixture({maxSources: 2, maxRetired: 2})

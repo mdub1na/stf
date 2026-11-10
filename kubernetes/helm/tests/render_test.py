@@ -368,12 +368,14 @@ class ChartTest(unittest.TestCase):
         phones = [iphone(), iphone('iphone-b', '00008100-0000000000000002')]
         phones[0]['persistence'] = {'existingClaim': 'previous-iphone-state'}
         phones[0]['extraContainers'] = [{'name': 'optional-adapter', 'image': 'example.invalid/adapter:test'}]
+        phones[1]['coreDevice'] = True
         items = render({'ios': {'image': IOS_IMAGE, 'devices': phones}})
         for p in phones:
             pod = obj(items, 'Deployment', 'stf-ios-' + p['name'])['spec']['template']['spec']
             cs = {c['name']: c for c in pod['containers']}
             self.assertTrue(cs['tunnel']['securityContext']['privileged'])
             self.assertFalse(cs['prototype']['securityContext']['allowPrivilegeEscalation'])
+            self.assertEqual('--coredevice' in cs['prototype']['args'], p.get('coreDevice', False))
             health = json.dumps(cs['prototype']['readinessProbe'])
             self.assertIn('/health', health)
             self.assertNotIn('state', health)

@@ -7,7 +7,7 @@ const config = {
   , publicOrigin: 'https://stf.example.test'
   , devices: [
     {udid: 'phone-00000001', node: 'usb-node', wdaBundleId: 'test.wda.xctrunner', legacy: true}
-    , {udid: 'phone-00000002', node: 'usb-node', wdaBundleId: 'test.wda.xctrunner'}
+    , {udid: 'phone-00000002', node: 'usb-node', wdaBundleId: 'test.wda.xctrunner', coreDevice: true}
     , {udid: 'phone-00000003', node: 'usb-node', wdaBundleId: 'test.wda.xctrunner'}
   ]
 }
@@ -33,6 +33,8 @@ describe('iPhone fleet deployment', () => {
       assert.equal(setting.data.udid, config.devices[index]!.udid)
       const tunnel = spec.containers.find((container: any) => container.name === 'tunnel')
       assert.ok(tunnel.args.includes('--udid=$(IOS_UDID)'))
+      const prototype = spec.containers.find((container: any) => container.name === 'prototype')
+      assert.equal(prototype.args.includes('--coredevice'), config.devices[index]!.coreDevice === true)
       for (const container of spec.containers.filter((c: any) => c.name !== 'tunnel')) {
         assert.equal(container.securityContext.allowPrivilegeEscalation, false)
         assert.equal(container.securityContext.runAsUser, 1000)

@@ -13,6 +13,7 @@ export async function authorizeScreen(
 , serial: string
 , owner: IosOwner | null
 , headers: IncomingHttpHeaders
+, requireReservationOwner = false
 ): Promise<boolean> {
   if (!owner || (headers.origin !== publicOrigin &&
       !(headers.origin === undefined && headers.authorization?.startsWith('Bearer ')))) {
@@ -41,6 +42,9 @@ export async function authorizeScreen(
       return false
     }
     const isOwner = viewer.user.email === owner.email
+    if (requireReservationOwner && (!isOwner || !owner.reservationId)) {
+      return false
+    }
     const url = new URL((isOwner ? '/api/v1/user/devices/' : '/api/v1/devices/') +
       encodeURIComponent(serial), apiUrl)
     const signal = AbortSignal.timeout(5000)
@@ -58,10 +62,12 @@ export async function authorizeScreen(
       await new Promise(resolve => setTimeout(resolve, 50))
     }
     const body = await response!.json() as {
-      success?: boolean, device?: {serial?: string, owner?: {email?: string}, usage?: string}
+      success?: boolean
+      device?: {serial?: string, owner?: {email?: string, reservationId?: string}, usage?: string}
     }
     return body.success === true && body.device?.serial === serial &&
       body.device.owner?.email === owner.email &&
+      (!requireReservationOwner || body.device.owner.reservationId === owner.reservationId) &&
       (isOwner || body.device.usage === 'automation')
   }
   catch {

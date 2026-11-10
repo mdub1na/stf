@@ -11,6 +11,7 @@ export interface FleetDevice {
   wdaBundleId: string
   marketName?: string
   legacy?: boolean
+  coreDevice?: boolean
 }
 
 export interface FleetConfig {
@@ -64,6 +65,7 @@ export function validateFleet(input: unknown): FleetConfig {
         ('marketName' in device && (typeof device.marketName !== 'string' ||
           device.marketName.length > 255)) ||
         ('legacy' in device && typeof device.legacy !== 'boolean') ||
+        ('coreDevice' in device && typeof device.coreDevice !== 'boolean') ||
         udids.has(device.udid.toLowerCase())) {
       throw new Error('Invalid or duplicate fleet device')
     }
@@ -116,6 +118,7 @@ export function renderFleet(input: unknown) {
         , {name: 'prototype', image: config.prototypeImage, securityContext: userSecurity, env
           , args: ['node', 'tools/ios-prototype/main.mts', '--udid=$(IOS_UDID)'
             , '--wda-bundle-id=$(WDA_BUNDLE_ID)', '--image-mounter=pymobiledevice3'
+            , ...(device.coreDevice ? ['--coredevice'] : [])
             , '--token-file=/token/token'
             , '--storage-url=http://stf-storage-temp.stf.svc.cluster.local:3000']
           , resources: {requests: {cpu: '100m', memory: '256Mi'}, limits: {cpu: '2', memory: '2Gi'}}

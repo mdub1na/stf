@@ -1,9 +1,10 @@
 import {timingSafeEqual} from 'node:crypto'
 import http from 'node:http'
-import {pipeline} from 'node:stream'
+import {pipeline, Readable} from 'node:stream'
 
 import type {IosRuntime} from './runtime.mts'
 import {InstallError, type Installations} from './installations.mts'
+import {CoreDeviceError} from './coredevice.mts'
 
 class InputError extends Error {
 }
@@ -87,6 +88,7 @@ export function createServer(
         , instance: runtime.instance
         , ios: runtime.telemetry.status
         , error: runtime.lastError, info: runtime.info
+        , ...(runtime.coreDevice ? {coreDevice: true} : {})
         })
         return
       }
@@ -105,6 +107,23 @@ export function createServer(
       }
       if (runtime.state !== 'ready') {
         json(503, {error: 'device_not_ready', state: runtime.state})
+        return
+      }
+      if (route === 'GET /coredevice/screen') {
+        const screen = await runtime.openCoreDevice(abort.signal)
+        if (abort.signal.aborted) {
+          await screen.body.cancel().catch(() => null)
+          return
+        }
+        res.writeHead(200, {
+          'Content-Type': 'application/octet-stream'
+        , 'X-STF-CoreDevice-Session': screen.sessionId
+        , 'X-STF-HEVC-Codec': screen.codec
+        , 'X-STF-HEVC-Description': screen.description
+        })
+        const upstream = Readable.fromWeb(screen.body)
+        abort.signal.addEventListener('abort', () => upstream.destroy(), {once: true})
+        pipeline(upstream, res, () => abort.abort())
         return
       }
       if (route === 'GET /screen') {
@@ -154,6 +173,17 @@ export function createServer(
       }
       const input = await body(req)
       switch (req.url) {
+      case '/coredevice/touch': {
+        const type = input.type
+        if (type !== 'contact' && type !== 'release') {
+          throw new InputError('type must be contact or release')
+        }
+        await runtime.coreDeviceInput(input.sessionId).touch(type, point(input), abort.signal)
+        break
+      }
+      case '/coredevice/keyframe':
+        await runtime.coreDeviceInput(input.sessionId).keyframe(abort.signal)
+        break
       case '/lock':
         json(200, await runtime.lock(abort.signal))
         return
@@ -209,11 +239,18 @@ export function createServer(
       json(200, {success: true})
     }
     catch (error) {
+      if (res.destroyed) {
+        return
+      }
+      if (res.headersSent) {
+        res.destroy()
+        return
+      }
       let status = runtime.state === 'ready' ? 502 : 503
       if (error instanceof InputError) {
         status = 400
       }
-      if (error instanceof InstallError) {
+      if (error instanceof InstallError || error instanceof CoreDeviceError) {
         status = error.status
       }
       json(status, {error: (error as Error).message})

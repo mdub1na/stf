@@ -122,6 +122,7 @@ ios:
   # - name: iphone-a
   #   udid: YOUR_DEVICE_UDID
   #   wdaBundleId: com.example.WebDriverAgentRunner.xctrunner
+  #   coreDevice: true  # Optional interactive video and touch for iOS 27+.
   #   tokenSecret: iphone-a-token
   #   service: {create: true}
   #   tokenKey: token

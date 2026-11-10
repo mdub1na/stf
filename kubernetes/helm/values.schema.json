@@ -195,6 +195,9 @@
                 "type": "string",
                 "pattern": "^[A-Za-z0-9_-]+(?:\\.[A-Za-z0-9_-]+)+$"
               },
+              "coreDevice": {
+                "type": "boolean"
+              },
               "tokenSecret": {
                 "type": "string",
                 "minLength": 1

@@ -153,6 +153,48 @@ describe('iOS prototype HTTP and WDA integration', () => {
     assert.equal(f.calls.length, 1)
   })
 
+  it('keeps CoreDevice opt-in and fences input to a current screen session', async() => {
+    const f = await fixture()
+    const device = await (await f.request('/device')).json() as object
+    assert.equal(Object.hasOwn(device, 'coreDevice'), false)
+    assert.equal((await f.request('/coredevice/screen')).status, 404)
+    assert.equal((await f.request('/coredevice/touch', {type: 'tap'})).status, 400)
+    assert.equal((await f.request('/coredevice/touch', {
+      type: 'contact', x: 0.5, y: 0.5, sessionId: 'expired'
+    })).status, 409)
+    assert.equal((await f.request('/coredevice/keyframe', {sessionId: 'expired'})).status, 409)
+    assert.equal(f.calls.length, 1)
+  })
+
+  it('passes native video through the authenticated screen and cancels on disconnect', async t => {
+    const f = await fixture()
+    let disconnected: AbortSignal | undefined
+    let cancelled = false
+    const frame = Buffer.from([0, 0, 0, 3, 0, 1, 2])
+    t.mock.method(f.runtime, 'openCoreDevice', async(signal: AbortSignal) => {
+      disconnected = signal
+      return {
+        sessionId: 'screen-session', codec: 'hev1.1.6.L120.B0', description: 'AAAB'
+      , body: new ReadableStream<Uint8Array>({
+          start: controller => controller.enqueue(frame)
+        , cancel: () => {
+            cancelled = true
+          }
+        })
+      }
+    })
+    assert.equal((await fetch(f.api + '/coredevice/screen')).status, 401)
+    const response = await f.request('/coredevice/screen')
+    assert.equal(response.status, 200)
+    assert.equal(response.headers.get('x-stf-coredevice-session'), 'screen-session')
+    assert.equal(response.headers.get('x-stf-hevc-codec'), 'hev1.1.6.L120.B0')
+    assert.equal(response.headers.get('x-stf-hevc-description'), 'AAAB')
+    const reader = response.body!.getReader()
+    assert.deepEqual(Buffer.from((await reader.read()).value!), frame)
+    await reader.cancel()
+    await until(() => disconnected?.aborted === true && cancelled)
+  })
+
   it('uses the device home-screen endpoint instead of a hardware Home button', async() => {
     const f = await fixture()
     assert.equal((await f.request('/home', {})).status, 200)
@@ -377,7 +419,7 @@ describe('iOS prototype HTTP and WDA integration', () => {
 })
 
 describe('iOS prototype lifecycle', () => {
-  function dependencies(f: Awaited<ReturnType<typeof fixture>>) {
+  function dependencies(f: Awaited<ReturnType<typeof fixture>>, version = '18.0') {
     const spawned: Array<{
       binary: string, args: string[], stopped: boolean, failure: Error | null
     }> = []
@@ -396,7 +438,7 @@ describe('iOS prototype lifecycle', () => {
         if (args.includes('ls')) {
           return [{udid: options.udid, address: 'fd00::1', rsdPort: 58783, userspaceTun: false}]
         }
-        return {ProductVersion: '18.0'}
+        return {ProductVersion: version}
       }
     , start: (binary, args) => {
         const child = {binary, args, stopped: false, failure: null as Error | null
@@ -411,6 +453,21 @@ describe('iOS prototype lifecycle', () => {
       connected = false
     }}
   }
+
+  it('keeps WDA available when the optional iOS 27 screen worker cannot start', async() => {
+    const f = await fixture()
+    const d = dependencies(f, '27.0.1')
+    const runtime = new IosRuntime({...options, coreDevice: true}, d.deps)
+    cleanups.push(() => runtime.stop())
+    runtime.start()
+    await until(() => runtime.state === 'ready' && runtime.telemetry.status.locked === false)
+    assert.equal(runtime.coreDevice, true)
+    const api = await listen(createServer(runtime, token))
+    const headers = {Authorization: 'Bearer ' + token, 'Content-Type': 'application/json'}
+    assert.equal((await fetch(api + '/coredevice/screen', {headers})).status, 503)
+    assert.equal((await fetch(api + '/home', {headers, method: 'POST', body: '{}'})).status, 200)
+    assert.equal(runtime.state, 'ready')
+  })
 
   it('selects one UDID, uses loopback forwards and cleans up only its own processes', async() => {
     const f = await fixture()

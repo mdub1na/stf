@@ -1,6 +1,7 @@
 import type {Device} from '@/core/devices/types'
 import {canViewDevice, isAutomated} from '@/core/devices/enhance'
 import {rotator} from './rotator'
+import {startHevcScreen, supportsHevcScreen} from './screen-hevc'
 
 export interface ScreenBounds {
   x: number
@@ -70,6 +71,9 @@ export function startScreenStream(options: ScreenStreamOptions): ScreenStream {
   let stopped = false
   let retry: ReturnType<typeof setTimeout> | null = null
   let retryAttempt = 0
+  let hevcRequested = false
+  let hevcDisabled = new URLSearchParams(window.location.search).get('iosScreen') === 'mjpeg'
+  let hevc: ReturnType<typeof startHevcScreen> | null = null
 
   let adjustedBoundSize: BoundSize | null = null
   let cachedEnabled = false
@@ -174,14 +178,31 @@ export function startScreenStream(options: ScreenStreamOptions): ScreenStream {
       isOpen()
   }
 
+  function isManualIPhone(): boolean {
+    const device = getDevice()
+    return device.platform === 'iOS' && device.using === true && !isAutomated(device)
+  }
+
+  function closeHevc() {
+    hevcRequested = false
+    hevc?.close()
+    hevc = null
+  }
+
   function onScreenInterestGained() {
     if (ws && isOpen()) {
       sendSize()
+      if (!hevcDisabled && isManualIPhone() && supportsHevcScreen()) {
+        hevcRequested = true
+        ws.binaryType = 'arraybuffer'
+        ws.send('hevc')
+      }
       ws.send('on')
     }
   }
 
   function onScreenInterestLost() {
+    closeHevc()
     if (ws && isOpen()) {
       ws.send('off')
     }
@@ -191,6 +212,11 @@ export function startScreenStream(options: ScreenStreamOptions): ScreenStream {
     const newEnabled = shouldUpdateScreen()
     updateStatus()
     scheduleRetry()
+
+    if (newEnabled && hevcRequested && !isManualIPhone()) {
+      closeHevc()
+      ws?.send('mjpeg')
+    }
 
     if (newEnabled === cachedEnabled) {
       updateBounds()
@@ -216,6 +242,7 @@ export function startScreenStream(options: ScreenStreamOptions): ScreenStream {
   const cachedScreen: ScreenGeometry = {rotation: 0, bounds: {x: 0, y: 0, w: 0, h: 0}}
   let cachedImageWidth = 0
   let cachedImageHeight = 0
+  let cachedImageScale = 0
   let cssRotation = 0
   let alwaysUpright = false
 
@@ -224,26 +251,28 @@ export function startScreenStream(options: ScreenStreamOptions): ScreenStream {
     root.classList.toggle('quirk-always-upright', alwaysUpright)
   }
 
-  function hasImageAreaChanged(img: ImageBitmap): boolean {
+  function hasImageAreaChanged(width: number, height: number, scale: number): boolean {
     return cachedScreen.bounds.w !== screen.bounds.w ||
       cachedScreen.bounds.h !== screen.bounds.h ||
-      cachedImageWidth !== img.width ||
-      cachedImageHeight !== img.height ||
+      cachedImageWidth !== width ||
+      cachedImageHeight !== height ||
+      cachedImageScale !== scale ||
       cachedScreen.rotation !== screen.rotation
   }
 
-  function updateImageArea(img: ImageBitmap) {
-    if (!hasImageAreaChanged(img)) {
+  function updateImageArea(width: number, height: number, scale: number) {
+    if (!hasImageAreaChanged(width, height, scale)) {
       return
     }
 
-    cachedImageWidth = img.width
-    cachedImageHeight = img.height
+    cachedImageWidth = width
+    cachedImageHeight = height
+    cachedImageScale = scale
 
     if (streamOptions.autoScaleForRetina) {
-      canvas.width = cachedImageWidth * frontBackRatio
-      canvas.height = cachedImageHeight * frontBackRatio
-      g.scale(frontBackRatio, frontBackRatio)
+      canvas.width = cachedImageWidth * scale
+      canvas.height = cachedImageHeight * scale
+      g.scale(scale, scale)
     }
     else {
       canvas.width = cachedImageWidth
@@ -258,11 +287,11 @@ export function startScreenStream(options: ScreenStreamOptions): ScreenStream {
     cachedScreen.rotation = screen.rotation
 
     if (isSideways(screen.rotation) && !alwaysUpright) {
-      canvasAspect = img.height / img.width
+      canvasAspect = height / width
       root.classList.add('rotated')
     }
     else {
-      canvasAspect = img.width / img.height
+      canvasAspect = width / height
       root.classList.remove('rotated')
     }
 
@@ -271,6 +300,20 @@ export function startScreenStream(options: ScreenStreamOptions): ScreenStream {
     }
 
     maybeFlipLetterbox()
+  }
+
+  function drawImage(image: CanvasImageSource, width: number, height: number, scale = frontBackRatio) {
+    updateImageArea(width, height, scale)
+    g.drawImage(image, 0, 0, width, height)
+    transportLost = false
+    if (displayError) {
+      setDisplayError(false)
+    }
+    updateStatus()
+    root.classList.add('has-frame')
+    if (framesDrawn++ === 0) {
+      options.onFirstFrame()
+    }
   }
 
   function drawFrame(data: Blob, socket: WebSocket) {
@@ -286,20 +329,62 @@ export function startScreenStream(options: ScreenStreamOptions): ScreenStream {
           return
         }
         newestDrawnFrame = frame
-        updateImageArea(bitmap)
-        g.drawImage(bitmap, 0, 0, bitmap.width, bitmap.height)
-        bitmap.close()
-        transportLost = false
-        if (displayError) {
-          setDisplayError(false)
+        try {
+          drawImage(bitmap, bitmap.width, bitmap.height)
         }
-        updateStatus()
-        root.classList.add('has-frame')
-        if (framesDrawn++ === 0) {
-          options.onFirstFrame()
+        finally {
+          bitmap.close()
         }
       })
       .catch(() => undefined)
+  }
+
+  function fallBackToMjpeg(socket: WebSocket) {
+    hevcDisabled = true
+    closeHevc()
+    transportLost = true
+    updateStatus()
+    socket.send('mjpeg')
+  }
+
+  function openHevc(header: string, socket: WebSocket) {
+    if (!hevcRequested || !isManualIPhone() || !shouldUpdateScreen()) {
+      return
+    }
+    hevc?.close()
+    frameGeneration += 1
+    let ready = false
+    const session = startHevcScreen(header, {
+      onFrame: (frame) => {
+        if (hevc !== session || ws !== socket || !shouldUpdateScreen()) {
+          return
+        }
+        const display = getDevice().display
+        const width = display?.width || frame.displayWidth
+        const height = display?.height || frame.displayHeight
+        if ((width > height) !== (frame.displayWidth > frame.displayHeight)) {
+          fallBackToMjpeg(socket)
+          return
+        }
+        // Keep the canvas aligned with touch coordinates as the encoder changes resolution.
+        drawImage(frame, width, height, 1)
+        if (!ready) {
+          ready = true
+          socket.send('hevc ready')
+        }
+      }
+      , onKeyframe: () => {
+        if (hevc === session && ws === socket && shouldUpdateScreen()) {
+          socket.send('hevc keyframe')
+        }
+      }
+      , onFallback: () => {
+        if (hevc === session && ws === socket && shouldUpdateScreen()) {
+          fallBackToMjpeg(socket)
+        }
+      }
+    })
+    hevc = session
   }
 
   function connect() {
@@ -313,15 +398,38 @@ export function startScreenStream(options: ScreenStreamOptions): ScreenStream {
       const display = getDevice().display
       screen.rotation = display ? display.rotation : 0
 
-      if (message.data instanceof Blob) {
+      if (message.data instanceof ArrayBuffer) {
         if (shouldUpdateScreen()) {
+          if (hevc) {
+            hevc.receive(message.data)
+          }
+          else {
+            const bytes = new Uint8Array(message.data)
+            if (bytes[0] === 0xff && bytes[1] === 0xd8) {
+              drawFrame(new Blob([message.data]), socket)
+            }
+          }
+        }
+      }
+      else if (message.data instanceof Blob) {
+        if (shouldUpdateScreen() && !hevc) {
           drawFrame(message.data, socket)
         }
+      }
+      else if (typeof message.data === 'string' && message.data.startsWith('hevc ')) {
+        openHevc(message.data.slice('hevc '.length), socket)
+      }
+      else if (message.data === 'mjpeg') {
+        hevcDisabled ||= hevcRequested
+        closeHevc()
       }
       else if (/^start /.test(message.data)) {
         applyQuirks(JSON.parse(message.data.slice('start '.length)))
       }
       else if (message.data === 'secure_on') {
+        if (hevcRequested) {
+          fallBackToMjpeg(socket)
+        }
         clearFrame()
         setDisplayError('secure')
       }
@@ -340,6 +448,7 @@ export function startScreenStream(options: ScreenStreamOptions): ScreenStream {
         return
       }
       ws = null
+      closeHevc()
       cachedEnabled = false
       transportLost = true
       clearFrame()
@@ -348,6 +457,7 @@ export function startScreenStream(options: ScreenStreamOptions): ScreenStream {
     }
     socket.onerror = () => {
       if (ws === socket && !stopped) {
+        closeHevc()
         transportLost = true
         clearFrame()
         updateStatus()
@@ -375,6 +485,7 @@ export function startScreenStream(options: ScreenStreamOptions): ScreenStream {
 
   function stop() {
     stopped = true
+    closeHevc()
     clearFrame()
     updateStatus()
     if (retry) {

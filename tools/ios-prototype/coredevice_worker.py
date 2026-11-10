@@ -3,6 +3,7 @@
 import asyncio
 import contextlib
 import json
+import logging
 import os
 import socket
 import sys
@@ -11,6 +12,9 @@ import threading
 from pymobiledevice3.remote.core_device.display_service import DisplayService
 from pymobiledevice3.remote.core_device.screen_stream import ScreenStreamServer
 from pymobiledevice3.remote.remote_service_discovery import RemoteServiceDiscoveryService
+
+
+MAX_TOUCH_BYTES = 1024
 
 
 class ScreenServer(ScreenStreamServer):
@@ -37,13 +41,17 @@ class ScreenServer(ScreenStreamServer):
             if self.stopping:
                 return 409, b"screen session ended"
             try:
+                touch = json.loads(body)
+                # A timed-out send may already have reached the phone.
+                if touch["type"] == "contact":
+                    self.last_contact = touch
                 result = await super()._handle_touch(body)
             except Exception:
                 self.stop_requested.set()
                 raise
             if result[0] == 200:
-                touch = json.loads(body)
-                self.last_contact = touch if touch["type"] == "contact" else None
+                if touch["type"] != "contact":
+                    self.last_contact = None
             else:
                 self.stop_requested.set()
             return result
@@ -57,7 +65,25 @@ class ScreenServer(ScreenStreamServer):
                 await super()._handle_touch(json.dumps(release).encode())
 
 
-async def serve(config, stop):
+async def dispatch_touches(server, commands, stop):
+    while not stop.is_set():
+        body = await commands.get()
+        if stop.is_set():
+            return
+        try:
+            status, _ = await server._handle_touch(body)
+        except Exception:
+            logging.exception("CoreDevice touch failed")
+            status = 500
+        try:
+            print("ok" if status == 200 else "error", flush=True)
+        except BrokenPipeError:
+            stop.set()
+        if status != 200:
+            stop.set()
+
+
+async def serve(config, stop, commands):
     async with RemoteServiceDiscoveryService((config["address"], config["rsdPort"])) as rsd:
         if rsd.udid != config["udid"]:
             raise RuntimeError("RSD belongs to a different iPhone")
@@ -72,16 +98,23 @@ async def serve(config, stop):
             server = ScreenServer(rsd, reservation, config["password"], stop)
             print(reservation.getsockname()[1], flush=True)
             task = asyncio.create_task(server.serve())
+            touches = asyncio.create_task(dispatch_touches(server, commands, stop))
             stopped = asyncio.create_task(stop.wait())
             try:
                 done, _ = await asyncio.wait((task, stopped), return_when=asyncio.FIRST_COMPLETED)
                 if task in done:
                     await task
                 else:
+                    server.stopping = True
+                    touches.cancel()
+                    await asyncio.wait((touches,), timeout=1)
                     with contextlib.suppress(Exception):
                         await asyncio.wait_for(server.release_contact(), 1)
             finally:
                 stopped.cancel()
+                touches.cancel()
+                with contextlib.suppress(asyncio.CancelledError):
+                    await touches
                 if not task.done():
                     task.cancel()
                     with contextlib.suppress(asyncio.CancelledError):
@@ -107,12 +140,32 @@ async def main(config):
     loop = asyncio.get_running_loop()
     stop = asyncio.Event()
     finished = threading.Event()
+    commands = asyncio.Queue(maxsize=1)
+
+    def enqueue(body):
+        if not stop.is_set():
+            try:
+                commands.put_nowait(body)
+            except asyncio.QueueFull:
+                logging.error("Overlapping CoreDevice touch commands")
+                stop.set()
 
     def watch_parent():
         # EOF arrives even if the Node parent exits abruptly. AppArmor on the
         # farm can reject signals between processes in the same container.
-        with contextlib.suppress(OSError):
-            os.read(sys.stdin.fileno(), 1)
+        pending = b""
+        try:
+            while chunk := os.read(sys.stdin.fileno(), MAX_TOUCH_BYTES):
+                pending += chunk
+                while b"\n" in pending:
+                    body, pending = pending.split(b"\n", 1)
+                    if not body or len(body) > MAX_TOUCH_BYTES:
+                        raise ValueError("Invalid CoreDevice touch command length")
+                    loop.call_soon_threadsafe(enqueue, body)
+                if len(pending) > MAX_TOUCH_BYTES:
+                    raise ValueError("CoreDevice touch command exceeds its size limit")
+        except (OSError, RuntimeError, ValueError) as error:
+            logging.error("CoreDevice touch pipe closed: %s", error)
         with contextlib.suppress(RuntimeError):
             loop.call_soon_threadsafe(stop.set)
         if not finished.wait(25):
@@ -120,7 +173,7 @@ async def main(config):
 
     threading.Thread(target=watch_parent, daemon=True).start()
     try:
-        await serve(config, stop)
+        await serve(config, stop, commands)
     finally:
         finished.set()
 

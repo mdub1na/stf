@@ -97,7 +97,7 @@ core:
   resources:
     requests: {cpu: 25m, memory: 128Mi}
     limits: {cpu: '1', memory: 1Gi}
-  # Per-component pod/container overrides, e.g. units.api.resources.
+  # Per-component pod/container overrides, e.g. units.api.resources or units.app.image.
   units: {}
 android:
   adbImage: devicefarmer/adb:latest
@@ -122,6 +122,9 @@ ios:
   # - name: iphone-a
   #   udid: YOUR_DEVICE_UDID
   #   wdaBundleId: com.example.WebDriverAgentRunner.xctrunner
+  #   coreDevice: true  # Optional interactive video and touch for iOS 27+.
+  #   prototypeImage: {repository: YOUR_REGISTRY/ios-runtime, tag: VERSION}
+  #   providerImage: {repository: YOUR_REGISTRY/stf, tag: VERSION}
   #   tokenSecret: iphone-a-token
   #   service: {create: true}
   #   tokenKey: token

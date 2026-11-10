@@ -48,6 +48,7 @@ describe('Linux iOS integration', function() {
     }
     const requests: {path: string, body: any}[] = []
     let cancelled = false
+    let nativeClosed = false
     let failKeepalive = false
     const errors: unknown[] = []
     const screens: http.ServerResponse[] = []
@@ -73,6 +74,20 @@ describe('Linux iOS integration', function() {
         res.setHeader('Content-Type', 'multipart/x-mixed-replace;boundary=frame')
         screens.push(res)
         res.write(Buffer.concat([frame, frame]))
+      }
+      else if (req.url === '/coredevice/screen') {
+        res.writeHead(200, {
+          'Content-Type': 'application/octet-stream'
+        , 'X-STF-CoreDevice-Session': 'coredevice-session'
+        , 'X-STF-HEVC-Codec': 'hev1.1.6.L150.B0'
+        , 'X-STF-HEVC-Description': 'AQID'
+        })
+        const unit = Buffer.from('0000000700000000022601', 'hex')
+        res.write(unit.subarray(0, 5))
+        res.write(unit.subarray(5))
+        res.once('close', () => {
+          nativeClosed = true
+        })
       }
       else {
         const chunks: Buffer[] = []
@@ -136,6 +151,7 @@ describe('Linux iOS integration', function() {
  failKeepalive = true
 }
       , pushFrames: () => screens.forEach(res => res.write(Buffer.concat([frame, frame])))
+      , nativeClosed: () => nativeClosed
       , disconnects: () => disconnects, cancelled: () => cancelled}
   }
 
@@ -797,6 +813,28 @@ describe('Linux iOS integration', function() {
     assert.deepEqual(f.requests.map(item => item.path), ['/home'])
   })
 
+  it('accepts an old WebSocket gesture ID only once in its own reservation', async function() {
+    const f = await fixture()
+    await f.join()
+    const gestureId = '11111111-1111-4111-8111-111111111111:1'
+    const tap = (reservationId: string | null, x: number) => {
+      const identity = {gestureId, reservationId}
+      f.send(new wire.GestureStartMessage({seq: 0, ...identity}))
+      f.send(new wire.TouchDownMessage({seq: 1, contact: 0, x, y: 0.4, ...identity}))
+      f.send(new wire.TouchUpMessage({seq: 2, contact: 0, ...identity}))
+      f.send(new wire.GestureStopMessage({seq: 3, ...identity}))
+    }
+    tap(null, 0.1)
+    tap('previous-reservation', 0.2)
+    const current = f.bridge.owner!.reservationId!
+    tap(current, 0.25)
+    tap(current, 0.4)
+    f.send(new wire.KeyPressMessage('home'))
+    await until(() => f.requests.some(item => item.path === '/home'))
+    const taps = f.requests.filter(item => item.path === '/tap')
+    assert.deepEqual(taps.map(item => item.body.x), [0.25])
+  })
+
   it('invalidates commands on release and WDA recovery', async function() {
     const f = await fixture()
     await f.join()
@@ -1187,4 +1225,84 @@ describe('Linux iOS integration', function() {
         screen.close()
       }
     })
+
+  it('forwards live contacts on HEVC and falls back to WDA', async function() {
+    const f = await fixture()
+    f.state.coreDevice = true
+    await f.join()
+    const currentOwner = f.bridge.owner!
+    const reservation = {...currentOwner, reservationId: 'stale'}
+    const api = http.createServer((req, res) => {
+      const data = req.url === '/api/v1/user' ?
+        {user: {email: owner.email}} : {device: {serial, owner: reservation}}
+      res.end(JSON.stringify({success: true, ...data}))
+    })
+    servers.push(api)
+    const apiUrl = await listen(api)
+    const headers = {origin, cookie: 'session=signed'}
+    const authorized = await authorizeScreen(apiUrl, origin, serial, currentOwner, headers, true)
+    assert.equal(authorized, false)
+    reservation.reservationId = currentOwner.reservationId!
+    const screen = createScreenServer({
+      client: f.client, apiUrl, publicOrigin: origin, serial
+    , owner: () => f.bridge.owner
+    , coreDevice: {
+        available: () => f.bridge.canUseCoreDevice()
+      , connectInput: (id, signal, fail) => f.bridge.connectCoreDeviceInput(id, signal, fail)
+      }
+    })
+    const ws = new WebSocket((await listen(screen.server)).replace('http:', 'ws:'), {headers})
+    const messages: {data: Buffer, binary: boolean}[] = []
+    const contacts = () => f.requests.filter(request => request.path === '/coredevice/touch')
+    ws.on('message', (data, binary) => messages.push({data: data as Buffer, binary}))
+    try {
+      await once(ws, 'open')
+      ws.send('hevc')
+      ws.send('on')
+      await until(() => messages.some(message => message.binary))
+      assert.deepEqual(messages.find(message => message.binary)!.data,
+        Buffer.from('02000000022601', 'hex'))
+      const config = messages.find(message => message.data.toString().startsWith('hevc '))
+      assert.deepEqual(JSON.parse(config!.data.toString().slice(5)), {
+        codec: 'hev1.1.6.L150.B0', description: 'AQID'
+      })
+      ws.send('hevc ready')
+      ws.send('hevc keyframe')
+      await until(() => f.requests.some(request => request.path === '/coredevice/keyframe'))
+      const gesture = {
+        gestureId: '11111111-1111-4111-8111-111111111111:1'
+      , reservationId: currentOwner.reservationId!
+      }
+      f.send(new wire.GestureStartMessage({seq: 0, ...gesture}))
+      f.send(new wire.TouchDownMessage({seq: 1, contact: 0, x: 0.25, y: 0.5, ...gesture}))
+      f.send(new wire.TouchCommitMessage({seq: 2, ...gesture}))
+      await until(() => contacts().length === 1)
+      f.send(new wire.TouchMoveMessage({seq: 3, contact: 0, x: 0.5, y: 0.5, ...gesture}))
+      f.send(new wire.TouchCommitMessage({seq: 4, ...gesture}))
+      await until(() => contacts().length === 2)
+      f.send(new wire.TouchUpMessage({seq: 5, contact: 0, ...gesture}))
+      f.send(new wire.TouchCommitMessage({seq: 6, ...gesture}))
+      f.send(new wire.GestureStopMessage({seq: 7, ...gesture}))
+      await until(() => contacts().length === 3)
+      assert.deepEqual(contacts().map(request => request.body), [
+        {sessionId: 'coredevice-session', type: 'contact', x: 0.25, y: 0.5}
+      , {sessionId: 'coredevice-session', type: 'contact', x: 0.5, y: 0.5}
+      , {sessionId: 'coredevice-session', type: 'release', x: 0.5, y: 0.5}
+      ])
+      ws.send('mjpeg')
+      const receivedJpeg = () => messages.some(({binary, data}) => binary && data[0] === 0xff)
+      await until(() => f.nativeClosed() && receivedJpeg())
+      const fallback = f.gesture(2)
+      f.send(new wire.GestureStartMessage({seq: 0, ...fallback}))
+      f.send(new wire.TouchDownMessage({seq: 1, contact: 0, x: 0.25, y: 0.5, ...fallback}))
+      f.send(new wire.TouchUpMessage({seq: 2, contact: 0, ...fallback}))
+      f.send(new wire.GestureStopMessage({seq: 3, ...fallback}))
+      await until(() => f.requests.some(request => request.path === '/tap'))
+      assert.equal(contacts().length, 3)
+    }
+    finally {
+      ws.terminate()
+      screen.close()
+    }
+  })
 })

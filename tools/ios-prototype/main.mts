@@ -17,6 +17,7 @@ const {values} = parseArgs({options: {
 , iproxy: {type: 'string', default: 'iproxy'}
 , 'image-mounter': {type: 'string', default: 'go-ios'}
 , pymobiledevice3: {type: 'string', default: 'pymobiledevice3'}
+, coredevice: {type: 'boolean'}
 , port: {type: 'string', default: '7400'}
 , 'wda-port': {type: 'string', default: '18100'}
 , 'mjpeg-port': {type: 'string', default: '19100'}
@@ -41,6 +42,7 @@ if (values.help) {
     'Options: --port 7400 --wda-port 18100 --mjpeg-port 19100 --tunnel-port 28100\n' +
     '         --go-ios ios --iproxy iproxy --xctest-config WebDriverAgentRunner.xctest\n' +
     '         --image-mounter go-ios|pymobiledevice3 --pymobiledevice3 /path/to/pymobiledevice3\n' +
+    '         --coredevice (enable native screen and touch on iOS 27+)\n' +
     '         --storage-url http://storage:3000 --install-dir /private/installations\n' +
     'Use pymobiledevice3 for iOS 27 developer images (requires a kernel go-ios tunnel).\n' +
     'Check the Linux host without starting WDA: --doctor [--udid UDID]\n' +
@@ -88,6 +90,7 @@ async function main(): Promise<void> {
   , wdaPort: ports[1]!, mjpegPort: ports[2]!, tunnelPort: ports[3]!
   , retryMs: 5000, startupMs: 60000
   , stateDirectory: values['state-dir']
+  , coreDevice: values.coredevice === true
   })
   const installations = values['storage-url'] ? await Installations.create({
     storageUrl: values['storage-url'], directory: values['install-dir'], maxBytes: 1024 ** 3

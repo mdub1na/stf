@@ -368,12 +368,14 @@ class ChartTest(unittest.TestCase):
         phones = [iphone(), iphone('iphone-b', '00008100-0000000000000002')]
         phones[0]['persistence'] = {'existingClaim': 'previous-iphone-state'}
         phones[0]['extraContainers'] = [{'name': 'optional-adapter', 'image': 'example.invalid/adapter:test'}]
+        phones[1]['coreDevice'] = True
         items = render({'ios': {'image': IOS_IMAGE, 'devices': phones}})
         for p in phones:
             pod = obj(items, 'Deployment', 'stf-ios-' + p['name'])['spec']['template']['spec']
             cs = {c['name']: c for c in pod['containers']}
             self.assertTrue(cs['tunnel']['securityContext']['privileged'])
             self.assertFalse(cs['prototype']['securityContext']['allowPrivilegeEscalation'])
+            self.assertEqual('--coredevice' in cs['prototype']['args'], p.get('coreDevice', False))
             health = json.dumps(cs['prototype']['readinessProbe'])
             self.assertIn('/health', health)
             self.assertNotIn('state', health)
@@ -383,6 +385,47 @@ class ChartTest(unittest.TestCase):
         self.assertFalse(any(x['kind'] == 'PersistentVolumeClaim' and x['metadata']['name'] == 'stf-ios-iphone-a' for x in items))
         render({'ios': {'devices': [iphone()]}}, failure='ios.image')
         render({'ios': {'image': IOS_IMAGE, 'devices': [iphone(), iphone('b')]}}, failure='UDIDs must be unique')
+
+    def test_interactive_ios_rollout_overrides_only_the_app_and_selected_phone(self):
+        first = iphone()
+        second = iphone('iphone-b', '00008100-0000000000000002')
+        baseline = {'ios': {'image': IOS_IMAGE, 'devices': [first, second]}}
+        app_image = {'repository': 'example.invalid/stf', 'digest': 'sha256:' + 'a' * 64}
+        runtime_image = {'repository': 'example.invalid/ios-runtime', 'tag': 'pilot', 'pullPolicy': 'Always'}
+        pilot = {**first, 'coreDevice': True, 'providerImage': app_image, 'prototypeImage': runtime_image}
+        updated = {'core': {'units': {'app': {'image': app_image}}},
+                   'ios': {'image': IOS_IMAGE, 'devices': [pilot, second]}}
+
+        def manifests(values):
+            return {(item['kind'], item['metadata']['name']): item for item in render(values)}
+
+        before = manifests(baseline)
+        after = manifests(updated)
+        self.assertEqual(before.keys(), after.keys())
+        self.assertEqual({key for key in before if before[key] != after[key]},
+                         {('Deployment', 'stf-app'), ('Deployment', 'stf-ios-iphone-a')})
+        app = after['Deployment', 'stf-app']['spec']['template']['spec']['containers'][0]
+        app_digest = app_image['repository'] + '@' + app_image['digest']
+        self.assertEqual(app['image'], app_digest)
+        self.assertEqual(app['imagePullPolicy'], 'IfNotPresent')
+        ios = after['Deployment', 'stf-ios-iphone-a']['spec']['template']['spec']
+        old_ios = before['Deployment', 'stf-ios-iphone-a']['spec']['template']['spec']
+        containers = {item['name']: item for item in ios['containers']}
+        self.assertEqual(ios['initContainers'], old_ios['initContainers'])
+        self.assertEqual(containers['tunnel'], next(c for c in old_ios['containers'] if c['name'] == 'tunnel'))
+        self.assertEqual(containers['prototype']['image'], 'example.invalid/ios-runtime:pilot')
+        self.assertEqual(containers['prototype']['imagePullPolicy'], 'Always')
+        self.assertIn('--coredevice', containers['prototype']['args'])
+        self.assertEqual(containers['stf-provider']['image'], app_digest)
+
+    def test_image_overrides_require_a_complete_reference(self):
+        render({'core': {'units': {'app': {'image': {'repository': 'example.invalid/stf'}}}}},
+               failure='image')
+        render({'ios': {'image': IOS_IMAGE, 'devices': [
+            {**iphone(), 'prototypeImage': {'tag': 'pilot'}}]}}, failure='prototypeImage')
+        render({'ios': {'image': IOS_IMAGE, 'devices': [
+            {**iphone(), 'providerImage': {'repository': 'example.invalid/stf', 'digest': ''}}]}},
+               failure='providerImage')
 
     def test_ingress_uses_public_origin_and_only_the_proxy(self):
         items = render({'publicOrigin': 'https://farm.example.com', 'proxy': {'ingress': {'enabled': True, 'className': 'custom'}}})

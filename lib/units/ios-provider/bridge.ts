@@ -8,6 +8,7 @@ import {TouchGesture} from '../../wire/touch-gesture.js'
 import type {IosDeviceState, PrototypeClient} from './client.js'
 import type {IosOwner} from './access.js'
 import {findCatalogDevice} from '../../util/device-catalog.js'
+import {CoreDeviceInput} from './coredevice-input.js'
 
 export interface BridgeOptions {
   serial: string
@@ -24,6 +25,7 @@ export class IosBridge {
   readonly channel: string
   readonly solo = wireutil.makePrivateChannel()
   owner: IosOwner | null = null
+  private automated = false
   private state: IosDeviceState | null = null
   private identity: InstanceType<typeof wire.DeviceIdentityMessage> | null = null
   private registered = false
@@ -33,7 +35,8 @@ export class IosBridge {
   private readonly automationLease = new AutomationLease(() => this.leave('automatic_timeout'))
   private automationLeaseId: string | null = null
   private queue = Promise.resolve()
-  private touch: {from: Point, to: Point, started: number} | null = null
+  private touch: {from: Point, to: Point, started: number, native: string | null} | null = null
+  private readonly nativeInput: CoreDeviceInput
   private multitouch = false
   private readonly gestures: TouchGesture
   private lease = randomUUID()
@@ -50,8 +53,10 @@ export class IosBridge {
   , private readonly disconnect: () => void
   , private readonly report: (error: unknown) => void
   ) {
+    this.nativeInput = new CoreDeviceInput(client)
     this.gestures = new TouchGesture(() => this.resetTouch(), {
-      report: error => this.report(error), onFinish: () => this.resetTouch()
+      allowUntimestampedIds: true
+    , report: error => this.report(error), onFinish: () => this.resetTouch()
     })
     this.gestures.setOwner(null)
     this.channel = 'ios:' + options.serial
@@ -114,11 +119,15 @@ export class IosBridge {
         const arrived = performance.now()
         this.gestures.push(message.seq, () => {
           if (message.contact !== 0 || this.touch) {
+            this.resetTouch()
             this.multitouch = true
-            this.touch = null
           }
           else if (!this.multitouch && this.point(message)) {
-            this.touch = {from: message, to: message, started: arrived}
+            const native = this.nativeInput.active
+            this.touch = {from: message, to: message, started: arrived, native}
+            if (native) {
+              this.nativeInput.send(native, 'down', message)
+            }
           }
         }, message.gestureId, message.reservationId, {type: 'down', contact: message.contact})
       })
@@ -126,6 +135,9 @@ export class IosBridge {
         this.gestures.push(message.seq, () => {
           if (this.touch && message.contact === 0 && this.point(message)) {
             this.touch.to = message
+            if (this.touch.native) {
+              this.nativeInput.send(this.touch.native, 'move', message)
+            }
           }
         }, message.gestureId, message.reservationId, {type: 'move', contact: message.contact})
       })
@@ -135,6 +147,10 @@ export class IosBridge {
           const touch = this.touch
           this.touch = null
           if (touch && message.contact === 0 && !this.multitouch) {
+            if (touch.native) {
+              this.nativeInput.send(touch.native, 'up', touch.to)
+              return
+            }
             const distance = Math.hypot(touch.to.x - touch.from.x, touch.to.y - touch.from.y)
             if (distance < 0.005) {
               this.command('/tap', touch.to)
@@ -273,8 +289,25 @@ export class IosBridge {
   }
 
   private resetTouch() {
+    if (this.touch?.native) {
+      this.nativeInput.send(this.touch.native, 'up', this.touch.to)
+    }
     this.touch = null
     this.multitouch = false
+  }
+
+  canUseCoreDevice() {
+    const device = this.lastObservation
+    return Boolean(this.owner && !this.automated && device?.state === 'ready' &&
+      device.coreDevice && !device.ios?.locked)
+  }
+
+  connectCoreDeviceInput(sessionId: string, signal: AbortSignal, fail: (error: unknown) => void) {
+    if (!this.canUseCoreDevice() || signal.aborted) {
+      return undefined
+    }
+    const active = AbortSignal.any([signal, this.ownerAbort.signal])
+    return this.nativeInput.connect(sessionId, active, fail)
   }
 
   private key(key: string) {
@@ -346,6 +379,7 @@ export class IosBridge {
     if (!this.owner) {
       this.ownerAbort = new AbortController()
       this.owner = {...owner, reservationId: randomUUID()}
+      this.automated = usage === 'automation'
       this.gestures.setOwner(this.owner.reservationId!)
       this.lease = randomUUID()
       this.epoch++
@@ -374,6 +408,7 @@ export class IosBridge {
     this.automationLease.clear()
     this.automationLeaseId = null
     this.owner = null
+    this.automated = false
     this.epoch++
     this.gestures.setOwner(null)
     this.disconnect()

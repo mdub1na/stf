@@ -26,6 +26,10 @@
 {{- range $component, $args := $commands -}}
 {{- $name := include "stf.name" (dict "root" $r "component" $component) -}}
 {{- $unit := default dict (get $r.Values.core.units $component) -}}
+{{- $image := $r.Values.image -}}
+{{- if and (eq $component "app") $unit.image -}}
+{{- $image = $unit.image -}}
+{{- end -}}
 {{- $triproxy := hasPrefix "triproxy-" $component -}}
 {{- $transport := ternary $r.Values.messaging.app $r.Values.messaging.dev (eq $component "triproxy-app") -}}
 {{ printf "\n---\n" }}apiVersion: apps/v1
@@ -69,8 +73,8 @@ spec:
       {{- end }}
       containers:
         - name: {{ default $component $unit.containerName }}
-          image: {{ include "stf.image" $r.Values.image | quote }}
-          imagePullPolicy: {{ $r.Values.image.pullPolicy }}
+          image: {{ include "stf.image" $image | quote }}
+          imagePullPolicy: {{ default $r.Values.image.pullPolicy $image.pullPolicy }}
           command: {{ toJson (prepend $args "stf") }}
           env:
             {{- include "stf.env" $r | nindent 12 }}

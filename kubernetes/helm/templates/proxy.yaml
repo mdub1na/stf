@@ -1,6 +1,11 @@
 {{- $r := . -}}
 {{- $proxy := include "stf.name" (dict "root" . "component" "proxy") -}}
 {{- $config := default $proxy (get .Values.resourceNames "proxy-config") -}}
+{{- /* Per-device image and input mode changes do not alter the proxy routes. */ -}}
+{{- $screenDevices := list -}}
+{{- range .Values.ios.devices -}}
+{{- $screenDevices = append $screenDevices (omit . "coreDevice" "prototypeImage" "providerImage") -}}
+{{- end -}}
 apiVersion: v1
 kind: ConfigMap
 metadata:
@@ -71,7 +76,7 @@ spec:
     metadata:
       labels: {{ include "stf.podLabels" (dict "root" . "component" "proxy") | nindent 8 }}
       annotations:
-        checksum/config: {{ toJson (dict "names" .Values.resourceNames "httpPort" .Values.ports.http "proxyPort" .Values.proxy.containerPort "extraRoutes" .Values.proxy.extraScreenRoutes "android" .Values.android.providers "ios" .Values.ios.devices "maxFileSize" .Values.storage.maxFileSize "migration" (include "stf.migration" .)) | sha256sum }}
+        checksum/config: {{ toJson (dict "names" .Values.resourceNames "httpPort" .Values.ports.http "proxyPort" .Values.proxy.containerPort "extraRoutes" .Values.proxy.extraScreenRoutes "android" .Values.android.providers "ios" $screenDevices "maxFileSize" .Values.storage.maxFileSize "migration" (include "stf.migration" .)) | sha256sum }}
     spec:
       enableServiceLinks: false
       automountServiceAccountToken: false

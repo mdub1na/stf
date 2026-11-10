@@ -142,6 +142,23 @@ to your deployment. Route the public screen URL through your reverse proxy to th
 cookies, Origin and WebSocket headers; see the local Nginx generator for an
 example. UDID and WDA bundle ID must match the selected physical phone.
 
+## Interactive CoreDevice control
+
+On iOS 27 or later, opt in per phone with `ios.devices[].coreDevice: true` in
+Helm, `"coreDevice": true` in a Kubernetes fleet device, or `--coredevice` when
+launching the runtime manually. The phone needs Developer Mode, the mounted
+developer image and the existing go-ios kernel tunnel. Use matching STF and iOS
+runtime builds. The browser needs HEVC decoding through WebCodecs to use this
+mode.
+
+For an active manual session, CoreDevice streams the phone's HEVC video and
+delivers touch movements as they happen. STF's screen and input authorization
+still apply. WDA remains available for Appium and as the manual fallback. STF
+uses WDA and JPEG frames on earlier iOS versions and when CoreDevice or HEVC
+decoding is unavailable. CoreDevice screen sharing can interfere with apps that
+use the camera or microphone. For these workflows, open the device page with
+the `iosScreen=mjpeg` query parameter to use the WDA path for that page.
+
 ## Installing an IPA
 
 Claim the iPhone, open its dashboard and drop one `.ipa` into **App Upload**,

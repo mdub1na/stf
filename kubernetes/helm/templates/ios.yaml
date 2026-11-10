@@ -3,6 +3,8 @@
 {{- $component := printf "ios-%s" .name -}}
 {{- $name := include "stf.name" (dict "root" $r "component" $component) -}}
 {{- $p := merge (default dict .persistence) (dict "enabled" true "existingClaim" "" "storageClass" "" "size" "5Gi" "annotations" dict) -}}
+{{- $prototypeImage := default $r.Values.ios.image .prototypeImage -}}
+{{- $providerImage := default $r.Values.image .providerImage -}}
 {{- if not $p.enabled }}{{ fail "iOS device state persistence cannot be disabled" }}{{ end -}}
 {{- $platformVersion := get (default dict .appium) "platformVersion" -}}
 {{- $appium := and $r.Values.appium.enabled $platformVersion -}}
@@ -82,13 +84,16 @@ spec:
             - {name: tun, mountPath: /dev/net/tun}
             - {name: state, mountPath: /state}
         - name: prototype
-          image: {{ include "stf.image" $r.Values.ios.image | quote }}
-          imagePullPolicy: {{ $r.Values.ios.image.pullPolicy }}
+          image: {{ include "stf.image" $prototypeImage | quote }}
+          imagePullPolicy: {{ default $r.Values.ios.image.pullPolicy $prototypeImage.pullPolicy }}
           command: [node, tools/ios-prototype/container.mts, supervise, node, tools/ios-prototype/main.mts]
           args:
             - --udid={{ .udid }}
             - --wda-bundle-id={{ .wdaBundleId }}
             - --image-mounter=pymobiledevice3
+            {{- if .coreDevice }}
+            - --coredevice
+            {{- end }}
             - --token-file=/token/token
             - --storage-url=http://{{ include "stf.name" (dict "root" $r "component" "storage") }}:{{ $r.Values.ports.http }}/
           env: [{name: HOME, value: /home/node/home}]
@@ -114,8 +119,8 @@ spec:
             - {name: state, mountPath: /home/node}
             {{- with .extraVolumeMounts }}{{ toYaml . | nindent 12 }}{{ end }}
         - name: stf-provider
-          image: {{ include "stf.image" $r.Values.image | quote }}
-          imagePullPolicy: {{ $r.Values.image.pullPolicy }}
+          image: {{ include "stf.image" $providerImage | quote }}
+          imagePullPolicy: {{ default $r.Values.image.pullPolicy $providerImage.pullPolicy }}
           command: [stf, ios-provider]
           args:
             - --serial={{ .udid }}

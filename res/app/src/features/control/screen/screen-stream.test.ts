@@ -26,10 +26,55 @@ class Socket {
     this.readyState = 1
     this.onopen?.()
   }
-  message(data: Blob | string) {
+  message(data: ArrayBuffer | Blob | string) {
     this.onmessage?.(new MessageEvent('message', {data}))
   }
 }
+
+class Chunk {
+  constructor(readonly options: EncodedVideoChunkInit) {}
+}
+
+class Decoder {
+  static instances: Decoder[] = []
+  static isConfigSupported = vi.fn(async(_config: VideoDecoderConfig) => ({supported: true}))
+  state: CodecState = 'unconfigured'
+  decodeQueueSize = 0
+  configure = vi.fn((_config: VideoDecoderConfig) => {
+    this.state = 'configured'
+  })
+  decode = vi.fn((_chunk: Chunk) => {
+    this.decodeQueueSize += 1
+  })
+  reset = vi.fn(() => {
+    this.decodeQueueSize = 0
+    this.state = 'unconfigured'
+  })
+  close = vi.fn(() => {
+    this.state = 'closed'
+  })
+
+  constructor(private readonly callbacks: VideoDecoderInit) {
+    Decoder.instances.push(this)
+  }
+
+  output(timestamp: number) {
+    const frame = {timestamp, displayWidth: 1170, displayHeight: 2532, close: vi.fn()}
+    this.callbacks.output(frame as unknown as VideoFrame)
+    return frame
+  }
+}
+
+function enableHevc() {
+  Decoder.instances = []
+  Decoder.isConfigSupported.mockReset().mockResolvedValue({supported: true})
+  vi.stubGlobal('VideoDecoder', Decoder)
+  vi.stubGlobal('EncodedVideoChunk', Chunk)
+}
+
+const hevcHeader = 'hevc ' + JSON.stringify({codec: 'hvc1.1.6.L123.B0', description: btoa('config')})
+const accessUnit = (kind: number) => Uint8Array.of(kind, 0, 0, 0, 2, 0x26, 0x01).buffer
+const jpegFrame = () => Uint8Array.of(0xff, 0xd8, 0xff, 0xd9).buffer
 
 function fixture(platform = 'iOS') {
   vi.useFakeTimers()
@@ -228,6 +273,117 @@ describe('screen stream availability', () => {
     if (action === 'reconnect') {
       expect(onStatusChange).toHaveBeenLastCalledWith('reconnecting')
     }
+    stream.stop()
+  })
+})
+
+describe('iPhone CoreDevice video', () => {
+  it('negotiates on the existing socket and acknowledges only the first displayed video frame', async() => {
+    enableHevc()
+    const {stream, context, decode} = fixture()
+    const socket = Socket.instances[0]!
+    socket.open()
+    expect(socket.sent.slice(-2)).toEqual(['hevc', 'on'])
+    expect(socket.binaryType).toBe('arraybuffer')
+
+    socket.message(hevcHeader)
+    socket.message(accessUnit(2))
+    socket.message(accessUnit(1))
+    await vi.advanceTimersByTimeAsync(0)
+    const decoder = Decoder.instances[0]!
+    expect(decoder.configure).toHaveBeenCalledWith(expect.objectContaining({
+      codec: 'hvc1.1.6.L123.B0', optimizeForLatency: true
+    }))
+    expect(decoder.decode.mock.calls.map(([chunk]) => chunk.options.type)).toEqual(['key', 'delta'])
+    expect(socket.sent).not.toContain('hevc ready')
+
+    const first = decoder.output(decoder.decode.mock.calls[0]![0].options.timestamp)
+    decoder.output(decoder.decode.mock.calls[1]![0].options.timestamp)
+    expect(context.drawImage).toHaveBeenCalledWith(first, 0, 0, 1170, 2532)
+    expect(first.close).toHaveBeenCalledOnce()
+    expect(socket.sent.filter(message => message === 'hevc ready')).toHaveLength(1)
+    expect(decode).not.toHaveBeenCalled()
+    stream.stop()
+    expect(decoder.close).toHaveBeenCalledOnce()
+  })
+
+  it('retains JPEG for older providers and for read-only automation viewers', async() => {
+    enableHevc()
+    const {stream, device, context, shown} = fixture()
+    const socket = Socket.instances[0]!
+    socket.open()
+    socket.message(jpegFrame())
+    await Promise.resolve()
+    expect(context.drawImage).toHaveBeenCalledOnce()
+    shown.mockReturnValue(false)
+    stream.checkEnabled()
+    device.using = false
+    device.owner = {email: 'runner@example.test'}
+    device.usage = 'automation'
+    shown.mockReturnValue(true)
+    stream.checkEnabled()
+    expect(socket.sent.filter(message => message === 'hevc')).toHaveLength(1)
+    expect(socket.sent.at(-1)).toBe('on')
+    stream.stop()
+  })
+
+  it('switches once to JPEG when the actual codec is unsupported and ignores stale video', async() => {
+    enableHevc()
+    Decoder.isConfigSupported.mockResolvedValueOnce({supported: false})
+    const {stream, context, decode, shown} = fixture()
+    const socket = Socket.instances[0]!
+    socket.open()
+    socket.message(hevcHeader)
+    await vi.advanceTimersByTimeAsync(0)
+    expect(socket.sent.at(-1)).toBe('mjpeg')
+    socket.message(accessUnit(0))
+    expect(decode).not.toHaveBeenCalled()
+    socket.message('mjpeg')
+    socket.message(jpegFrame())
+    await Promise.resolve()
+    expect(context.drawImage).toHaveBeenCalledOnce()
+    shown.mockReturnValue(false)
+    stream.checkEnabled()
+    shown.mockReturnValue(true)
+    stream.checkEnabled()
+    expect(socket.sent.filter(message => message === 'mjpeg')).toHaveLength(1)
+    expect(socket.sent.filter(message => message === 'hevc')).toHaveLength(1)
+    stream.stop()
+  })
+
+  it('drops stalled decode work, requests a keyframe and discards stale output', async() => {
+    enableHevc()
+    const {stream, context} = fixture()
+    const socket = Socket.instances[0]!
+    socket.open()
+    socket.message(hevcHeader)
+    socket.message(accessUnit(0))
+    await vi.advanceTimersByTimeAsync(0)
+    const decoder = Decoder.instances[0]!
+    for (let i = 0; i < 10; i += 1) {
+      socket.message(accessUnit(1))
+    }
+    expect(decoder.decode).toHaveBeenCalledTimes(6)
+    expect(decoder.reset).toHaveBeenCalledOnce()
+    expect(socket.sent.filter(message => message === 'hevc keyframe')).toHaveLength(1)
+    const stale = decoder.output(decoder.decode.mock.calls[0]![0].options.timestamp)
+    expect(stale.close).toHaveBeenCalledOnce()
+    expect(context.drawImage).not.toHaveBeenCalled()
+    socket.message(accessUnit(0))
+    decoder.output(decoder.decode.mock.calls[6]![0].options.timestamp)
+    expect(context.drawImage).toHaveBeenCalledOnce()
+    stream.stop()
+  })
+
+  it('falls back when native video never produces a frame', async() => {
+    enableHevc()
+    const {stream} = fixture()
+    const socket = Socket.instances[0]!
+    socket.open()
+    socket.message(hevcHeader)
+    await vi.advanceTimersByTimeAsync(6000)
+    expect(socket.sent.at(-1)).toBe('mjpeg')
+    expect(Decoder.instances[0]!.close).toHaveBeenCalledOnce()
     stream.stop()
   })
 })

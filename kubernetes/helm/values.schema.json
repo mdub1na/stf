@@ -168,6 +168,22 @@
       },
       "additionalProperties": false
     },
+    "core": {
+      "type": "object",
+      "properties": {
+        "units": {
+          "type": "object",
+          "properties": {
+            "app": {
+              "type": "object",
+              "properties": {
+                "image": { "$ref": "#/definitions/imageOverride" }
+              }
+            }
+          }
+        }
+      }
+    },
     "ios": {
       "type": "object",
       "properties": {
@@ -195,6 +211,11 @@
                 "type": "string",
                 "pattern": "^[A-Za-z0-9_-]+(?:\\.[A-Za-z0-9_-]+)+$"
               },
+              "coreDevice": {
+                "type": "boolean"
+              },
+              "prototypeImage": { "$ref": "#/definitions/imageOverride" },
+              "providerImage": { "$ref": "#/definitions/imageOverride" },
               "tokenSecret": {
                 "type": "string",
                 "minLength": 1
@@ -690,6 +711,19 @@
     }
   },
   "definitions": {
+    "imageOverride": {
+      "allOf": [
+        { "$ref": "#/definitions/optionalImage" },
+        {
+          "required": ["repository"],
+          "properties": { "repository": { "minLength": 1 } },
+          "anyOf": [
+            { "required": ["tag"], "properties": { "tag": { "minLength": 1 } } },
+            { "required": ["digest"], "properties": { "digest": { "minLength": 1 } } }
+          ]
+        }
+      ]
+    },
     "optionalImage": {
       "type": "object",
       "properties": {

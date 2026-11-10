@@ -46,6 +46,7 @@ interface GestureOptions {
   sourceIdleMs?: number
   maxStartAgeMs?: number
   futureClockSkewMs?: number
+  allowUntimestampedIds?: boolean
   onFinish?: (heldContacts: ReadonlySet<number>) => void
 }
 
@@ -131,13 +132,14 @@ export class TouchGesture {
     }
     const source = typeof id === 'string' ? this.source(id) : null
     return this.owner !== null && reservationId === this.owner &&
-      source !== null && source.issuedAt !== null
+      source !== null && (source.issuedAt !== null || this.options.allowUntimestampedIds === true)
   }
 
   private fresh(id: string | null): boolean {
     const issuedAt = id && this.source(id)?.issuedAt
     if (typeof issuedAt !== 'number') {
-      return typeof this.owner === 'undefined'
+      return typeof this.owner === 'undefined' ||
+        (issuedAt === null && this.options.allowUntimestampedIds === true)
     }
     const now = this.now()
     return now - issuedAt < this.maxStartAgeMs && issuedAt - now <= this.futureClockSkewMs
@@ -169,10 +171,14 @@ export class TouchGesture {
       }
     }
     this.sources.delete(source.source)
+    // A source with any untimestamped IDs needs its watermark for the entire reservation.
+    const keepWatermark = this.options.allowUntimestampedIds === true &&
+      (source.issuedAt === null || latest?.issuedAt === null)
+    const issuedAt = source.issuedAt === null ? latest?.issuedAt ?? null :
+      Math.max(latest?.issuedAt ?? 0, source.issuedAt)
     this.sources.set(source.source, {order: advance ? Math.max(latest?.order || 0, source.order) :
       latest?.order || 0, seen: now
-      , issuedAt: source.issuedAt === null ? latest?.issuedAt ?? null :
-        Math.max(latest?.issuedAt ?? 0, source.issuedAt)})
+      , issuedAt: keepWatermark ? null : issuedAt})
     return true
   }
 

@@ -813,6 +813,28 @@ describe('Linux iOS integration', function() {
     assert.deepEqual(f.requests.map(item => item.path), ['/home'])
   })
 
+  it('accepts an old WebSocket gesture ID only once in its own reservation', async function() {
+    const f = await fixture()
+    await f.join()
+    const gestureId = '11111111-1111-4111-8111-111111111111:1'
+    const tap = (reservationId: string | null, x: number) => {
+      const identity = {gestureId, reservationId}
+      f.send(new wire.GestureStartMessage({seq: 0, ...identity}))
+      f.send(new wire.TouchDownMessage({seq: 1, contact: 0, x, y: 0.4, ...identity}))
+      f.send(new wire.TouchUpMessage({seq: 2, contact: 0, ...identity}))
+      f.send(new wire.GestureStopMessage({seq: 3, ...identity}))
+    }
+    tap(null, 0.1)
+    tap('previous-reservation', 0.2)
+    const current = f.bridge.owner!.reservationId!
+    tap(current, 0.25)
+    tap(current, 0.4)
+    f.send(new wire.KeyPressMessage('home'))
+    await until(() => f.requests.some(item => item.path === '/home'))
+    const taps = f.requests.filter(item => item.path === '/tap')
+    assert.deepEqual(taps.map(item => item.body.x), [0.25])
+  })
+
   it('invalidates commands on release and WDA recovery', async function() {
     const f = await fixture()
     await f.join()
@@ -1247,7 +1269,10 @@ describe('Linux iOS integration', function() {
       ws.send('hevc ready')
       ws.send('hevc keyframe')
       await until(() => f.requests.some(request => request.path === '/coredevice/keyframe'))
-      const gesture = f.gesture(1)
+      const gesture = {
+        gestureId: '11111111-1111-4111-8111-111111111111:1'
+      , reservationId: currentOwner.reservationId!
+      }
       f.send(new wire.GestureStartMessage({seq: 0, ...gesture}))
       f.send(new wire.TouchDownMessage({seq: 1, contact: 0, x: 0.25, y: 0.5, ...gesture}))
       f.send(new wire.TouchCommitMessage({seq: 2, ...gesture}))

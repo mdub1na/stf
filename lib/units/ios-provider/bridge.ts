@@ -55,7 +55,8 @@ export class IosBridge {
   ) {
     this.nativeInput = new CoreDeviceInput(client)
     this.gestures = new TouchGesture(() => this.resetTouch(), {
-      report: error => this.report(error), onFinish: () => this.resetTouch()
+      allowUntimestampedIds: true
+    , report: error => this.report(error), onFinish: () => this.resetTouch()
     })
     this.gestures.setOwner(null)
     this.channel = 'ios:' + options.serial

@@ -64,6 +64,7 @@ Keep installation values in an environment-specific file outside the STF checkou
 | `coordinator` | Optional test queue, persistent lease state and worker connections |
 | `appium` | Optional Selenium Grid and Appium relays for selected USB devices |
 | `core.nodeSelector`, `core.units` | Core scheduling and per-unit overrides |
+| `core.units.app.image` | Optional image override for the browser-facing STF app only |
 | `ports.http`, `messaging.app`, `messaging.dev` | HTTP and ZeroMQ ports; override when adopting existing endpoints |
 | `proxy.containerPort`, `proxy.service.port` | Proxy listener and Service ports |
 | `migration.enabled`, `migration.revision` | Migration gate and explicit rerun revision |
@@ -130,6 +131,8 @@ ios:
       persistence:
         size: 5Gi
 ```
+
+Use `ios.devices[].prototypeImage` and `ios.devices[].providerImage` to select the runtime and bridge images for one phone. The tunnel and state initializer still use `ios.image`. Each override requires a repository and a tag or digest. An omitted pull policy inherits the corresponding default image policy.
 
 The [USB values example](examples/usb.yaml) combines Android and iOS configuration with OAuth2 for its public Ingress. Replace the domain, identity-provider URLs, device identifiers and runtime image before applying it.
 

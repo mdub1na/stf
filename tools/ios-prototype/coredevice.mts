@@ -2,7 +2,8 @@ import {spawn} from 'node:child_process'
 import {randomBytes, randomUUID} from 'node:crypto'
 import {once} from 'node:events'
 import {dirname, join} from 'node:path'
-import {createInterface} from 'node:readline'
+import {createInterface, type Interface} from 'node:readline'
+import type {Writable} from 'node:stream'
 import {setTimeout as delay} from 'node:timers/promises'
 import {fileURLToPath} from 'node:url'
 
@@ -29,6 +30,8 @@ export class CoreDeviceSession {
   private readonly controller = new AbortController()
   private readonly origin: Promise<string>
   private readonly authorization: string
+  private readonly input: Writable
+  private readonly replies: Interface
   private inputBusy = false
   private keyframeAt = Number.NEGATIVE_INFINITY
 
@@ -43,11 +46,14 @@ export class CoreDeviceSession {
       join(dirname(pymobiledevice3), 'python3') : 'python3'
     const script = fileURLToPath(new URL('./coredevice_worker.py', import.meta.url))
     const child = spawn(binary, [script], {stdio: ['pipe', 'pipe', 'pipe']})
+    this.input = child.stdin
+    this.replies = createInterface({input: child.stdout})
     let stderr = ''
     child.stderr.on('data', chunk => {
       stderr = (stderr + chunk.toString()).slice(-2000)
     })
     child.stdin.on('error', () => this.controller.abort())
+    this.replies.on('error', () => this.controller.abort())
     child.on('error', () => this.controller.abort())
     const closeInput = () => child.stdin.end()
     this.signal.addEventListener('abort', closeInput, {once: true})
@@ -59,15 +65,15 @@ export class CoreDeviceSession {
       this.controller.abort()
       resolve()
     }))
-    const lines = createInterface({input: child.stdout})
     const portReady = AbortSignal.any([this.signal, AbortSignal.timeout(35000)])
-    this.origin = once(lines, 'line', {signal: portReady}).then(([line]) => {
+    // The first line reports the HTTP port. Keep reading this pipe for touch acknowledgments.
+    this.origin = once(this.replies, 'line', {signal: portReady}).then(([line]) => {
       const port = Number(line)
       if (!Number.isInteger(port) || port < 1024 || port > 65535) {
         throw new Error('CoreDevice screen worker returned an invalid port')
       }
       return 'http://127.0.0.1:' + port
-    }).finally(() => lines.close())
+    })
     const config = {udid, address: rsd[0], rsdPort: Number(rsd[1]), password}
     child.stdin.write(JSON.stringify(config) + '\n')
     if (this.signal.aborted) {
@@ -75,13 +81,10 @@ export class CoreDeviceSession {
     }
   }
 
-  private async request(path: string, signal: AbortSignal, body?: unknown): Promise<Response> {
+  private async request(path: string, signal: AbortSignal): Promise<Response> {
     const origin = await this.origin
-    const post = typeof body !== 'undefined'
     return fetch(origin + path, {
-      signal, redirect: 'error', method: post ? 'POST' : 'GET'
-    , headers: {Authorization: this.authorization, 'Content-Type': 'application/json'}
-    , ...(post ? {body: JSON.stringify(body)} : {})
+      signal, redirect: 'error', headers: {Authorization: this.authorization}
     })
   }
 
@@ -121,9 +124,23 @@ export class CoreDeviceSession {
     }
     this.inputBusy = true
     try {
-      await this.control('/touch', signal, {
-        type, x: Math.round(position.x * 65535), y: Math.round(position.y * 65535)
+      const active = AbortSignal.any([signal, this.signal, AbortSignal.timeout(1500)])
+      active.throwIfAborted()
+      await this.origin
+      active.throwIfAborted()
+      const acknowledged = once(this.replies, 'line', {signal: active})
+      const written = new Promise<void>((resolve, reject) => {
+        const message = {type, x: Math.round(position.x * 65535), y: Math.round(position.y * 65535)}
+        this.input.write(JSON.stringify(message) + '\n', error => error ? reject(error) : resolve())
       })
+      const [[reply]] = await Promise.all([acknowledged, written])
+      if (reply !== 'ok') {
+        throw new Error('CoreDevice input was rejected')
+      }
+    }
+    catch (error) {
+      this.controller.abort()
+      throw error
     }
     finally {
       this.inputBusy = false
@@ -138,10 +155,10 @@ export class CoreDeviceSession {
     }
   }
 
-  private async control(path: string, signal: AbortSignal, body?: unknown) {
+  private async control(path: string, signal: AbortSignal) {
     try {
-      const result = await this.request(path,
-        AbortSignal.any([signal, this.signal, AbortSignal.timeout(1000)]), body)
+      const active = AbortSignal.any([signal, this.signal, AbortSignal.timeout(1000)])
+      const result = await this.request(path, active)
       await result.text()
       if (!result.ok) {
         throw new Error('CoreDevice input was rejected')

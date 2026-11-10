@@ -23,12 +23,14 @@ app.kubernetes.io/component: {{ .component | quote }}
 {{- end -}}
 {{- end -}}
 {{- define "stf.podLabels" -}}
-{{- $labels := include "stf.selector" . | fromYaml -}}
 {{- if .root.Values.networkPolicy.enabled -}}
+{{- $labels := include "stf.selector" . | fromYaml -}}
 {{- $_ := set $labels "app.kubernetes.io/instance" .root.Release.Name -}}
 {{- $_ := set $labels "app.kubernetes.io/component" .component -}}
-{{- end -}}
 {{ toYaml $labels }}
+{{- else -}}
+{{ include "stf.selector" . }}
+{{- end -}}
 {{- end -}}
 {{- define "stf.dbhost" -}}
 {{- if .Values.database.bundled -}}{{ include "stf.name" (dict "root" . "component" "rethinkdb") }}{{- else -}}{{ required "database.external.host is required for an external database" .Values.database.external.host }}{{- end -}}

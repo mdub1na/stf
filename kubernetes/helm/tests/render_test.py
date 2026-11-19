@@ -136,6 +136,34 @@ class ChartTest(unittest.TestCase):
             'app.kubernetes.io/instance': 'stf', 'app.kubernetes.io/component': 'coordinator'})
         self.assertEqual(policy['ingress'], [{'from': peers, 'ports': [{'protocol': 'TCP', 'port': 'http'}]}])
 
+    def test_api_automation_allowlist_is_scoped_to_the_api(self):
+        items = render({'coordinator': {
+            'enabled': True, 'existingSecret': 'credentials',
+            'stfApiUrl': 'http://stf-api.test-stf.svc:7100/api/v1',
+            'stfServiceAccountEmail': 'coordinator@example.invalid',
+        }})
+        deployments = [item for item in items if item['kind'] == 'Deployment']
+        configured = {
+            deploy['metadata']['name']: entry['value']
+            for deploy in deployments
+            for container in deploy['spec']['template']['spec']['containers']
+            for entry in container.get('env', [])
+            if entry['name'] == 'STF_API_AUTOMATION_LEASE_ACCOUNTS'
+        }
+        self.assertEqual(configured, {'stf-api': 'coordinator@example.invalid'})
+
+    def test_ios_prototype_environment_is_scoped_to_prototype(self):
+        device = {**iphone(), 'prototypeEnv': {'STF_TEST_SIGNER_TOKEN_FILE': '/signing/token'}}
+        items = render({'ios': {'image': IOS_IMAGE, 'devices': [device]}})
+        pod = obj(items, 'Deployment', 'stf-ios-iphone-a')['spec']['template']['spec']
+        injected = {
+            container['name']: entry['value']
+            for container in pod['initContainers'] + pod['containers']
+            for entry in container.get('env', [])
+            if entry['name'] == 'STF_TEST_SIGNER_TOKEN_FILE'
+        }
+        self.assertEqual(injected, {'prototype': '/signing/token'})
+
     def test_invalid_coordinator_inputs_fail_before_install(self):
         provider = {'name': 'usb', 'nodeSelector': {'kubernetes.io/hostname': 'usb-a'}}
         pool = {'provider': 'android-a', 'host': 'adb.example', 'port': 5037, 'systemPorts': [8200]}

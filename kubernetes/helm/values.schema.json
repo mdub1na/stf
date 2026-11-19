@@ -215,6 +215,11 @@
                 "type": "boolean"
               },
               "prototypeImage": { "$ref": "#/definitions/imageOverride" },
+              "prototypeEnv": {
+                "type": "object",
+                "propertyNames": { "pattern": "^[A-Za-z_][A-Za-z0-9_]*$" },
+                "additionalProperties": { "type": "string" }
+              },
               "providerImage": { "$ref": "#/definitions/imageOverride" },
               "tokenSecret": {
                 "type": "string",
@@ -628,6 +633,10 @@
         },
         "stfApiUrl": {
           "$ref": "#/definitions/optionalHttpEndpoint"
+        },
+        "stfServiceAccountEmail": {
+          "type": "string",
+          "pattern": "^$|^[^@,\\s]+@[^@,\\s]+$"
         },
         "publicUrl": {
           "$ref": "#/definitions/optionalHttpEndpoint"

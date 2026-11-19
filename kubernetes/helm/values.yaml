@@ -124,6 +124,7 @@ ios:
   #   wdaBundleId: com.example.WebDriverAgentRunner.xctrunner
   #   coreDevice: true  # Optional interactive video and touch for iOS 27+.
   #   prototypeImage: {repository: YOUR_REGISTRY/ios-runtime, tag: VERSION}
+  #   prototypeEnv: {}
   #   providerImage: {repository: YOUR_REGISTRY/stf, tag: VERSION}
   #   tokenSecret: iphone-a-token
   #   service: {create: true}
@@ -142,6 +143,8 @@ coordinator:
   # Empty uses the release STF image and API Service.
   image: {}
   stfApiUrl: ''
+  # Account allowed to create fenced automation leases on this release's API.
+  stfServiceAccountEmail: ''
   publicUrl: ''
   # Leave empty to use the bundled Grid if enabled, or run Maestro without Appium.
   appiumGridUrl: ''

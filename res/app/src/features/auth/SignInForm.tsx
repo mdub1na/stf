@@ -21,7 +21,7 @@ import {useContactEmail} from '@/core/contact'
 import {useTranslation} from '@/core/i18n'
 import classes from './SignInForm.module.css'
 
-type Mode = 'mock' | 'ldap'
+type Mode = 'mock' | 'ldap' | 'oauth'
 
 type SignInError = 'invalid' | 'incorrect' | 'server' | null
 
@@ -88,7 +88,7 @@ export function SignInForm({mode}: {mode: Mode}) {
   }
 
   return (
-    <Center className={classes.page}>
+    <Center className={mode === 'oauth' ? `${classes.page} ${classes.oauthPage}` : classes.page}>
       <Paper className={classes.card} shadow='xl' p='xl' withBorder>
         <Stack align='center' gap='xs' mb='lg'>
           <Image src='/static/logo/exports/STF-512.png' w={88} h={88} alt='STF' />
@@ -97,6 +97,11 @@ export function SignInForm({mode}: {mode: Mode}) {
             {mode === 'ldap' ? t('Sign in with your LDAP account') : t('Sign in to continue')}
           </Text>
         </Stack>
+        {mode === 'oauth' ?
+          <Button component='a' href='/auth/oauth/start' size='md' fullWidth
+            leftSection={<IconLock size={20} />}>
+            {t('Sign in with Keycloak')}
+          </Button> :
         <form name='signin' noValidate onSubmit={submit}>
           <Stack>
             {error && (
@@ -156,7 +161,7 @@ export function SignInForm({mode}: {mode: Mode}) {
               {t('Log In')}
             </Button>
           </Stack>
-        </form>
+        </form>}
         <Box mt='lg'>
           <Group justify='center'>
             {contactEmail ?

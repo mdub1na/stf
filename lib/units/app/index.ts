@@ -101,6 +101,11 @@ export default function(options: AppOptions) {
   app.use(serveFavicon(pathutil.resource(
     'common/logo/exports/STF-128.png')))
 
+  app.use(function(req, res, next) {
+    res.set('Cache-Control', 'no-store')
+    next()
+  })
+
   app.use(cookieSession(cookieutil.sessionOptions({
     ssid: options.ssid
   , secret: options.secret
@@ -123,6 +128,17 @@ export default function(options: AppOptions) {
 
   app.use(bodyParser.json())
   app.use(csrf())
+
+  app.post('/app/logout', function(req, res) {
+    req.session = null
+    res.clearCookie('XSRF-TOKEN', {
+      ...cookieutil.xsrfCookieOptions(options, req), path: '/'
+    })
+    // Cancel any unfinished OAuth flow as well as the main STF session.
+    res.clearCookie(options.ssid + '.oauth', {path: '/auth/oauth'})
+    res.clearCookie(options.ssid + '.oauth.sig', {path: '/auth/oauth'})
+    res.json({success: true, redirect: options.authUrl})
+  })
 
   app.use(function(req, res, next) {
     res.cookie('XSRF-TOKEN', req.csrfToken(), cookieutil.xsrfCookieOptions(options, req))
@@ -160,4 +176,5 @@ export default function(options: AppOptions) {
 
   server.listen(options.port)
   log.info('Listening on port %d', options.port)
+  return server
 }

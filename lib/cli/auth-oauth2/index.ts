@@ -61,13 +61,23 @@ var builder = function(yargs: Argv) {
     , demand: true
     })
     .option('oauth-state', {
-      describe: 'Whether to enable OAuth 2.0 state token support.'
+      describe: 'Enable OAuth 2.0 state token support (required).'
     , type: 'boolean'
-    , default: false
+    , default: true
+    })
+    .option('oauth-pkce', {
+      describe: 'Enable PKCE with the S256 challenge method.'
+    , type: 'boolean'
+    , default: true
+    })
+    .option('oauth-require-verified-email', {
+      describe: 'Require the provider to return email_verified: true.'
+    , type: 'boolean'
+    , default: true
     })
     .option('oauth-domain', {
-      describe: 'Optional email domain to allow authentication for, ' +
-        'e.g. "example.org". Subdomains are allowed too.'
+      describe: 'Optional exact email domain to allow authentication for, ' +
+        'e.g. "example.org". Subdomains are not included.'
     , type: 'string'
     , default: process.env.OAUTH_DOMAIN
     , demand: false
@@ -108,6 +118,7 @@ var handler = function(argv: CommandArgv<typeof builder>) {
   , ssid: argv.ssid
   , appUrl: argv.appUrl
   , domain: argv.oauthDomain
+  , requireVerifiedEmail: argv.oauthRequireVerifiedEmail
   , oauth: {
       authorizationURL: argv.oauthAuthorizationUrl
     , tokenURL: argv.oauthTokenUrl
@@ -117,6 +128,7 @@ var handler = function(argv: CommandArgv<typeof builder>) {
     , callbackURL: argv.oauthCallbackUrl
     , scope: argv.oauthScope.split(/\s+/)
     , state: argv.oauthState
+    , pkce: argv.oauthPkce
     }
   })
 }

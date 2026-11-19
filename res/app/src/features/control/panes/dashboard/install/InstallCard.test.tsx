@@ -23,7 +23,20 @@ describe('installation reset', () => {
     render(<AuthProviders><InstallCard control={control} /></AuthProviders>)
     const clear = screen.getByRole('button', {name: 'Clear'}) as HTMLButtonElement
     expect(clear.disabled).toBe(platform === 'iOS')
+    const sign = screen.queryByRole('button', {name: 'Sign and install'}) as HTMLButtonElement | null
+    expect(sign?.disabled ?? null).toBe(platform === 'iOS' ? true : null)
     fireEvent.click(clear)
     expect(installationStore.get(serial) === null).toBe(platform === 'Android')
+  })
+
+  it('opens the existing upload picker for sign and install', () => {
+    const serial = 'sign-and-install'
+    const control = {target: {serial, platform: 'iOS'}
+      , iosInstallStatus: vi.fn().mockResolvedValue({body: null})} as unknown as Control
+    const {container} = render(<AuthProviders><InstallCard control={control} /></AuthProviders>)
+    const input = container.querySelector<HTMLInputElement>('input[type="file"]')!
+    const chooseFile = vi.spyOn(input, 'click').mockImplementation(() => {})
+    fireEvent.click(screen.getByRole('button', {name: 'Sign and install'}))
+    expect(chooseFile).toHaveBeenCalledOnce()
   })
 })

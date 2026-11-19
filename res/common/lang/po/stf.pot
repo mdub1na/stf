@@ -1892,6 +1892,10 @@ msgstr ""
 msgid "Show Screen"
 msgstr ""
 
+#: res/app/src/features/control/panes/dashboard/install/InstallCard.tsx:246
+msgid "Sign and install"
+msgstr ""
+
 #: res/app/src/features/control/panes/automation/StoreAccountCard.tsx:157
 msgid "Sign In"
 msgstr ""
@@ -1906,6 +1910,14 @@ msgstr ""
 
 #: res/app/src/features/control/panes/automation/StoreAccountCard.tsx:188
 msgid "Sign Out"
+msgstr ""
+
+#: res/app/src/features/control/panes/dashboard/install/InstallCard.tsx:190
+msgid "Signed IPAs keep their signature. STF signs unsigned IPAs when signing is available."
+msgstr ""
+
+#: res/app/src/core/install.ts:65
+msgid "Signing IPA..."
 msgstr ""
 
 #: res/app/src/features/control/panes/automation/DeviceSettingsCard.tsx:32
@@ -2234,6 +2246,18 @@ msgstr ""
 msgid "The schedule can only be changed while the group is pending"
 msgstr ""
 
+#: res/app/src/core/install.ts:267
+msgid "The signing service could not prepare the IPA."
+msgstr ""
+
+#: res/app/src/core/install.ts:268
+msgid "The signing service is busy. Try again shortly."
+msgstr ""
+
+#: res/app/src/core/install.ts:269
+msgid "The signing service is unavailable."
+msgstr ""
+
 #: res/app/src/core/install.ts:196
 msgid "The system failed to install the package because its packaged native code did not match any of the ABIs supported by the system."
 msgstr ""
@@ -2288,6 +2312,14 @@ msgstr ""
 
 #: res/app/src/features/control/panes/explorer/ExplorerPane.tsx:265
 msgid "This folder is empty"
+msgstr ""
+
+#: res/app/src/core/install.ts:265
+msgid "This IPA needs to be signed before upload."
+msgstr ""
+
+#: res/app/src/core/install.ts:266
+msgid "This IPA or iPhone is not approved for signing."
 msgstr ""
 
 #: res/app/src/core/install.ts:264
@@ -2381,10 +2413,6 @@ msgstr ""
 
 #: res/app/src/ui/IosDeviceHealth.tsx:71
 msgid "Updated"
-msgstr ""
-
-#: res/app/src/features/control/panes/dashboard/install/InstallCard.tsx:188
-msgid "Upload an IPA signed for this iPhone. STF does not sign apps."
 msgstr ""
 
 #: res/app/src/features/control/panes/dashboard/install/InstallCard.tsx:205

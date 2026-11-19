@@ -1912,6 +1912,10 @@ msgstr "Показать манифест"
 msgid "Show Screen"
 msgstr "Показать экран"
 
+#: res/app/src/features/control/panes/dashboard/install/InstallCard.tsx:246
+msgid "Sign and install"
+msgstr "Подписать и установить"
+
 #: res/app/src/features/control/panes/automation/StoreAccountCard.tsx:157
 msgid "Sign In"
 msgstr "Войти"
@@ -1927,6 +1931,18 @@ msgstr "Войдите с помощью учетной записи LDAP"
 #: res/app/src/features/control/panes/automation/StoreAccountCard.tsx:188
 msgid "Sign Out"
 msgstr "Выйти"
+
+#: res/app/src/features/control/panes/dashboard/install/InstallCard.tsx:190
+msgid ""
+"Signed IPAs keep their signature. STF signs unsigned IPAs when "
+"signing is available."
+msgstr ""
+"Подписанные IPA сохраняют свою подпись. Если подпись доступна, STF "
+"подписывает неподписанные IPA."
+
+#: res/app/src/core/install.ts:65
+msgid "Signing IPA..."
+msgstr "Подписание IPA..."
 
 #: res/app/src/features/control/panes/automation/DeviceSettingsCard.tsx:32
 msgid "Silent Mode"
@@ -2478,10 +2494,6 @@ msgstr "Неизвестная неисправность"
 
 #: res/app/src/ui/IosDeviceHealth.tsx:71
 msgid "Updated"
-msgstr ""
-
-#: res/app/src/features/control/panes/dashboard/install/InstallCard.tsx:188
-msgid "Upload an IPA signed for this iPhone. STF does not sign apps."
 msgstr ""
 
 #: res/app/src/features/control/panes/dashboard/install/InstallCard.tsx:205

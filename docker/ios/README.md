@@ -19,7 +19,8 @@
 This experimental provider runs physical iPhones in STF without a Mac runtime
 node or Kubernetes. A Mac with compatible Xcode is used to build/sign/install
 WebDriverAgent (WDA), including again when its provisioning profile expires.
-STF installs already signed IPA files; it does not sign or re-sign applications.
+STF installs signed IPAs by default. Operators can configure a
+[private signer for unsigned test builds](../../doc/ios-provider.md#optional-signing-of-unsigned-ipas).
 
 Start by [preparing the phone](#prepare-the-phone) and connecting it to the Linux
 host over USB.

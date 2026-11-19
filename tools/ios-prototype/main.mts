@@ -7,6 +7,7 @@ import {IosRuntime} from './runtime.mts'
 import {createServer} from './server.mts'
 import {diagnose} from './doctor.mts'
 import {Installations} from './installations.mts'
+import {ipaSignerOptions} from './ipa-signing.mts'
 import type {ImageMounter} from './tunnel.mts'
 
 const {values} = parseArgs({options: {
@@ -25,6 +26,9 @@ const {values} = parseArgs({options: {
 , 'appium-mjpeg-port': {type: 'string'}
 , 'token-file': {type: 'string'}
 , 'storage-url': {type: 'string'}
+, 'ipa-signer-url': {type: 'string'}
+, 'ipa-signer-token-file': {type: 'string'}
+, 'ipa-signer-bundle-id': {type: 'string'}
 , 'install-dir': {type: 'string', default: path.join(os.homedir(), '.stf-ios-installations')}
 , 'state-dir': {type: 'string', default: path.join(os.homedir(), '.stf-ios')}
 , help: {type: 'boolean', short: 'h'}
@@ -47,6 +51,8 @@ if (values.help) {
     '         --go-ios ios --iproxy iproxy --xctest-config WebDriverAgentRunner.xctest\n' +
     '         --image-mounter go-ios|pymobiledevice3 --pymobiledevice3 /path/to/pymobiledevice3\n' +
     '         --storage-url http://storage:3000 --install-dir /private/installations\n' +
+    '         --ipa-signer-url https://ipa-signer.example --ipa-signer-token-file /private/signer-token\n' +
+    '         --ipa-signer-bundle-id com.example.test (optional signing slot)\n' +
     'Use pymobiledevice3 for iOS 27 developer images (requires a kernel go-ios tunnel).\n' +
     'Manual screen and touch use CoreDevice on iOS 27+ and WDA on earlier versions.\n' +
     'Check the Linux host without starting WDA: --doctor [--udid UDID]\n' +
@@ -106,8 +112,21 @@ async function main(): Promise<void> {
   , retryMs: 5000, startupMs: 60000
   , stateDirectory: values['state-dir']
   })
+  const signerUrl = values['ipa-signer-url'] || process.env.STF_IOS_IPA_SIGNER_URL
+  const signerTokenFile = values['ipa-signer-token-file'] ||
+    process.env.STF_IOS_IPA_SIGNER_TOKEN_FILE
+  const signerBundleId = values['ipa-signer-bundle-id'] ?? process.env.STF_IOS_IPA_SIGNER_BUNDLE_ID
+  const signingRequested = signerUrl || signerTokenFile || typeof signerBundleId === 'string'
+  if (signingRequested && (!values['storage-url'] || !signerUrl || !signerTokenFile)) {
+    throw new Error('IPA signing requires storage, a signer URL and a signer token file')
+  }
+  const signer = signerUrl && signerTokenFile ?
+    ipaSignerOptions(
+      signerUrl, (await fs.readFile(signerTokenFile, 'utf8')).trim(), signerBundleId
+    ) : null
   const installations = values['storage-url'] ? await Installations.create({
     storageUrl: values['storage-url'], directory: values['install-dir'], maxBytes: 1024 ** 3
+  , ...(signer ? {signer} : {})
   }, runtime) : undefined
   const server = createServer(runtime, token, installations)
   await new Promise<void>((resolve, reject) => {

@@ -1,6 +1,7 @@
 import fs from 'node:fs/promises'
 import path from 'node:path'
 import {fileURLToPath} from 'node:url'
+import {IpaSigningError, signIpa, type IpaSignerOptions} from './ipa-signing.mts'
 import {runCommand, runJson} from './process.mts'
 import type {IosRuntime} from './runtime.mts'
 
@@ -12,9 +13,21 @@ export interface IpaManifest {
   profileExpiresAt: string
 }
 
+type InspectedIpa = Omit<IpaManifest, 'profileExpiresAt'> & {
+  profileExpiresAt: string | null
+  signature?: 'signed' | 'unsigned'
+}
+
+interface InstallationOptions {
+  storageUrl: string
+  directory: string
+  maxBytes: number
+  signer?: IpaSignerOptions
+}
+
 export interface InstallJob {
   id: string
-  state: 'downloading' | 'validating_app' | 'installing_app' | 'verifying_app' |
+  state: 'downloading' | 'validating_app' | 'signing_app' | 'installing_app' | 'verifying_app' |
     'launching_app' | 'installed' | 'failed' | 'canceled'
   settled: boolean
   progress: number | null
@@ -59,11 +72,11 @@ export class Installations {
   private timer: NodeJS.Timeout
   private stopped = false
   private accepting = false
-  readonly options: {storageUrl: string, directory: string, maxBytes: number}
+  readonly options: InstallationOptions
   private runtime: IosRuntime
   private dependencies: {run: typeof runCommand, json: typeof runJson}
   private constructor(
-    options: {storageUrl: string, directory: string, maxBytes: number}
+    options: InstallationOptions
   , runtime: IosRuntime
   , dependencies: {run: typeof runCommand, json: typeof runJson}
   ) {
@@ -75,6 +88,9 @@ export class Installations {
         storage.search || storage.hash || storage.pathname !== '/') {
       throw new Error('--storage-url must be a trusted HTTP(S) storage origin')
     }
+    if (options.signer?.targetBundleId?.toLowerCase() === runtime.options.bundleId.toLowerCase()) {
+      throw new Error('The IPA signing slot cannot use the WebDriverAgent Bundle ID')
+    }
     this.timer = setInterval(() => {
       const current = this.active
       if (current && (Date.now() > current.expires || !this.current(current.job))) {
@@ -85,7 +101,7 @@ export class Installations {
   }
 
   static async create(
-    options: {storageUrl: string, directory: string, maxBytes: number}
+    options: InstallationOptions
   , runtime: IosRuntime
   , dependencies = {run: runCommand, json: runJson}
   ) {
@@ -244,13 +260,29 @@ export class Installations {
       , '--tunnel-info-port=' + this.runtime.options.tunnelPort, ...args]
   }
 
+  private async inspectIpa(
+    file: string, version: string, signal: AbortSignal, allowUnsigned = false
+  ) {
+    const result = await this.dependencies.json('python3', [
+      fileURLToPath(new URL('./ipa_metadata.py', import.meta.url)), file
+    , this.runtime.options.udid, version, ...(allowUnsigned ? ['--allow-unsigned'] : [])
+    ], 15000, signal) as {manifest?: InspectedIpa, error?: string}
+    if (!result.manifest || result.error) {
+      throw new InstallError(result.error || 'IOS_IPA_INVALID')
+    }
+    if (result.manifest.package.toLowerCase() === this.runtime.options.bundleId.toLowerCase()) {
+      throw new InstallError('IOS_INSTALL_WDA_PROTECTED')
+    }
+    return result.manifest
+  }
+
   private async run(job: StoredJob, launch: boolean, abort: AbortController) {
     let directory: string | null = null
     let installationStarted = false
     const signal = abort.signal
     try {
       directory = await fs.mkdtemp(path.join(this.options.directory, 'ipa-'))
-      const file = path.join(directory, 'app.ipa')
+      let file = path.join(directory, 'app.ipa')
       const response = await fetch(new URL('/s/blob/' + job.artifact.id + '/' + job.artifact.name,
         this.options.storageUrl), {signal: AbortSignal.any([signal, AbortSignal.timeout(120000)])
         , redirect: 'error'})
@@ -280,18 +312,33 @@ export class Installations {
       signal.throwIfAborted()
       job.state = 'validating_app'
       job.progress = null
-      const metadata = await this.dependencies.json('python3', [
-        fileURLToPath(new URL('./ipa_metadata.py', import.meta.url)), file
-      , this.runtime.options.udid
-      , (this.runtime.info as {ProductVersion?: string})?.ProductVersion || '0'
-      ], 15000, signal) as {manifest?: IpaManifest, error?: string}
-      if (metadata.error || !metadata.manifest) {
-        throw new InstallError(metadata.error || 'IOS_IPA_INVALID')
+      const iosVersion = (this.runtime.info as {ProductVersion?: string})?.ProductVersion || '0'
+      const signer = this.options.signer
+      const original = await this.inspectIpa(file, iosVersion, signal, Boolean(signer))
+      let metadata = original
+      if (original.signature === 'unsigned') {
+        if (!signer) {
+          throw new InstallError('IOS_IPA_SIGNING')
+        }
+        signal.throwIfAborted()
+        job.state = 'signing_app'
+        const signedFile = path.join(directory, 'signed.ipa')
+        await signIpa(signer, file, signedFile, {udid: this.runtime.options.udid, iosVersion},
+          this.options.maxBytes, signal)
+        signal.throwIfAborted()
+        metadata = await this.inspectIpa(signedFile, iosVersion, signal)
+        const expectedPackage = signer.targetBundleId ?? original.package
+        if (metadata.package !== expectedPackage || metadata.version !== original.version ||
+            metadata.minimumOSVersion !== original.minimumOSVersion) {
+          throw new InstallError('IOS_IPA_SIGNING_FAILED')
+        }
+        file = signedFile
       }
-      job.manifest = metadata.manifest
-      if (job.manifest.package === this.runtime.options.bundleId) {
-        throw new InstallError('IOS_INSTALL_WDA_PROTECTED')
+      const {signature: _signature, profileExpiresAt, ...app} = metadata
+      if (!profileExpiresAt) {
+        throw new InstallError('IOS_IPA_SIGNING')
       }
+      job.manifest = {...app, profileExpiresAt}
       job.state = 'installing_app'
       await this.save(job)
       signal.throwIfAborted()
@@ -339,11 +386,13 @@ export class Installations {
     }
     catch (error) {
       const canceled = signal.aborted && signal.reason?.message === 'IOS_INSTALL_CANCELED'
-      let code = error instanceof InstallError ? error.code : 'IOS_INSTALL_FAILED'
+      let code = error instanceof InstallError || error instanceof IpaSigningError ?
+        error.code : 'IOS_INSTALL_FAILED'
       if (signal.aborted) {
         code = canceled ? 'IOS_INSTALL_CANCELED' : 'IOS_INSTALL_INTERRUPTED'
       }
-      else if (/ApplicationVerificationFailed|code.?sign|provision|0xe800801[58]/i
+      else if (!(error instanceof InstallError || error instanceof IpaSigningError) &&
+        /ApplicationVerificationFailed|code.?sign|provision|0xe800801[58]/i
         .test(String(error))) {
         code = 'IOS_IPA_SIGNING'
       }

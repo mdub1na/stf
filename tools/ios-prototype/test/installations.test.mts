@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict'
-import {randomUUID} from 'node:crypto'
+import {createHash, randomUUID} from 'node:crypto'
 import fs from 'node:fs/promises'
 import http from 'node:http'
 import os from 'node:os'
@@ -7,6 +7,7 @@ import path from 'node:path'
 import {afterEach, describe, it} from 'node:test'
 import {setTimeout as delay} from 'node:timers/promises'
 import {Installations} from '../installations.mts'
+import {ipaSignerOptions} from '../ipa-signing.mts'
 import {IosRuntime, type RuntimeOptions} from '../runtime.mts'
 import {createServer} from '../server.mts'
 import {runCommand} from '../process.mts'
@@ -14,6 +15,8 @@ import {runCommand} from '../process.mts'
 const cleanups: Array<() => Promise<unknown>> = []
 const manifest = {package: 'test.stf.app', name: 'Test App', version: '1.2'
   , minimumOSVersion: '18.0', profileExpiresAt: '2099-01-01T00:00:00Z'}
+const unsigned = {manifest: {...manifest, signature: 'unsigned', profileExpiresAt: null}}
+const signerToken = 'a'.repeat(32)
 
 afterEach(async() => {
   for (const cleanup of cleanups.splice(0).reverse()) {
@@ -38,7 +41,10 @@ async function until(check: () => boolean) {
   }
 }
 
-async function fixture(options: {maxBytes?: number, storage?: http.RequestListener} = {}) {
+async function fixture(options: {
+  maxBytes?: number, storage?: http.RequestListener, signer?: http.RequestListener
+  targetBundleId?: string
+} = {}) {
   const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'stf-ipa-test-'))
   cleanups.push(() => fs.rm(directory, {recursive: true, force: true}))
   const requests: string[] = []
@@ -51,7 +57,8 @@ async function fixture(options: {maxBytes?: number, storage?: http.RequestListen
   runtime.state = 'ready'
   runtime.info = {ProductVersion: '27.0.1'}
   const commands: string[][] = []
-  let metadata: unknown = {manifest}
+  const installedFiles: Buffer[] = []
+  let metadata: unknown | ((args: string[]) => unknown) = {manifest}
   let block = false
   let aborted = false
   let installedApps: unknown = [{CFBundleIdentifier: manifest.package
@@ -59,6 +66,10 @@ async function fixture(options: {maxBytes?: number, storage?: http.RequestListen
   const deps = {
     run: async(binary: string, args: string[], _timeout?: number, signal?: AbortSignal) => {
       commands.push([binary, ...args])
+      const installPath = args.find(arg => arg.startsWith('--path='))
+      if (binary === 'selected-ios' && args.includes('install') && installPath) {
+        installedFiles.push(await fs.readFile(installPath.slice('--path='.length)))
+      }
       if (block) {
         await new Promise<void>((_resolve, reject) => {
           signal!.addEventListener('abort', () => {
@@ -71,11 +82,17 @@ async function fixture(options: {maxBytes?: number, storage?: http.RequestListen
     }
   , json: async(binary: string, args: string[]) => {
       commands.push([binary, ...args])
-      return binary === 'python3' ? metadata : installedApps
+      if (binary !== 'python3') {
+        return installedApps
+      }
+      return typeof metadata === 'function' ? metadata(args) : metadata
     }
   }
+  const signer = options.signer ?
+    ipaSignerOptions(await listen(http.createServer(options.signer)), signerToken,
+      options.targetBundleId) : null
   const manager = await Installations.create({storageUrl, directory
-    , maxBytes: options.maxBytes || 1024}, runtime, deps)
+    , maxBytes: options.maxBytes || 1024, ...(signer ? {signer} : {})}, runtime, deps)
   cleanups.push(() => manager.stop())
   const input = {id: randomUUID(), lease: randomUUID(), artifact: {id: randomUUID()
     , name: 'a'.repeat(32)}, launch: false, instance: runtime.instance, generation: 0}
@@ -83,7 +100,7 @@ async function fixture(options: {maxBytes?: number, storage?: http.RequestListen
     await until(() => manager.status(input)!.settled)
     return manager.status(input)!
   }
-  return {manager, runtime, input, directory, commands, requests, done
+  return {manager, runtime, input, directory, commands, requests, installedFiles, done
     , block: () => {
         block = true
       }, aborted: () => aborted
@@ -96,6 +113,111 @@ async function fixture(options: {maxBytes?: number, storage?: http.RequestListen
 }
 
 describe('IPA installation jobs', () => {
+  it('sends an unsigned IPA and installs the verified response', async() => {
+    const signed = Buffer.from('signed-ipa-data')
+    const received: unknown[] = []
+    const f = await fixture({signer: (req, res) => {
+      const input: Buffer[] = []
+      req.on('data', chunk => input.push(chunk))
+      req.once('end', () => {
+        received.push({
+          path: req.url, method: req.method, authorization: req.headers.authorization
+        , udid: req.headers['x-stf-ipa-udid'], iosVersion: req.headers['x-stf-ipa-ios-version']
+        , sha256: req.headers['x-stf-ipa-sha256'], content: Buffer.concat(input).toString()
+        })
+        res.writeHead(200, {
+          'Content-Type': 'application/octet-stream'
+        , 'Content-Length': signed.length
+        , 'X-STF-IPA-SHA256': createHash('sha256').update(signed).digest('hex')
+        }).end(signed)
+      })
+    }})
+    f.metadata((args: string[]) => args.includes('--allow-unsigned') ? unsigned : {manifest})
+    await f.manager.start(f.input)
+    assert.equal((await f.done()).state, 'installed')
+    assert.deepEqual(received, [{
+      path: '/sign', method: 'POST', authorization: 'Bearer ' + signerToken
+    , udid: 'selected-phone', iosVersion: '27.0.1'
+    , sha256: createHash('sha256').update('test-ipa-bytes').digest('hex')
+    , content: 'test-ipa-bytes'
+    }])
+    assert.deepEqual(f.installedFiles, [signed])
+  })
+
+  it('preserves a valid signature and never sends profile errors to the signer', async() => {
+    let signingCalls = 0
+    const f = await fixture({signer: (_req, res) => {
+      signingCalls++
+      res.writeHead(500).end()
+    }})
+    f.metadata({manifest: {...manifest, signature: 'signed'}})
+    await f.manager.start(f.input)
+    assert.equal((await f.done()).state, 'installed')
+    assert.deepEqual(f.installedFiles, [Buffer.from('test-ipa-bytes')])
+    const bad = {...f.input, id: randomUUID()}
+    f.metadata({error: 'IOS_IPA_DEVICE_NOT_PROVISIONED'})
+    await f.manager.start(bad)
+    await until(() => f.manager.status(bad)?.settled === true)
+    assert.equal(f.manager.status(bad)?.error, 'IOS_IPA_DEVICE_NOT_PROVISIONED')
+    assert.equal(f.installedFiles.length, 1)
+    assert.equal(signingCalls, 0)
+  })
+
+  it('installs an unsigned IPA under the configured signing slot only', async() => {
+    const targetBundleId = 'test.stf.signing-slot'
+    const signed = Buffer.from('signed-slot-ipa')
+    const f = await fixture({targetBundleId, signer: (req, res) => {
+      req.resume().once('end', () => {
+        res.writeHead(200, {
+          'Content-Type': 'application/octet-stream'
+        , 'Content-Length': signed.length
+        , 'X-STF-IPA-SHA256': createHash('sha256').update(signed).digest('hex')
+        }).end(signed)
+      })
+    }})
+    f.metadata((args: string[]) => args.includes('--allow-unsigned') ? unsigned : {manifest})
+    await f.manager.start(f.input)
+    assert.equal((await f.done()).error, 'IOS_IPA_SIGNING_FAILED')
+    assert.deepEqual(f.installedFiles, [])
+
+    f.metadata((args: string[]) => args.includes('--allow-unsigned') ? unsigned :
+      {manifest: {...manifest, package: targetBundleId}})
+    f.apps([{CFBundleIdentifier: targetBundleId, CFBundleShortVersionString: manifest.version}])
+    const retry = {...f.input, id: randomUUID()}
+    await f.manager.start(retry)
+    await until(() => f.manager.status(retry)?.settled === true)
+    assert.equal(f.manager.status(retry)?.state, 'installed')
+    assert.equal(f.manager.status(retry)?.manifest?.package, targetBundleId)
+    assert.deepEqual(f.installedFiles, [signed])
+  })
+
+  it('rejects a signed response with the wrong checksum before installing', async() => {
+    const f = await fixture({signer: (_req, res) => {
+      res.writeHead(200, {
+        'Content-Type': 'application/octet-stream', 'Content-Length': 8
+      , 'X-STF-IPA-SHA256': '0'.repeat(64)
+      }).end('bad-data')
+    }})
+    f.metadata(unsigned)
+    await f.manager.start(f.input)
+    assert.equal((await f.done()).error, 'IOS_IPA_SIGNING_FAILED')
+    assert.deepEqual(f.installedFiles, [])
+  })
+
+  it('cancels signing without installing when the owner releases the job', async() => {
+    let submitted = false
+    const f = await fixture({signer: (_req, _res) => {
+      submitted = true
+    }})
+    f.metadata(unsigned)
+    await f.manager.start(f.input)
+    await until(() => submitted)
+    assert.equal(f.manager.status(f.input)?.state, 'signing_app')
+    await f.manager.cancel(f.input)
+    assert.equal((await f.done()).state, 'canceled')
+    assert.deepEqual(f.installedFiles, [])
+  })
+
   it('downloads only a blob and confirms the bundle on the selected UDID', async() => {
     const f = await fixture()
     await f.manager.start(f.input)
@@ -284,6 +406,6 @@ describe('IPA installation jobs', () => {
     const output = await runCommand('python3', [
       path.join(import.meta.dirname, 'ipa_metadata_test.py')
     ], 30000)
-    assert.match(output, /IPA preflight fixtures passed/)
+    assert.match(output, /IPA signed and unsigned preflight fixtures passed/)
   })
 })

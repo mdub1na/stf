@@ -2711,3 +2711,11 @@ msgstr "Остановить автоматизацию"
 #: res/app/src/features/control/ControlPage.tsx
 msgid "Stop this automation from its test runner."
 msgstr ""
+
+#: res/app/src/features/auth/SignInForm.tsx
+msgid "Sign in with Keycloak"
+msgstr "Войти через Keycloak"
+
+#: res/app/src/ui/AppLayout.tsx
+msgid "Unable to log out. Please try again."
+msgstr "Не удалось выйти. Попробуйте ещё раз."

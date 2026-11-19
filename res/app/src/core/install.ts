@@ -62,6 +62,7 @@ const installStateLabels: Record<string, string> = {
   , installing_app: gettext('Installing app...')
   , launching_app: gettext('Launching app...')
   , validating_app: gettext('Checking IPA...')
+  , signing_app: gettext('Signing IPA...')
   , verifying_app: gettext('Verifying installation...')
 }
 
@@ -261,6 +262,11 @@ const installErrors: Record<string, string> = {
   , IOS_IPA_PLATFORM: gettext('This app is not compatible with a physical iPhone.')
   , IOS_IPA_OS_VERSION: gettext('This app requires a newer iOS version.')
   , IOS_IPA_SIGNING: gettext('The IPA signature or provisioning profile is invalid. Upload a signed development, ad hoc, or enterprise IPA.')
+  , IOS_IPA_SIGNING_UNSUPPORTED: gettext('This IPA needs to be signed before upload.')
+  , IOS_IPA_SIGNING_NOT_ALLOWED: gettext('This IPA or iPhone is not approved for signing.')
+  , IOS_IPA_SIGNING_FAILED: gettext('The signing service could not prepare the IPA.')
+  , IOS_IPA_SIGNING_BUSY: gettext('The signing service is busy. Try again shortly.')
+  , IOS_IPA_SIGNING_UNAVAILABLE: gettext('The signing service is unavailable.')
   , IOS_IPA_PROFILE_EXPIRED: gettext('The provisioning profile has expired. Sign the IPA again.')
   , IOS_IPA_DEVICE_NOT_PROVISIONED: gettext('This iPhone is not included in the provisioning profile.')
   , IOS_INSTALL_WDA_PROTECTED: gettext('Replacing WebDriverAgent from this panel is not allowed.')

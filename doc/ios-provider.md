@@ -196,10 +196,10 @@ with the previous screen path and the results from two physical iPhones.
 ## Installing an IPA
 
 Claim the iPhone, open its dashboard and drop one `.ipa` into **App Upload**,
-or onto the device screen. The limit is 1 GiB. STF accepts an already signed
-development, ad hoc or enterprise package provisioned for that phone; it does
-not sign, re-sign or bypass Apple verification. An App Store download, simulator
-build or arbitrary unsigned IPA is not an installation artifact for this flow.
+or onto the device screen. The limit is 1 GiB. STF installs development, ad hoc,
+and enterprise IPAs with their existing signature when the profile covers the
+selected phone. An optional [signing service](#optional-signing-of-unsigned-ipas)
+can prepare an unsigned device build for installation.
 
 The browser uploads the file through existing `/s/upload/blob` storage and sends
 `InstallMessage` with a unique `requestId`. The bridge accepts only STF blob
@@ -216,15 +216,15 @@ and version in `ios apps`, and optionally opens the app through the owned WDA
 session. WDA itself cannot be replaced through this panel.
 
 The UI displays upload/download percentages and named indeterminate stages for
-validation, installation, verification and launch. It shows app metadata and
-profile expiry after success. A launch failure is reported separately from a
-successful installation. The panel supports cancellation and restoring the
+validation, signing when needed, installation, verification and launch. It
+shows app metadata and profile expiry after success. The panel reports launch
+failures separately and supports cancellation and restoring the
 latest job after a page refresh within the same ownership session. This first
 version accepts local files; URL installation and iOS uninstall are not exposed.
 
 | Private API (all POST, JSON, Bearer token) | Purpose |
 | --- | --- |
-| `/installations/start` | Idempotent start with request UUID, lease, artifact ID/hash, runtime instance/generation and launch flag |
+| `/installations/start` | Idempotent start with request UUID, lease, artifact ID and storage name, runtime instance/generation and launch flag |
 | `/installations/status` | Job by UUID or latest job for the supplied lease |
 | `/installations/keepalive` | Extend the active ownership lease by 10 seconds |
 | `/installations/cancel` | Stop the job belonging to that lease |
@@ -240,15 +240,100 @@ startup or the next start. Temporary IPA files are removed when jobs finish and
 abandoned job directories are removed after restart. The existing STF temporary
 storage service controls the lifetime of the uploaded blob.
 
+### Optional signing of unsigned IPAs
+
+Enable signing on the providers for the phones that can install your test app.
+App Upload shows **Sign and install** on iOS. The signer accepts unsigned arm64
+builds for physical iPhones without extensions, App Clips, or watchOS apps.
+Signed IPAs keep their signature and follow the regular installation path,
+including profile and device checks.
+
+Run `ipa_signer.py` as an isolated, unprivileged process using Python 3 and
+OpenSSL. For a signer that uses
+[zsign 1.1.3](https://github.com/zhlynn/zsign/releases/tag/v1.1.3),
+create a private JSON policy with absolute paths as shown below.
+
+```json
+{
+  "bundleId": "com.example.test",
+  "deviceUdids": ["00008000-0000000000000000"],
+  "allowedIpaSha256": ["0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"],
+  "profilePath": "/private/signing/test.mobileprovision",
+  "certificatePath": "/private/signing/test-certificate.pem",
+  "privateKeyPath": "/private/signing/test-private-key.pem",
+  "entitlementsPath": "/private/signing/test-entitlements.plist"
+}
+```
+
+Use an Apple development or ad hoc profile with the exact App ID and the UDIDs
+of the permitted phones. The PEM certificate and private key must correspond
+to a certificate authorized by that profile. The entitlements plist must
+include the app and team identifiers and contain only grants authorized by the
+profile. Review the capabilities required by the app before signing it.
+Set `allowedIpaSha256` to the hashes produced by your trusted builds and reload
+the signer when approving new builds. The signer checks the actual bytes against
+this list because an uploaded archive can claim the same Bundle ID.
+Store the unencrypted PEM key with mode `0600` on the isolated signer. Grant
+access to this signer only to providers for trusted test uploads.
+
+Create a dedicated bearer token file with 32 or more URL-safe random characters.
+Put the same token file on the signer and the allowed providers. Set the worker's
+temporary directory to private storage with enough space for the input, expanded
+bundle and output. The worker runs one request at a time. The following command
+starts a private HTTPS service.
+
+```sh
+python3 tools/ios-prototype/ipa_signer.py \
+  --policy-file /private/signing/policy.json \
+  --token-file /private/signing/token \
+  --zsign /usr/local/bin/zsign \
+  --bind 0.0.0.0 --port 7443 \
+  --tls-cert /private/tls/tls.crt --tls-key /private/tls/tls.key
+```
+
+On macOS, pass `--codesign` in place of `--zsign` to keep the signing key
+in Keychain. In the policy, replace `certificatePath` and `privateKeyPath`
+with `identitySha1`. Get the 40-character identity from
+`security find-identity -v -p codesigning` and choose the one authorized by
+the provisioning profile. Run the worker under the macOS account that owns
+the identity. Its Keychain must be available and permit `/usr/bin/codesign`
+to use the key without an interactive prompt. An Xcode Personal Team can
+provision a separately identified test build for registered phones. Apple
+[expires these profiles after seven days](https://developer.apple.com/help/account/basics/about-your-developer-account).
+
+To accept uploads from different Bundle IDs, set `rebindBundleId` to `true`
+in a Keychain policy and omit `allowedIpaSha256`. The worker replaces the
+root Bundle ID with the policy's `bundleId` in the signed copy. Use a dedicated
+App ID and profile for the test app. STF verifies that the signed copy uses the
+configured ID and retains the app version and minimum iOS version. SHA-256
+still verifies the bytes transferred between the provider and signer.
+An installation that uses the same test Bundle ID replaces the app in that
+slot. Features such as push notifications and universal links may require the
+app's original identity or capabilities. Give use of the slot only to providers
+handling test devices and trusted users.
+
+Keep the signer reachable only from the configured providers. For use on the
+same machine, the worker can listen on `127.0.0.1` without TLS. Configure the
+iOS runtime with `--ipa-signer-url https://ipa-signer.internal:7443` and
+`--ipa-signer-token-file /private/signer-token`, or set
+`STF_IOS_IPA_SIGNER_URL` and `STF_IOS_IPA_SIGNER_TOKEN_FILE`.
+Both are required and the runtime must already have `--storage-url`.
+For a policy with `rebindBundleId`, also set `--ipa-signer-bundle-id` or
+`STF_IOS_IPA_SIGNER_BUNDLE_ID` to the policy's dedicated `bundleId`.
+For container deployments, set these in the runtime container and mount the
+token file there.
+The provider verifies the response hash and profile and rechecks the device
+session before installation. iOS may ask for developer trust on first launch.
+
 ## Verification
 
 `npm run test:unit` covers the STF bridge, wire compatibility, authentication and
 prototype lifecycle. `npm run test:ios-prototype` also exercises job persistence,
-idempotency, ownership, cancellation, stream limits and synthetic ZIP/plist/
-Mach-O/CMS fixtures. `npm run test:component` covers browser-side file routing,
-status polling, lost acknowledgements and transaction timeouts without browser
-automation. Actual IPA acceptance and app launch still require a signed artifact
-and a real iPhone; record that separately from fixture tests.
+idempotency, ownership, cancellation, signing policy enforcement, stream limits
+and synthetic ZIP/plist/Mach-O/CMS fixtures. `npm run test:component` covers
+browser-side file routing, status polling, lost acknowledgements and transaction
+timeouts. Verifying installation and launch on hardware requires a real iPhone
+and a provisioning profile for it.
 
 ### Hardware coverage and limits
 

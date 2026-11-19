@@ -7,6 +7,7 @@ import stat
 import struct
 import subprocess
 import sys
+import unicodedata
 import zipfile
 
 
@@ -19,7 +20,118 @@ def require(condition, code):
     raise InvalidIpa(code)
 
 
-def inspect(filename, udid, ios_version):
+ARM64 = 0x0100000C
+MACHO64_LE = b"\xcf\xfa\xed\xfe"
+FAT32_BE = b"\xca\xfe\xba\xbe"
+FAT64_BE = b"\xca\xfe\xba\xbf"
+
+
+def unsigned_executable(stream, file_size):
+  """Prove that each executable slice targets a device and carries no signature."""
+  def read_at(offset, size):
+    require(offset >= 0 and offset + size <= file_size, "IOS_IPA_INVALID")
+    stream.seek(offset)
+    data = stream.read(size)
+    require(len(data) == size, "IOS_IPA_INVALID")
+    return data
+
+  magic = read_at(0, 4)
+  if magic == MACHO64_LE:
+    slices = [(0, file_size, None)]
+  else:
+    require(magic in (FAT32_BE, FAT64_BE), "IOS_IPA_PLATFORM")
+    count = struct.unpack(">I", read_at(4, 4))[0]
+    require(0 < count <= 32, "IOS_IPA_INVALID")
+    wide = magic == FAT64_BE
+    stride = 32 if wide else 20
+    table = read_at(8, count * stride)
+    slices = []
+    for index in range(count):
+      cpu, subtype, offset, size, align = struct.unpack_from(
+          ">IIQQI" if wide else ">IIIII", table, index * stride)
+      require(cpu == ARM64, "IOS_IPA_PLATFORM")
+      require(offset >= 8 + len(table) and size >= 32 and offset + size <= file_size and
+          align <= 31 and offset % (1 << align) == 0, "IOS_IPA_INVALID")
+      slices.append((offset, size, subtype))
+    slices.sort()
+    require(all(offset + size <= next_offset
+        for (offset, size, _), (next_offset, _, _) in zip(slices, slices[1:])), "IOS_IPA_INVALID")
+
+  for offset, size, expected_subtype in slices:
+    require(size >= 32, "IOS_IPA_INVALID")
+    header = read_at(offset, 32)
+    require(header[:4] == MACHO64_LE, "IOS_IPA_PLATFORM")
+    cpu, subtype, file_type, count, command_bytes = struct.unpack_from("<5I", header, 4)
+    require(cpu == ARM64 and file_type == 2, "IOS_IPA_PLATFORM")  # MH_EXECUTE
+    require(expected_subtype is None or subtype == expected_subtype, "IOS_IPA_INVALID")
+    require(0 < count <= command_bytes // 8 and command_bytes <= min(size - 32, 1024 * 1024),
+        "IOS_IPA_INVALID")
+    commands = read_at(offset + 32, command_bytes)
+    cursor = 0
+    device_platform = False
+    for _ in range(count):
+      require(cursor + 8 <= len(commands), "IOS_IPA_INVALID")
+      kind, length = struct.unpack_from("<II", commands, cursor)
+      require(length >= 8 and length % 8 == 0 and cursor + length <= len(commands), "IOS_IPA_INVALID")
+      if kind == 0x1D:  # LC_CODE_SIGNATURE, including ad hoc signatures
+        raise InvalidIpa("IOS_IPA_SIGNING")
+      if kind == 0x32:  # LC_BUILD_VERSION
+        require(length >= 24, "IOS_IPA_INVALID")
+        platform, _, _, tools = struct.unpack_from("<4I", commands, cursor + 8)
+        require(length == 24 + tools * 8, "IOS_IPA_INVALID")
+        require(platform == 2, "IOS_IPA_PLATFORM")  # PLATFORM_IOS, not IOS_SIMULATOR
+        device_platform = True
+      elif kind == 0x25:  # LC_VERSION_MIN_IPHONEOS
+        require(length == 16, "IOS_IPA_INVALID")
+        device_platform = True
+      elif kind in (0x24, 0x2F, 0x30):  # macOS, tvOS, watchOS
+        raise InvalidIpa("IOS_IPA_PLATFORM")
+      elif kind in (0x21, 0x2C):  # LC_ENCRYPTION_INFO(_64)
+        require(length >= 20, "IOS_IPA_INVALID")
+        crypt_offset, crypt_size, crypt_id = struct.unpack_from("<3I", commands, cursor + 8)
+        require(crypt_offset + crypt_size <= size, "IOS_IPA_INVALID")
+        require(crypt_id == 0, "IOS_IPA_SIGNING_UNSUPPORTED")
+      cursor += length
+    require(cursor == len(commands), "IOS_IPA_INVALID")
+    require(device_platform, "IOS_IPA_PLATFORM")
+
+
+def unsigned_archive(entries, root):
+  paths = {}
+  files = set()
+  folded_root = unicodedata.normalize("NFC", root).casefold().rstrip("/")
+  for entry in entries:
+    name = entry.filename.rstrip("/")
+    parts = pathlib.PurePosixPath(name).parts
+    kind = stat.S_IFMT(entry.external_attr >> 16)
+    require(name and "/".join(parts) == name and "\0" not in entry.orig_filename and
+        kind in (0, stat.S_IFREG, stat.S_IFDIR) and
+        (kind == 0 or (kind == stat.S_IFDIR) == entry.is_dir()), "IOS_IPA_INVALID")
+    folded = unicodedata.normalize("NFC", name).casefold()
+    require(folded not in paths, "IOS_IPA_INVALID")
+    paths[folded] = name
+    if not entry.is_dir():
+      files.add(folded)
+    if folded.startswith("payload/"):
+      require(folded == folded_root or folded.startswith(folded_root + "/"), "IOS_IPA_INVALID")
+    if folded.startswith(folded_root + "/"):
+      require(entry.filename.startswith(root), "IOS_IPA_INVALID")
+      nested = pathlib.PurePosixPath(entry.filename[len(root):]).parts
+      require(not nested or (nested[0].casefold() not in ("plugins", "watch", "appclips") and
+          not any(part.casefold().endswith((".app", ".appex")) for part in nested)),
+          "IOS_IPA_SIGNING_UNSUPPORTED")
+  parents = {}
+  for folded, name in paths.items():
+    parent, _, _ = folded.rpartition("/")
+    actual, _, _ = name.rpartition("/")
+    while parent:
+      require(parent not in files and paths.get(parent, actual) == actual and
+          parents.setdefault(parent, actual) == actual, "IOS_IPA_INVALID")
+      parent, _, _ = parent.rpartition("/")
+      actual, _, _ = actual.rpartition("/")
+
+
+def inspect(filename, udid, ios_version, allow_unsigned=False):
   with zipfile.ZipFile(filename) as archive:
     entries = archive.infolist()
     require(0 < len(entries) <= 20000, "IOS_IPA_INVALID")
@@ -62,7 +174,9 @@ def inspect(filename, udid, ios_version):
     executable = info.get("CFBundleExecutable", "")
     require(isinstance(executable, str) and executable not in ("", ".", "..")
         and "/" not in executable and "\\" not in executable, "IOS_IPA_INVALID")
-    with archive.open(root + executable) as stream:
+    executable_path = root + executable
+    require(executable_path in names, "IOS_IPA_INVALID")
+    with archive.open(executable_path) as stream:
       header = stream.read(4096)
     require(len(header) >= 8, "IOS_IPA_PLATFORM")
     magic = header[:4]
@@ -77,8 +191,22 @@ def inspect(filename, udid, ios_version):
     else:
       arm64 = False
     require(arm64, "IOS_IPA_PLATFORM")
-    require(root + "_CodeSignature/CodeResources" in names, "IOS_IPA_SIGNING")
-    require(root + "embedded.mobileprovision" in names, "IOS_IPA_SIGNING")
+    resources = root + "_CodeSignature/CodeResources" in names
+    embedded = root + "embedded.mobileprovision" in names
+    manifest = {"package": bundle, "name": str(info.get("CFBundleDisplayName") or
+        info.get("CFBundleName") or bundle)[:255],
+        "version": str(info.get("CFBundleShortVersionString") or info.get("CFBundleVersion") or ""),
+        "minimumOSVersion": minimum}
+    if allow_unsigned and not resources and not embedded:
+      root_folded = root.casefold()
+      require(not any(name.casefold().startswith(root_folded + "_codesignature/") or
+          name.casefold().rstrip("/") in (root_folded + "_codesignature",
+              root_folded + "embedded.mobileprovision") for name in names), "IOS_IPA_SIGNING")
+      unsigned_archive(entries, root)
+      with archive.open(executable_path) as stream:
+        unsigned_executable(stream, archive.getinfo(executable_path).file_size)
+      return {**manifest, "profileExpiresAt": None, "signature": "unsigned"}
+    require(resources and embedded, "IOS_IPA_SIGNING")
     profile_bytes = read(root + "embedded.mobileprovision", 4 * 1024 * 1024)
     decoded = subprocess.run(["openssl", "cms", "-verify", "-inform", "DER", "-noverify"],
                 input=profile_bytes, capture_output=True, timeout=10)
@@ -97,15 +225,18 @@ def inspect(filename, udid, ios_version):
     identifier = app_id.split(".", 1)[1]
     require(identifier == bundle or (identifier.endswith("*") and
         "*" not in identifier[:-1] and bundle.startswith(identifier[:-1])), "IOS_IPA_SIGNING")
-    return {"package": bundle, "name": str(info.get("CFBundleDisplayName") or
-        info.get("CFBundleName") or bundle)[:255],
-        "version": str(info.get("CFBundleShortVersionString") or info.get("CFBundleVersion") or ""),
-        "minimumOSVersion": minimum, "profileExpiresAt": expires.isoformat()}
+    manifest["profileExpiresAt"] = expires.isoformat()
+    if allow_unsigned:
+      manifest["signature"] = "signed"
+    return manifest
 
 
 if __name__ == "__main__":
   try:
-    print(json.dumps({"manifest": inspect(*sys.argv[1:])}))
+    arguments = sys.argv[1:]
+    allow_unsigned = arguments[3:] == ["--allow-unsigned"]
+    require(len(arguments) == (4 if allow_unsigned else 3), "IOS_IPA_INVALID")
+    print(json.dumps({"manifest": inspect(*arguments[:3], allow_unsigned=allow_unsigned)}))
   except InvalidIpa as error:
     print(json.dumps({"error": str(error)}))
   except Exception:

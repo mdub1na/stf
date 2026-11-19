@@ -1,4 +1,4 @@
-import {useEffect, useState} from 'react'
+import {useEffect, useRef, useState} from 'react'
 import {
   ActionIcon
   , Alert
@@ -151,6 +151,7 @@ export function InstallCard({control}: {control: Control}) {
   const serial = control.target.serial
   const installation = installationStore.useValue(serial)
   const [remoteUrl, setRemoteUrl] = useState('')
+  const openPicker = useRef<(() => void) | null>(null)
   const busy = Boolean(installation && !installation.settled)
   const ios = control.target.platform === 'iOS'
   useEffect(() => {
@@ -185,10 +186,13 @@ export function InstallCard({control}: {control: Control}) {
       )}
     >
       <Stack gap='sm'>
-        {ios && <Text size='xs' c='dimmed'>{t('Upload an IPA signed for this iPhone. STF does not sign apps.')}</Text>}
+        {ios && <Text size='xs' c='dimmed'>
+          {t('Signed IPAs keep their signature. STF signs unsigned IPAs when signing is available.')}
+        </Text>}
         <Dropzone
           className={`${classes.dropzone} drop-area`}
           onDrop={(files) => installFile(control, files)}
+          openRef={openPicker}
           multiple={false}
           loading={busy}
           radius='md'
@@ -236,9 +240,14 @@ export function InstallCard({control}: {control: Control}) {
             autoComplete='url'
           />
         </form>}
-        {ios && <Button size='compact-xs' variant='subtle' disabled={busy}
-          onClick={() => restoreIosInstallation(control).catch(notifyFailure)}
-        >{t('Check installation status')}</Button>}
+        {ios && <Group gap='xs'>
+          <Button size='compact-xs' variant='light' disabled={busy}
+            onClick={() => openPicker.current?.()}
+          >{t('Sign and install')}</Button>
+          <Button size='compact-xs' variant='subtle' disabled={busy}
+            onClick={() => restoreIosInstallation(control).catch(notifyFailure)}
+          >{t('Check installation status')}</Button>
+        </Group>}
         {installation && (
           <div className='upload-status'>
             <InstallationStatus control={control} installation={installation} />
